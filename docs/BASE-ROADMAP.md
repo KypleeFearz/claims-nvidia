@@ -152,7 +152,7 @@ Done: issue #72 (D63). How it works: `docs/ARCHITECTURE.md`, section 5b. Not don
 
 - Dry run on the demo instance (#35). Needs the date of the event (O14).
 - Several visitors at once: sandboxes in parallel and the rate limit of the key (O15, measured by #18). Not tested.
-- Stop and start of the VM. The first one (2026-11-16) left the backend down: corrected. To test again after the correction.
+- Stop and start of the VM. The first one (2026-11-16) left the backend down: corrected and tested with a reboot (issue #75). Left: a stop and a start from the Brev console.
 - Confirm `docs/WORKFLOWS.md` (O12). B2 and B4 depend on it.
 - Delete or keep `docs/FIRST-PROMPT.md`.
 

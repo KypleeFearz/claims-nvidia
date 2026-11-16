@@ -124,5 +124,5 @@ The VM costs about $3 per day when it runs. Stop it when nobody uses it: `brev s
 
 - No access control in the app (D33). The public URL has one shared password for everybody (Caddy basic auth): a person who has it can do all that the demo can do. Never open port 5173 or 8000 directly.
 - One free key for the VM: about 40 requests per minute, so about 2 claims per minute.
-- A restart of the VM: the services start again alone. The first restart (2026-11-16) showed that the backend did not start; the unit is corrected. Not tested again after the correction: after a restart, run the commands of "Check".
+- A restart of the VM: the services start again alone. The first restart (2026-11-16) showed that the backend did not start; the unit is corrected (issue #75). Tested after the correction, the same day, with `sudo reboot`: no ordering cycle in the journal, the backend up 6 seconds after its start, one agent turn in `sandbox` mode with the real model. Not tested: a stop and a start from the Brev console. After a restart, run the commands of "Check".
 - Tested with one visitor at a time. Not tested: several sandboxes at the same time.
