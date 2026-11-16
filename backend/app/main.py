@@ -16,6 +16,7 @@ from starlette.types import Receive, Scope, Send
 
 from app.agent import Agent, get_agent
 from app.agent.sandbox_panel import SandboxView, clean, policy_view
+from app.bench import router as bench_router
 from app.demo import router as demo_router
 from app.docintel.reader import get_reader
 from app.models import Claim, ClaimStatus, Customer, Document, Message, Policy
@@ -72,6 +73,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     routing_tool.register(gateway)
     app.state.agent = get_agent(gateway)  # CLAIMS_MODE: local, nim or sandbox
     app.state.uploads = uploads
+    app.state.reader = reader  # the reader bench calls it too (issue #82)
     app.state.store = store
     app.state.gateway = gateway
     app.state.locks = {}
@@ -320,6 +322,7 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(demo_router)
+    app.include_router(bench_router)
     app.mount("/mcp", mcp_endpoint)
     return app
 
