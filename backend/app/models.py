@@ -189,6 +189,15 @@ class Decision(BaseModel):
     time: datetime
 
 
+class NoticeItem(BaseModel):
+    """One question of the first notice (issue #98), with its answer when given."""
+
+    key: str
+    question: str
+    why: str
+    answer: str | None = None
+
+
 class Payment(BaseModel):
     """A mock payment (issue #94): no real money, no real account."""
 
@@ -248,6 +257,7 @@ class Claim(BaseModel):
     fraud_report: FraudReport | None = None
     proposal: Proposal | None = None
     status: ClaimStatus = ClaimStatus.open
+    notice: list[NoticeItem] = []  # the questions for the cause, and the answers
     decisions: list[Decision] = []
     investigation: Investigation | None = None
     reserve: float | None = (

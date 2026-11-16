@@ -9,9 +9,20 @@ from app.checks.rules import Rule
 from app.models import Claim
 
 
-class RequiredDocument(TypedDict):
+class RequiredDocument(TypedDict, total=False):
     label: str
     any_of: list[str]  # any one of these document types satisfies the entry
+    why: str  # what the document is for, said to the customer (issue #98)
+
+
+@dataclass(frozen=True)
+class Question:
+    """One question of the first notice of loss (issue #98): asked to the customer
+    for a cause, with the reason the insurer asks it (for the handler)."""
+
+    key: str
+    text: str
+    why: str
 
 
 @dataclass(frozen=True)
@@ -23,6 +34,8 @@ class Workflow:
     # (cause, regex) in order: the first regex found in the story gives the cause
     causes: tuple[tuple[str, str], ...] = ()
     default_cause: str = "other"
+    # the questions of the first notice, by cause; a cause with no entry has none
+    questions: dict[str, tuple[Question, ...]] = field(default_factory=dict)
 
     def all_causes(self) -> list[str]:
         return [c for c, _ in self.causes] + [self.default_cause]

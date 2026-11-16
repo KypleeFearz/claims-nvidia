@@ -15,6 +15,7 @@ from tests.reader_contract import MOCK
 EXPOSED = {
     "get_claim_summary",
     "update_claim",
+    "save_answer",  # issue #98: the questions of the first notice
     "required_documents",
     "classify_document",
     "extract_document",

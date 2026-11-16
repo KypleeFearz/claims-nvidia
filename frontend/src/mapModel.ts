@@ -151,7 +151,7 @@ export const BOXES: MapBox[] = [
     line: 'Travel, property, health: required documents, fields, rules.',
     status: 'built',
     icon: 'list',
-    detail: 'A workflow decides which documents and fields a claim needs.',
+    detail: 'A workflow decides which documents and fields a claim needs, and the questions of the first notice for each cause (the agent asks them one at a time; the handler reads the answers).',
     files: ['backend/app/workflows/', 'docs/WORKFLOWS.md'],
     issues: [],
   },

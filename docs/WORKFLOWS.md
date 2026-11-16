@@ -42,6 +42,24 @@ These lists are a first reading of a typical claims flow. Paul must confirm them
 | Straight-through limit | CHF 2,500 |
 | Own rules | Cancellation date is between the incident date and the departure date. Claimed amount = trip price − refund. |
 
+## First notice: the questions per cause (issue #98)
+
+A first reading of what a call centre asks. The data is in each workflow file (`questions`). The agent asks them one at a time; they do not block the claim. The handler reads the answers on the case page.
+
+| Workflow | Cause | Questions | Why the insurer asks |
+|---|---|---|---|
+| Property | water | Where did the water come from? When did you first see the damage? | A slow leak and water from outside can be excluded. A late notice makes the damage larger. |
+| Property | theft | How did the thief get in? Did you report it to the police, and when? | No sign of entry is a known indicator. A theft needs a police report. |
+| Property | fire | Do you know how the fire started? | The cause decides the cover and a possible recovery. |
+| Property | breakage | How did it break, and who was there? | Another person can be liable. |
+| Health | accident | Where did it happen? Was another person involved or responsible? | An accident at work is for another insurer. A liable person pays back. |
+| Health | illness | When did the symptoms start? | An accident policy does not cover an illness. |
+| Travel | illness | Who was ill? On what date did a doctor first see the illness? | The cover depends on who is ill. An illness known before the booking can be excluded. |
+| Travel | luggage | Did you report the loss to the airline, and do you have a file number? | The airline pays first. |
+| Travel | cancellation | What made you cancel the trip? | Only some reasons are covered. |
+
+Each required document also has a short "why" that the agent says to the customer.
+
 ## Settlement: what the policy pays (issue #86)
 
 Confirmed by Paul on 2026-11-16 (D67). The code is `backend/app/settlement.py`; the calculation by hand of the 10 kit stories is `data/mock/settlements.json`.

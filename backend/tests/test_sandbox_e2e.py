@@ -140,7 +140,9 @@ def test_the_graph_only_calls_tools_the_policy_allows(live: Live) -> None:
         used |= {e.stage for e in live.store.events_since(cid, 0) if e.actor == "tool"}
     allowed = set(GRAPH_TOOLS)
     assert used - {"write_fraud_report"} <= allowed
-    assert allowed <= used  # no tool in the policy that the graph never calls
+    # no tool in the policy that the graph never calls. `save_answer` runs only when
+    # the customer answers a question of the first notice (issue #98): not here.
+    assert allowed - {"save_answer"} <= used
 
 
 def test_the_events_of_a_real_turn_sort_into_the_order_they_happened(

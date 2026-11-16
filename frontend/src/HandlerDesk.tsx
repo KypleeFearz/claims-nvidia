@@ -27,6 +27,7 @@ type Case = PipelineClaim & {
   claimed_amount: number | null
   cause: string | null
   status: string
+  notice?: { key: string; question: string; why: string; answer: string | null }[]
   decisions: Decision[]
   investigation?: Investigation | null
   reserve?: number | null
@@ -390,6 +391,22 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
           </div>
         )}
         {error && <p className="pill pill-bad">{error}</p>}
+
+        {claim.notice && claim.notice.length > 0 && (
+          <div className="stack" aria-label="First notice">
+            <h3>First notice</h3>
+            <dl className="desk-notice">
+              {claim.notice.map((n) => (
+                <div key={n.key}>
+                  <dt>
+                    {n.question} <span className="muted">{n.why}</span>
+                  </dt>
+                  <dd>{n.answer ?? <span className="pill pill-warn">not answered</span>}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
 
         {(claim.reserve != null || claim.payment) && (
           <div className="stack" aria-label="Reserve and payment">
