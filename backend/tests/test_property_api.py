@@ -108,7 +108,7 @@ def test_theft_with_no_police_report_gives_r001(client: TestClient) -> None:
     [s] = c["signals"]
     assert s["code"] == "R001" and "a police report" in s["detail"]
     assert c["score"] == 25 and c["outcome"] == "handler_review"
-    assert c["status"] == "in_review"
+    assert c["status"] == "waiting_customer"  # issue #72: the claim waits for it
 
 
 def test_a_water_claim_needs_no_police_report(client: TestClient) -> None:

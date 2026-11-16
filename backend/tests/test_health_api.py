@@ -60,7 +60,7 @@ def test_claim_file_3_gives_seven_signals_and_a_score_of_130(
         "C001", "R003", "R004", "R005", "T001", "T002", "T003",
     ]  # fmt: skip
     assert c["score"] == 130 and c["outcome"] == "investigation"
-    assert c["agent_state"] == "closed" and c["status"] == "in_review"
+    assert c["agent_state"] == "closed" and c["status"] == "in_investigation"
 
 
 def test_every_signal_of_claim_file_3_has_a_document_and_page_as_evidence(

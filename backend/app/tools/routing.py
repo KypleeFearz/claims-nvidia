@@ -17,7 +17,7 @@ from app.fraud.routing import route
 from app.fraud.routing import score as sum_points
 from app.models import Claim, Outcome
 from app.tools.gateway import Gateway
-from app.views import customer_message, customer_status
+from app.views import customer_message
 from app.workflows import WORKFLOWS
 
 
@@ -43,14 +43,12 @@ def register(gateway: Gateway) -> None:
             # its own event (rule 5); it saves the outcome and the report together
             gateway.call(claim_id, "write_fraud_report", {"claim_id": claim_id})
         else:
-            gateway.store.save_routing(
-                claim_id, total, outcome, reasons, customer_status(outcome)
-            )
+            gateway.store.save_routing(claim_id, total, outcome, reasons)
         return {
             "score": total,
             "outcome": outcome.value,
             "reasons": reasons,
-            "customer_message": customer_message(outcome),
+            "customer_message": customer_message(outcome, claim.signals),
         }
 
     def write_fraud_report(claim_id: str) -> dict[str, Any]:
@@ -64,9 +62,7 @@ def register(gateway: Gateway) -> None:
             )
         total = sum_points(claim.signals)
         report = write_report(claim, claim.signals, outcome, total)
-        gateway.store.save_routing(
-            claim_id, total, outcome, reasons, customer_status(outcome), report
-        )
+        gateway.store.save_routing(claim_id, total, outcome, reasons, report)
         return report.model_dump(mode="json")
 
     # The agent gets nothing from the checks, and only the customer text from the

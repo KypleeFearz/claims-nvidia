@@ -691,7 +691,7 @@ def test_the_checks_node_reads_a_document_the_model_left_unread(rig: Rig) -> Non
     rig.say("I was ill, 3 August 2026, CHF 1500")
     rig.fake.replies += [text("I will look at it."), text("I will look at it.")]
     doc = rig.upload()
-    assert rig.say("done") == TO_A_PERSON  # one document of three: R001
+    assert rig.say("done").endswith(TO_A_PERSON)  # one document of three: R001
     reads = [
         e
         for e in tool_events(rig)
@@ -852,7 +852,7 @@ def test_the_step_survives_a_restart_of_the_backend(
         # a new process: the step "documents" comes from the file. "done" is then
         # decided in code and no model call is needed (in intake it would need one).
         res = client.post(f"/claims/{cid}/messages", json={"text": "done"})
-        assert res.json()[-1]["text"] == TO_A_PERSON  # no document: R001
+        assert res.json()[-1]["text"].endswith(TO_A_PERSON)  # no document: R001
 
 
 # ---- the rules of the trusted code ------------------------------------------------
@@ -1045,3 +1045,24 @@ def test_the_demo_reset_empties_the_checkpoints(rig: Rig) -> None:
     assert saver.get_tuple({"configurable": {"thread_id": rig.cid}}) is not None
     assert rig.client.post("/demo/reset").status_code == 200
     assert saver.get_tuple({"configurable": {"thread_id": rig.cid}}) is None
+
+
+# ---- a claim that waits opens again (issue #72) -----------------------------------
+
+
+def test_a_document_sent_after_the_routing_opens_the_claim_and_the_graph_again(
+    rig: Rig,
+) -> None:
+    rig.start()
+    rig.fake.replies += [story(), calls(("required_documents", {})), text("Upload.")]
+    rig.say("I was ill, 3 August 2026, CHF 1500")
+    first = rig.say("done")  # no document: the claim waits, the graph step is closed
+    assert rig.claim()["status"] == "waiting_customer"
+    assert "a booking confirmation" in first
+    rig.fake.replies += [read_it, extract_it, text("Thank you. Another one?")]
+    rig.upload("booking-confirmation")  # the second visit
+    assert rig.last_message() == "Thank you. Another one?"  # not the closed text
+    assert rig.claim()["status"] == "open" and rig.claim()["outcome"] is None
+    second = rig.say("done")  # decided in code: the step is `documents` again
+    assert "a booking confirmation" not in second and "a medical certificate" in second
+    assert rig.claim()["status"] == "waiting_customer"

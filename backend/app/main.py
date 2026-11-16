@@ -18,7 +18,7 @@ from app.agent import Agent, get_agent
 from app.agent.sandbox_panel import SandboxView, clean, policy_view
 from app.demo import router as demo_router
 from app.docintel.reader import get_reader
-from app.models import Claim, Customer, Document, Message, Policy
+from app.models import Claim, ClaimStatus, Customer, Document, Message, Policy
 from app.store import Store
 from app.stream import event_stream
 from app.tools import checks as checks_tool
@@ -28,7 +28,7 @@ from app.tools import policies as policies_tool
 from app.tools import requirements as requirements_tool
 from app.tools import routing as routing_tool
 from app.tools.gateway import Gateway
-from app.views import CustomerView, customer_view
+from app.views import ClaimRow, CustomerView, claim_row, customer_view
 
 MAX_UPLOAD = 10 * 1024 * 1024
 # magic bytes -> extension; the client file name and content type are never trusted
@@ -148,6 +148,11 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "unknown customer")
         return customer_view(claim)
 
+    @app.get("/claims")
+    def list_claims(request: Request) -> list[ClaimRow]:
+        """The list for a handler. The customer panel never calls it."""
+        return [claim_row(c) for c in store(request).list_claims()]
+
     @app.get("/claims/{claim_id}")
     def get_claim(claim_id: str, request: Request) -> Claim:
         """The pipeline view: everything. The customer panel never calls it."""
@@ -219,8 +224,11 @@ def create_app() -> FastAPI:
             file_metadata={"original_name": (file.filename or "")[:200]},
         )
         with claim_lock(request, claim_id):
-            if claim_or_404(request, claim_id).agent_state == "closed":
-                raise HTTPException(409, "the claim is closed")
+            claim = claim_or_404(request, claim_id)
+            if claim.agent_state == "closed":
+                if claim.status != ClaimStatus.waiting_customer:
+                    raise HTTPException(409, "the claim is closed")
+                store(request).reopen(claim_id, "customer")  # the missing document
             path: Path = request.app.state.uploads / doc.file
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)

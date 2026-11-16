@@ -18,6 +18,16 @@ class Outcome(StrEnum):
     investigation = "investigation"
 
 
+class ClaimStatus(StrEnum):
+    """Where a claim is in its life. The allowed moves are in `app/lifecycle.py`."""
+
+    open = "open"  # the customer and the agent build the file
+    waiting_customer = "waiting_customer"  # routed, but a required document is missing
+    validated = "validated"
+    in_review = "in_review"  # a handler has the case
+    in_investigation = "in_investigation"
+
+
 class Customer(BaseModel):
     id: str
     name: str
@@ -124,7 +134,7 @@ class FraudReport(BaseModel):
 class PipelineEvent(BaseModel):
     sequence: int
     time: datetime
-    actor: Literal["agent", "tool", "workflow", "sandbox"]
+    actor: Literal["agent", "tool", "workflow", "sandbox", "system"]
     stage: str
     title: str
     inputs: dict[str, Any] = {}
@@ -161,7 +171,7 @@ class Claim(BaseModel):
     outcome: Outcome | None = None
     outcome_reasons: list[str] = []
     fraud_report: FraudReport | None = None
-    status: str = "open"
+    status: ClaimStatus = ClaimStatus.open
 
 
 class Message(BaseModel):

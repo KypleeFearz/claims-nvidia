@@ -54,6 +54,8 @@ Order = the order to build. Size: S = one pull request, M = two or three, L = a 
 
 ### B1. Claim lifecycle (M) — first, the others need it
 
+Done: issue #72 (D63). How it works: `docs/ARCHITECTURE.md`, section 5b. Not done in #72: a reminder to the customer, and a claim that the customer opens again from a new browser session (the customer panel has no list of "my claims").
+
 **Practice.** A claim has a status that a person can read: opened, waiting for the customer, in assessment, with a handler, in investigation, decided, paid, closed.
 
 **Build.**

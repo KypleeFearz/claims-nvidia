@@ -160,9 +160,7 @@ def test_the_denials_are_read_before_the_sandbox_is_deleted(make: Any) -> None:
     events_before = len(denied(rig))
 
     def close(s: FakeShell, name: str, argv: list[str], stdin: str) -> str:
-        rig.store.update_claim(
-            rig.cid, {"outcome": "straight_through", "status": "closed", "score": 0}
-        )
+        rig.store.update_claim(rig.cid, {"outcome": "straight_through", "score": 0})
         return line("Done.")
 
     rig.shell.turn = close
@@ -229,9 +227,7 @@ def test_the_view_says_deleted_when_the_claim_is_closed(make: Any) -> None:
     rig: Rig = make()
 
     def close(s: FakeShell, name: str, argv: list[str], stdin: str) -> str:
-        rig.store.update_claim(
-            rig.cid, {"outcome": "straight_through", "status": "closed", "score": 0}
-        )
+        rig.store.update_claim(rig.cid, {"outcome": "straight_through", "score": 0})
         return line("Done.")
 
     rig.shell.turn = close
@@ -350,9 +346,7 @@ def test_the_probe_is_a_409_when_the_sandbox_is_not_running(make: Any) -> None:
     rig: Rig = make()
 
     def close(s: FakeShell, name: str, argv: list[str], stdin: str) -> str:
-        rig.store.update_claim(
-            rig.cid, {"outcome": "straight_through", "status": "closed", "score": 0}
-        )
+        rig.store.update_claim(rig.cid, {"outcome": "straight_through", "score": 0})
         return line("Done.")
 
     rig.shell.turn = close

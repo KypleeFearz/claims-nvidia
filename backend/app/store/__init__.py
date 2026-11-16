@@ -9,8 +9,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from app.lifecycle import after_routing, check_move
 from app.models import (
     Claim,
+    ClaimStatus,
     ClaimType,
     Customer,
     Document,
@@ -144,6 +146,11 @@ class Store:
             return claim
 
     def update_claim(self, claim_id: str, fields: dict[str, Any]) -> Claim | None:
+        if "status" in fields:
+            raise ValueError("a status changes with set_status, save_routing or reopen")
+        return self._update(claim_id, fields)
+
+    def _update(self, claim_id: str, fields: dict[str, Any]) -> Claim | None:
         with self.lock:
             claim = self.get_claim(claim_id)
             if claim is None:
@@ -176,19 +183,78 @@ class Store:
         score: int,
         outcome: Outcome,
         reasons: list[str],
-        status: str,
         report: FraudReport | None = None,
     ) -> Claim | None:
-        """Outcome, score, reasons and report in one write: an investigation and
-        its report are saved together or not at all."""
-        fields = {
-            "score": score,
-            "outcome": outcome.value,
-            "outcome_reasons": reasons,
-            "status": status,
-            "fraud_report": report.model_dump(mode="json") if report else None,
-        }
-        return self.update_claim(claim_id, fields)
+        """Outcome, score, reasons, report and the new status in one write: an
+        investigation and its report are saved together or not at all."""
+        with self.lock:
+            claim = self.get_claim(claim_id)
+            if claim is None:
+                return None
+            fields = {
+                "score": score,
+                "outcome": outcome.value,
+                "outcome_reasons": reasons,
+                "fraud_report": report.model_dump(mode="json") if report else None,
+            }
+            status = after_routing(outcome, claim.signals)
+            return self._move(claim, status, "system", "routing", fields)
+
+    def set_status(
+        self, claim_id: str, status: ClaimStatus, by: str, why: str = ""
+    ) -> Claim | None:
+        """One status move. `IllegalMove` when `app/lifecycle.py` does not allow it."""
+        with self.lock:
+            claim = self.get_claim(claim_id)
+            return self._move(claim, status, by, why, {}) if claim else None
+
+    def reopen(self, claim_id: str, by: str) -> Claim | None:
+        """A claim that waits for the customer opens again: the old outcome goes (it
+        stays in the event) and the chat is back at the documents step."""
+        with self.lock:
+            claim = self.get_claim(claim_id)
+            if claim is None:
+                return None
+            fields: dict[str, Any] = {
+                "agent_state": "ask_documents",
+                "outcome": None,
+                "score": None,
+                "outcome_reasons": [],
+                "fraud_report": None,
+            }
+            return self._move(claim, ClaimStatus.open, by, "a new document", fields)
+
+    def _move(
+        self,
+        claim: Claim,
+        status: ClaimStatus,
+        by: str,
+        why: str,
+        fields: dict[str, Any],
+    ) -> Claim | None:
+        """The one place a status changes: the check, the write with `fields`, and one
+        event that says from, to, who and why. The same status again is no move."""
+        before = claim.status
+        if status != before:
+            check_move(before, status)
+        saved = self._update(claim.id, {**fields, "status": status.value})
+        if status != before:
+            self.append_event(
+                claim.id, "system", "status", f"Status: {before} → {status}",
+                {"from": before.value, "to": status.value, "by": by},
+                {
+                    "why": why,
+                    "outcome_before": claim.outcome.value if claim.outcome else None,
+                    "score_before": claim.score,
+                },
+            )  # fmt: skip
+        return saved
+
+    def list_claims(self) -> list[Claim]:
+        """Every claim, oldest first."""
+        with self.lock:
+            rows = self.db.execute("SELECT data FROM claims ORDER BY rowid").fetchall()
+        return [Claim.model_validate_json(r[0]) for r in rows]
 
     def _save_claim(self, claim: Claim) -> None:
         """Every save of a claim goes through here: the one place of rule 4."""
@@ -205,7 +271,7 @@ class Store:
     def append_event(
         self,
         claim_id: str,
-        actor: Literal["agent", "tool", "workflow", "sandbox"],
+        actor: Literal["agent", "tool", "workflow", "sandbox", "system"],
         stage: str,
         title: str,
         inputs: dict[str, Any] | None = None,
