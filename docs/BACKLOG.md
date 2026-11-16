@@ -76,6 +76,10 @@ Each task ends with a number.
 42. Demo mode for visitors: account choice, kit of documents, "no real document" notice, reset that deletes the uploads. Done: issue #34.
 43. Dry run on the demo instance. Fix list. Issue #35.
 
+## After M3: the base track
+
+The work of the base that runs next to M4 and M5 is in `docs/BASE-ROADMAP.md` (packages B1 to B10). It has no issue yet.
+
 ## Notes on the split
 
 - The intern starts with a working flow in `local` mode. He does not start from an empty repository.
