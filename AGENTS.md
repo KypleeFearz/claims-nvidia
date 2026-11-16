@@ -20,6 +20,7 @@ Target: a working demo on real-looking mock claim files at the Q1 2027 event.
 | `docs/READING-LIST.md` | NVIDIA documentation to read, with what to take from each |
 | `docs/DEPLOY.md` | The Brev VM: services, install, update, access for the intern |
 | `docs/BACKLOG.md` | Ordered tasks, with the tasks kept for the intern |
+| `docs/BASE-ROADMAP.md` | What the base builds next, outside the work of the intern: lifecycle, settlement, handler workbench, fraud practice |
 | `docs/BRIEF.md` | Paul's first brief, kept as the source |
 
 ## Status
