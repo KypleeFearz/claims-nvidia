@@ -111,6 +111,7 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 
 ## 5. Views
 
+- **Customer follow-up (issue #88).** The customer view also gives a status line in the words of a customer, the open requests (the missing documents and the last request of a handler, while the claim waits) and, once the claim is validated or approved, the settlement letter: the amount and the lines of the proposal with their reason and article. When a handler approved another amount than the proposal, the letter gives the amount and says that the reasons come by post. The reason of a handler is never in the view. The three parts depend on the customer status, so they are the same for a review and for an investigation. The customer panel shows them above the chat.
 - **Customer view** of a claim: messages and status only. Built by one function that drops signals, score and report. It gives the same exact message for `handler_review` and `investigation`. Non-negotiable 2 tests this function.
 - **Pipeline / handler view**: everything.
 

@@ -1201,3 +1201,31 @@ table th[scope='row'] {
   padding-left: 18px;
 }
 
+/* Customer follow-up (issue #88): the status line, the requests and the settlement letter. */
+.follow-up {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.follow-up ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.letter {
+  align-self: stretch;
+  padding: 12px 14px;
+}
+.letter h3 {
+  margin: 0 0 6px;
+}
+.letter td {
+  text-align: right;
+  white-space: nowrap;
+}
+.letter-why {
+  display: block;
+  font-weight: 400;
+  font-size: var(--fs-xs);
+}
+

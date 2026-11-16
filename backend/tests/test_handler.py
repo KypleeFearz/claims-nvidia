@@ -92,13 +92,15 @@ def test_approve_is_a_decision_with_a_name_one_event_and_a_text_for_the_customer
     assert events[0].outputs["why"] == "The invoice fits the damage."
     assert d["amount"] == 3000.0  # the proposal: 3,200 less the deductible of 200
     assert last_message(client, cid) == PAID
-    assert view(client, cid) == {
-        "claim_id": cid,
-        "policy_number": "HH-2024-0933",
-        "status": "approved",
-        "message": PAID,
-        "step": "closed",
-    }
+    v = view(client, cid)
+    assert (v["status"], v["message"], v["step"]) == ("approved", PAID, "closed")
+    assert v["status_line"] == "Your claim is approved. We prepare the payment."
+    # the letter: the amount and the two lines of the proposal (issue #88)
+    assert v["letter"]["amount"] == 3000.0 and v["letter"]["note"] == ""
+    assert [(x["label"], x["amount"]) for x in v["letter"]["lines"]] == [
+        ("Documented loss", 3200.0),
+        ("Deductible", -200.0),
+    ]
 
 
 def test_refuse_needs_a_reason_and_the_customer_never_reads_it(
