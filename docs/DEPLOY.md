@@ -108,11 +108,10 @@ Result on 2026-11-13: 9 of 9 pass. In the browser: claim file 3 gives `investiga
 
 ```sh
 git clone https://github.com/<your GitHub name>/claims-nvidia.git ~/work/claims-nvidia   # your fork, see docs/NIKOLA.md
-cd ~/work/claims-nvidia/backend && uv sync && uv run uvicorn app.main:app --port 8001
-cd ~/work/claims-nvidia/frontend && npm ci && BACKEND_URL=http://localhost:8001 npm run dev -- --port 5174
+cd ~/work/claims-nvidia && scripts/dev.sh 8001 5174   # your backend and your frontend; Ctrl-C stops both
 ```
 
-From your machine: `brev port-forward claims-nvidia -p 5174:5174`.
+From your machine: `brev port-forward claims-nvidia -p 5174:5174`, then open `http://localhost:5174`. Your claims and uploads stay in your copy (`backend/.dev-data`, `backend/uploads`): the demo does not see them, and the reset of the demo does not delete them. The mode and the key come from the `.env` of your copy.
 
 4. For the Omni reader (task 26, issue #18) you need a key: copy `.env.example` to `.env` in your copy and ask Paul for the key. Never commit `.env`.
 

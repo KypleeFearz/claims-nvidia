@@ -33,6 +33,8 @@ Target: a working demo on real-looking mock claim files at the Q1 2027 event.
 
 Backend in `backend/` (Python, FastAPI, uv). Frontend in `frontend/` (React, Vite, TypeScript).
 
+- All the checks of the CI in one command: `scripts/check.sh` (or `scripts/check.sh backend`, `scripts/check.sh frontend`)
+- Start this checkout, backend and frontend: `scripts/dev.sh [backend port] [frontend port]` (default 8000 and 5173; the mode comes from `.env`)
 - Test: `cd backend && uv run pytest` and `cd frontend && npm test`
 - Types: `cd backend && uv run mypy .` and `cd frontend && npm run typecheck`
 - Lint: `cd backend && uv run ruff check . ../scripts && uv run ruff format --check . ../scripts` and `cd frontend && npm run lint`
