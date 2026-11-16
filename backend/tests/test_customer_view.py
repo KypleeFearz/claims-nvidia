@@ -8,6 +8,9 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agent.phrases import check_message
+from app.checks import rules
+from app.lifecycle import after_routing
 from app.main import create_app
 from app.models import Claim, FraudReport, Outcome
 from app.views import CustomerView, customer_view
@@ -65,6 +68,24 @@ def test_handler_review_and_investigation_give_the_same_text() -> None:
     b = customer_view(routed(Outcome.investigation))
     assert a.message == b.message
     assert a.status == b.status
+
+
+def test_a_missing_document_gives_the_same_view_for_both_outcomes() -> None:
+    """Issue #72: the claim waits for the customer. The text names the document and
+    nothing else, and the wait does not depend on the outcome."""
+    views = []
+    for outcome in (Outcome.handler_review, Outcome.investigation):
+        claim = routed(outcome)
+        claim.signals.append(rules.signal("R001", "Missing: a medical certificate."))
+        claim.status = after_routing(outcome, claim.signals)
+        views.append(customer_view(claim))
+    a, b = views
+    assert a == b and a.status == "waiting_customer"
+    assert a.message == (
+        "We still need: a medical certificate. You can upload here at any time. "
+        + REVIEW
+    )
+    assert check_message(a.message, "no-model") is None  # no forbidden word
 
 
 def test_no_message_before_the_result() -> None:

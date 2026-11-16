@@ -499,7 +499,7 @@ class SandboxAgent:
             return None
         if claim.agent_state != "closed":
             store.update_claim(claim_id, {"agent_state": "closed"})
-        return customer_message(claim.outcome)  # ours, word for word
+        return customer_message(claim.outcome, claim.signals)  # ours, word for word
 
     def _reply(self, claim_id: str, said: Any) -> tuple[str, bool]:
         """What the customer reads, and whether the claim is closed."""

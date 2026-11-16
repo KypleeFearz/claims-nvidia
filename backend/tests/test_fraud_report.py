@@ -52,7 +52,7 @@ def test_the_store_refuses_it_through_every_save_call(store: Store) -> None:
     claim = store.create_claim("C-1003")
     assert claim is not None
     with pytest.raises(InvestigationWithoutReport):
-        store.save_routing(claim.id, 80, Outcome.investigation, ["r"], "in_review")
+        store.save_routing(claim.id, 80, Outcome.investigation, ["r"])
     with pytest.raises(InvestigationWithoutReport):
         store._save_claim(travel_claim(outcome=Outcome.investigation))
 
@@ -60,9 +60,7 @@ def test_the_store_refuses_it_through_every_save_call(store: Store) -> None:
 def test_outcome_and_report_are_saved_together(store: Store) -> None:
     claim = store.create_claim("C-1003")
     assert claim is not None
-    store.save_routing(
-        claim.id, 80, Outcome.investigation, ["r"], "in_review", a_report()
-    )
+    store.save_routing(claim.id, 80, Outcome.investigation, ["r"], a_report())
     saved = store.get_claim(claim.id)
     assert saved is not None and saved.outcome == Outcome.investigation
     assert saved.fraud_report == a_report() and saved.score == 80
@@ -72,7 +70,7 @@ def test_outcome_and_report_are_saved_together(store: Store) -> None:
 def test_the_other_outcomes_need_no_report(store: Store, outcome: Outcome) -> None:
     claim = store.create_claim("C-1003")
     assert claim is not None
-    store.save_routing(claim.id, 20, outcome, [], "in_review")
+    store.save_routing(claim.id, 20, outcome, [])
     saved = store.get_claim(claim.id)
     assert saved is not None and saved.outcome == outcome
     assert saved.fraud_report is None

@@ -85,8 +85,18 @@ class GraphAgent:
             self.gateway.tool_specs(), emit,
         )  # fmt: skip
         config: RunnableConfig = {"configurable": {"thread_id": claim_id}}
+        turn = turn_input(text, document_id)
+        claim = store.get_claim(claim_id)
+        if (
+            claim is not None
+            and claim.agent_state != "closed"
+            and graph.get_state(config).values.get("step") == "closed"
+        ):
+            # the claim waited for a document and is open again (issue #72): the
+            # checkpoint still says closed, the claim is the truth
+            turn["step"] = "documents"
         try:
-            out = graph.invoke(turn_input(text, document_id), config)
+            out = graph.invoke(turn, config)
         except Exception as e:
             # a tool failed in a code node: the step is in the checkpoint, so the
             # next message of the customer resumes there. Twice in a row in the same

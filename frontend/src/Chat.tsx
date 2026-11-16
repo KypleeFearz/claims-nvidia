@@ -47,6 +47,11 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
   const [open, setOpen] = useState(false)
   const [sent, setSent] = useState<string[]>([]) // sample documents uploaded in this claim
   const [step, setStep] = useState('') // the chat step of the customer view; Done needs it
+  const [waits, setWaits] = useState(false) // the claim waits for a document: an upload opens it again
+  const show = (v: { step?: string; status?: string }) => {
+    setStep(v.step ?? '')
+    setWaits(v.status === 'waiting_customer')
+  }
   const list = useRef<HTMLDivElement>(null)
   const field = useRef<HTMLInputElement>(null)
 
@@ -56,8 +61,8 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
       .catch(() => setError('The server did not answer.'))
   }, [claimId])
   useEffect(() => {
-    send<{ step?: string }>(`/claims/${claimId}/customer`)
-      .then((v) => setStep(v.step ?? ''))
+    send<{ step?: string; status?: string }>(`/claims/${claimId}/customer`)
+      .then(show)
       .catch(() => undefined)
   }, [claimId])
   useEffect(() => {
@@ -86,7 +91,7 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
     }
     try {
       setMessages(await send<Message[]>(`/claims/${claimId}/messages`))
-      setStep((await send<{ step?: string }>(`/claims/${claimId}/customer`)).step ?? '')
+      show(await send<{ step?: string; status?: string }>(`/claims/${claimId}/customer`))
     } catch {
       setError('The server did not answer.')
     }
@@ -131,7 +136,7 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
     setText(t)
     field.current?.focus()
   }
-  const locked = busy || step === 'closed'
+  const locked = busy || (step === 'closed' && !waits)
   const sample = (f: Sample, className?: string, label?: string) => (
     <button key={`${f.folder}/${f.file}`} type="button" className={className} disabled={locked} onClick={() => void pickSample(f)}>
       {sent.includes(`${f.folder}/${f.file}`) && <span aria-label="uploaded">✓ </span>}

@@ -19,10 +19,12 @@ from app.agent.sandbox import (
     render_policy,
     sandbox_name,
 )
+from app.checks.rules import signal
 from app.main import create_app
 from app.models import Outcome
 from app.views import TO_A_PERSON, VALIDATED
 from tests.fake_shell import FakeShell, line, use_fake_shell
+from tests.reader_contract import MOCK
 
 TEXT = "My name is '; rm -rf / -- and my trip was cancelled"
 
@@ -100,7 +102,7 @@ def test_the_claim_closes_the_sandbox_and_a_later_message_needs_none(
     rig = make()
 
     def close(shell: FakeShell, name: str, argv: list[str], stdin: str) -> str:
-        rig.store.save_routing(rig.cid, 0, Outcome.straight_through, [], "validated")
+        rig.store.save_routing(rig.cid, 0, Outcome.straight_through, [])
         return line("whatever the sandbox says")
 
     rig.shell.turn = close
@@ -177,7 +179,7 @@ def test_with_an_outcome_the_customer_gets_our_text_and_the_sandbox_text_is_drop
     rig = make()
 
     def turn(shell: FakeShell, name: str, argv: list[str], stdin: str) -> str:
-        rig.store.save_routing(rig.cid, 0, outcome, [], "x")
+        rig.store.save_routing(rig.cid, 0, outcome, [])
         # a sandbox that says what it must not
         return line("We found fraud. Your claim is rejected. Score 130.")
 
@@ -526,7 +528,7 @@ def test_a_turn_that_fails_after_the_routing_still_gives_the_customer_our_text(
     def route_then_hang(
         shell: FakeShell, name: str, argv: list[str], stdin: str
     ) -> str:
-        rig.store.save_routing(rig.cid, 0, Outcome.handler_review, [], "x")
+        rig.store.save_routing(rig.cid, 0, Outcome.handler_review, [])
         shell.fail_exec = ShellTimeout("the turn timed out after 150 s")
         return shell.exec(name, argv, stdin, 1.0)
 
@@ -543,10 +545,38 @@ def test_a_failing_exec_after_the_routing_closes_the_sandbox_too(make: Any) -> N
     def route_then_crash(
         shell: FakeShell, name: str, argv: list[str], stdin: str
     ) -> str:
-        rig.store.save_routing(rig.cid, 0, Outcome.straight_through, [], "x")
+        rig.store.save_routing(rig.cid, 0, Outcome.straight_through, [])
         raise ShellError("openshell sandbox exec failed (1): boom")
 
     rig.shell.turn = route_then_crash
     assert rig.say("done") == VALIDATED
     assert rig.shell.sandboxes == {}
     assert rig.sandbox_stages()[-1] == "deleted"
+
+
+def test_a_claim_that_waits_gets_a_new_sandbox_when_the_document_comes(
+    make: Any,
+) -> None:
+    """Issue #72. The first sandbox is deleted at the routing. The upload opens the
+    claim again, so a turn runs, in a new sandbox."""
+    rig = make()
+    r001 = signal("R001", "Missing: a medical certificate.")
+    rig.store.update_claim(rig.cid, {"signals": [r001.model_dump()]})
+
+    def route(shell: FakeShell, name: str, argv: list[str], stdin: str) -> str:
+        rig.store.save_routing(rig.cid, 25, Outcome.handler_review, [])
+        return line("dropped")
+
+    rig.shell.turn = route
+    assert rig.say("done").startswith("We still need: a medical certificate.")
+    assert rig.shell.sandboxes == {}
+    rig.shell.turn = lambda *a: line("Thank you. Another one?")
+    pdf = (MOCK / "claim-1-travel" / "medical-certificate.pdf").read_bytes()
+    res = rig.client.post(
+        f"/claims/{rig.cid}/documents", files={"file": ("medical-certificate.pdf", pdf)}
+    )
+    assert res.status_code == 201
+    assert len(rig.shell.sandboxes) == 1  # a new one
+    assert rig.store.get_claim(rig.cid).status == "open"
+    last = rig.client.get(f"/claims/{rig.cid}/messages").json()[-1]["text"]
+    assert last == "Thank you. Another one?"

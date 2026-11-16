@@ -33,6 +33,8 @@ The points are a first guess. Tune them on the mock test set.
 3. `handler_review` if the score is 20 or more, or a required document is missing, or the claimed amount is above the straight-through limit of the workflow, or a field has low confidence.
 4. `straight_through` in all other cases.
 
+When a required document is missing (R001), the claim also waits for the customer (status `waiting_customer`, issue #72). The customer can upload the document later: the checks and the routing run again and give a new score and a new outcome. See `docs/ARCHITECTURE.md`, section 5b.
+
 ## Fraud report
 
 Written for every `investigation`. The handler must understand it in one minute.

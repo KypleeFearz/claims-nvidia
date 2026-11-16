@@ -8,6 +8,7 @@ the status `in_review` and no outcome. A person decides.
 from typing import Any
 
 from app.agent.phrases import CODE_NODES
+from app.models import ClaimStatus
 
 HANDOVER = (
     "Sorry, something went wrong on our side. "
@@ -26,7 +27,8 @@ def hand_over_if_stuck(store: Any, claim_id: str) -> str | None:
     if len(failed) < 2 or failed[-1].outputs["node"] != failed[-2].outputs["node"]:
         return None
     node = failed[-1].outputs["node"]
-    store.update_claim(claim_id, {"status": "in_review", "agent_state": "closed"})
+    store.update_claim(claim_id, {"agent_state": "closed"})
+    store.set_status(claim_id, ClaimStatus.in_review, "system", f"failed twice: {node}")
     store.append_event(
         claim_id, "workflow", "failed", f"Failed twice in a row: {node}",
         {"node": node},

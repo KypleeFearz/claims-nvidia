@@ -6,9 +6,11 @@ that go to a person give the same exact text: a different text would tell a
 fraudster that the system flagged the claim.
 """
 
+from collections.abc import Iterable
+
 from pydantic import BaseModel
 
-from app.models import Claim, Outcome
+from app.models import Claim, ClaimStatus, Outcome, Signal
 
 VALIDATED = "Your claim is validated. You will receive a confirmation by e-mail."
 TO_A_PERSON = "A claims specialist will review your case and contact you."
@@ -17,11 +19,16 @@ MESSAGES = {
     Outcome.handler_review: TO_A_PERSON,
     Outcome.investigation: TO_A_PERSON,
 }
-# The status is as blunt as the message: both outcomes that go to a person match.
+# A required document is missing (signal R001): the customer reads what to send. It
+# depends only on the documents, never on the outcome, and R001 always goes to a person.
+WAITING = "We still need: {missing} You can upload here at any time. "
+# The status is as blunt as the message: both statuses that go to a person match.
 STATUS = {
-    Outcome.straight_through: "validated",
-    Outcome.handler_review: "in_review",
-    Outcome.investigation: "in_review",
+    ClaimStatus.open: "open",
+    ClaimStatus.waiting_customer: "waiting_customer",
+    ClaimStatus.validated: "validated",
+    ClaimStatus.in_review: "in_review",
+    ClaimStatus.in_investigation: "in_review",
 }
 
 
@@ -33,20 +40,46 @@ class CustomerView(BaseModel):
     step: str  # where the chat is (the agent state): the Done button needs it
 
 
-def customer_message(outcome: Outcome) -> str:
-    return MESSAGES[outcome]
-
-
-def customer_status(outcome: Outcome | None) -> str:
-    return STATUS[outcome] if outcome else "open"
+def customer_message(outcome: Outcome, signals: Iterable[Signal] = ()) -> str:
+    missing = next((s.detail for s in signals if s.code == "R001"), None)
+    if missing is None:
+        return MESSAGES[outcome]
+    return WAITING.format(missing=missing.removeprefix("Missing: ")) + TO_A_PERSON
 
 
 def customer_view(claim: Claim) -> CustomerView:
     return CustomerView(
         claim_id=claim.id,
         policy_number=claim.policy.number if claim.policy else None,
-        # no outcome: the claim status (open, or in_review after a failure of ours)
-        status=customer_status(claim.outcome) if claim.outcome else claim.status,
-        message=customer_message(claim.outcome) if claim.outcome else None,
+        status=STATUS[claim.status],
+        message=(
+            customer_message(claim.outcome, claim.signals) if claim.outcome else None
+        ),
         step=claim.agent_state,
+    )
+
+
+class ClaimRow(BaseModel):
+    """One line of the list of claims: for a handler, never for the customer."""
+
+    claim_id: str
+    customer: str
+    policy_number: str | None
+    type: str | None
+    claimed_amount: float | None
+    status: ClaimStatus
+    outcome: Outcome | None
+    score: int | None
+
+
+def claim_row(claim: Claim) -> ClaimRow:
+    return ClaimRow(
+        claim_id=claim.id,
+        customer=claim.customer.name,
+        policy_number=claim.policy.number if claim.policy else None,
+        type=claim.type,
+        claimed_amount=claim.claimed_amount,
+        status=claim.status,
+        outcome=claim.outcome,
+        score=claim.score,
     )

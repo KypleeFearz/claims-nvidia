@@ -68,3 +68,9 @@
 - The pipeline panel uses server-sent events (`EventSource`): check that a tunnel or a proxy supports them before you choose it.
 - The Brev HTTP port does not reach `127.0.0.1`: a service bound to the loopback gives a 503 from Brev. Listen on every interface and check that the raw port stays closed from outside.
 - `vite preview` refuses a Host name that it does not know (403). The proxy in front rewrites the Host header, so the frontend config does not hold the public name.
+
+## Claim lifecycle (issue #72, 2026-11-16)
+
+- The chat step lives in two places in `nim` mode: on the claim (`agent_state`) and in the checkpoint of the graph (`step`). When trusted code changes the first, the second is stale. The claim is the truth: the backend corrects the step in the input of the turn.
+- A new event with the actor `workflow` breaks every test and view that reads the node events. A new kind of event gets its own actor (`system`).
+- A frontend test that checks "the button is enabled" passes before the data is loaded. Wait for the load first, and check that the test fails without the feature.

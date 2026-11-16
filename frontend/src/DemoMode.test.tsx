@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import App from './App'
 import Chat from './Chat'
@@ -22,14 +22,14 @@ const cases = [
   },
 ]
 
-const stub = (list: unknown[] = cases, step = 'ask_documents') => {
+const stub = (list: unknown[] = cases, step = 'ask_documents', status = 'open') => {
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
     if (url === '/demo/scenarios?policy=TRV-1') return Promise.resolve(Response.json(list))
     if (url === '/demo/kit/claim-1-travel/booking-confirmation.pdf') return Promise.resolve(new Response('%PDF-x'))
     if (url === '/demo/kit/hard/b-scan.pdf') return Promise.resolve(new Response('%PDF-y'))
     if (url === '/claims/CL-1/documents' && init?.method === 'POST') return Promise.resolve(Response.json({}, { status: 201 }))
     if (url === '/claims/CL-1/messages') return Promise.resolve(Response.json([]))
-    return Promise.resolve(Response.json({ ...view, step }))
+    return Promise.resolve(Response.json({ ...view, step, status }))
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
@@ -70,6 +70,14 @@ test('no scenario: nothing is shown; closed claim: the uploads are disabled', as
   render(<Chat claimId="CL-1" policy="TRV-1" />)
   fireEvent.click(await screen.findByRole('button', { name: 'Sample cases (1)' }))
   await waitFor(() => expect(screen.getByRole('button', { name: /booking-confirmation.pdf/ })).toBeDisabled())
+})
+
+test('a closed claim that waits for a document keeps the uploads on', async () => {
+  stub(cases, 'closed', 'waiting_customer')
+  render(<Chat claimId="CL-1" policy="TRV-1" />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Sample cases (1)' }))
+  await act(async () => {}) // the customer view is loaded: the step is closed
+  expect(screen.getByRole('button', { name: /booking-confirmation.pdf/ })).toBeEnabled()
 })
 
 test('New claim goes back to the account choice; Reset demo asks, calls the API and starts over', async () => {

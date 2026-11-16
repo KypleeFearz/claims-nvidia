@@ -122,7 +122,7 @@ def test_missing_medical_certificate_and_done_gives_r001_and_handler_review(
     assert [s["code"] for s in c["signals"]] == ["R001"]
     assert c["score"] == 25 and c["outcome"] == "handler_review"
     assert any("missing" in r for r in c["outcome_reasons"])
-    assert c["agent_state"] == "closed" and c["status"] == "in_review"
+    assert c["agent_state"] == "closed" and c["status"] == "waiting_customer"
     [signal] = c["signals"]
     assert signal["evidence"] == [] and "medical certificate" in signal["detail"]
     last = client.get(f"/claims/{cid}/messages").json()[-1]["text"]
@@ -151,8 +151,12 @@ def test_investigation_gives_the_same_customer_text_as_handler_review(
     assert c["outcome"] == "investigation" and c["score"] == 65
     texts = [m["text"] for m in client.get(f"/claims/{cid}/messages").json()]
     assert REVIEW in texts[-1]
-    assert client.get(f"/claims/{cid}/customer").json()["message"] == REVIEW
-    assert c["status"] == "in_review"
+    # a document is missing too: the same words as for a handler review that waits
+    view = client.get(f"/claims/{cid}/customer").json()
+    assert view["message"].endswith(REVIEW) and view["message"] == texts[
+        -1
+    ].removeprefix("Thank you. ")
+    assert c["status"] == view["status"] == "waiting_customer"
 
 
 def test_the_customer_endpoint_leaks_nothing(client: TestClient) -> None:
