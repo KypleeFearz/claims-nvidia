@@ -181,11 +181,43 @@ class Proposal(BaseModel):
 class Decision(BaseModel):
     """What a handler did on a claim, and why (issue #84)."""
 
-    action: Literal["approve", "refuse", "request", "investigate", "clear"]
+    action: Literal["approve", "refuse", "request", "investigate", "clear", "confirm"]
     by: str
     reason: str = ""
     amount: float | None = None  # CHF approved, for `approve`
     time: datetime
+
+
+class InvestigationTask(BaseModel):
+    id: str
+    text: str
+    codes: list[str] = []  # the signals this task answers
+    done: bool = False
+    by: str | None = None
+    note: str = ""
+    time: datetime | None = None
+
+
+class Note(BaseModel):
+    by: str
+    text: str
+    time: datetime
+
+
+class Conclusion(BaseModel):
+    result: Literal["confirmed", "not_confirmed"]
+    by: str
+    text: str
+    time: datetime
+
+
+class Investigation(BaseModel):
+    """The case of an investigator (issue #92): a plan, an evidence log, a
+    conclusion. For the handler desk only: the customer view never reads it."""
+
+    tasks: list[InvestigationTask] = []
+    notes: list[Note] = []
+    conclusion: Conclusion | None = None
 
 
 class Claim(BaseModel):
@@ -207,6 +239,7 @@ class Claim(BaseModel):
     proposal: Proposal | None = None
     status: ClaimStatus = ClaimStatus.open
     decisions: list[Decision] = []
+    investigation: Investigation | None = None
     opened_at: datetime | None = None  # None: a claim made before issue #84
 
 

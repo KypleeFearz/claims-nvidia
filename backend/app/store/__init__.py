@@ -234,7 +234,11 @@ class Store:
             return self._move(claim, ClaimStatus.open, by, "a new document", fields)
 
     def decide(
-        self, claim_id: str, status: ClaimStatus, decision: Decision
+        self,
+        claim_id: str,
+        status: ClaimStatus,
+        decision: Decision,
+        more: dict[str, Any] | None = None,
     ) -> Claim | None:
         """The decision of a handler: the new status and the decision in one write,
         and one event with the actor `handler`. Called by `app/handler.py` only."""
@@ -244,7 +248,10 @@ class Store:
                 return None
             check_move(claim.status, status)  # the same status again is refused too
             decisions = [*claim.decisions, decision]
-            fields = {"decisions": [d.model_dump(mode="json") for d in decisions]}
+            fields = {
+                **(more or {}),  # the conclusion of an investigation, in the same write
+                "decisions": [d.model_dump(mode="json") for d in decisions],
+            }
             return self._move(
                 claim, status, decision.by, decision.reason, fields, decision.action
             )

@@ -12,6 +12,7 @@ of the agent; and nothing at all for investigate and clear.
 from datetime import UTC, datetime
 
 from app.agent.phrases import check_message
+from app.investigation import conclusion, open_case
 from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Decision
 from app.store import Store
@@ -27,9 +28,13 @@ TARGET: dict[str, ClaimStatus] = {
     "refuse": ClaimStatus.refused,
     "request": ClaimStatus.waiting_customer,
     "investigate": ClaimStatus.in_investigation,
-    "clear": ClaimStatus.in_review,  # an investigation that found nothing
+    # the two conclusions of an investigation (issue #92): the claim goes back to a
+    # handler, who decides. `confirm` is not a refusal.
+    "clear": ClaimStatus.in_review,
+    "confirm": ClaimStatus.in_review,
 }
-NEEDS_REASON = {"refuse", "request", "investigate", "clear"}
+CONCLUSION = {"clear": "not_confirmed", "confirm": "confirmed"}
+NEEDS_REASON = {"refuse", "request", "investigate", "clear", "confirm"}
 
 
 class BadDecision(ValueError):
@@ -77,8 +82,15 @@ def decide(
             "time": datetime.now(UTC),
         }
     )
-    saved = store.decide(claim_id, TARGET[action], decision)
+    more = (
+        conclusion(claim, CONCLUSION[action], by, reason)
+        if action in CONCLUSION
+        else None
+    )
+    saved = store.decide(claim_id, TARGET[action], decision, more)
     assert saved is not None
+    if action == "investigate":
+        open_case(store, claim_id, reason)  # the plan of the investigator
     text = reason if action == "request" else after_decision(decision)
     if text:  # investigate and clear: the customer sees nothing
         store.add_message(claim_id, "agent", text)

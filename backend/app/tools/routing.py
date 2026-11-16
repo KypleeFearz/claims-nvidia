@@ -16,6 +16,7 @@ from app.checks.rules import run_rules
 from app.fraud.report import write_report
 from app.fraud.routing import route
 from app.fraud.routing import score as sum_points
+from app.investigation import open_case
 from app.models import Claim, Outcome
 from app.settlement import propose
 from app.tools.gateway import Gateway
@@ -72,6 +73,7 @@ def register(gateway: Gateway) -> None:
         gateway.store.save_routing(
             claim_id, total, outcome, reasons, report, propose(claim)
         )
+        open_case(gateway.store, claim_id)  # the plan of the investigator (#92)
         return report.model_dump(mode="json")
 
     # The agent gets nothing from the checks, and only the customer text from the

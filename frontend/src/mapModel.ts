@@ -247,7 +247,7 @@ export const BOXES: MapBox[] = [
     status: 'built',
     icon: 'shield',
     detail:
-      'The system routes a claim and never refuses one. A handler approves, refuses with a written reason, asks the customer, or sends to investigation. Each decision is one event with the name of the handler. The correction of a field (issue 28) goes on the case page.',
+      'The system routes a claim and never refuses one. A handler approves, refuses with a written reason, asks the customer, or sends to investigation. An investigation has a plan of tasks, an evidence log and a conclusion; then the handler decides. Each decision is one event with the name of the handler. The correction of a field (issue 28) goes on the case page.',
     files: ['frontend/src/HandlerDesk.tsx', 'backend/app/handler.py', 'backend/app/lifecycle.py', 'backend/tests/test_handler.py'],
     issues: [{ n: 28, label: 'field correction' }],
     check: { cmd: 'cd backend && uv run pytest tests/test_handler.py tests/test_no_auto_rejection.py' },

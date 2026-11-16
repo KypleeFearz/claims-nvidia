@@ -157,6 +157,12 @@ def test_investigate_and_clear_change_nothing_that_the_customer_sees(
     )
     assert claim(client, cid)["status"] == "in_investigation"
     assert (view(client, cid), client.get(f"/claims/{cid}/messages").json()) == before
+    # the investigator does his one task first (issue #92), then concludes
+    task = {"by": SOFIA, "done": True, "note": "Called the provider."}
+    assert (
+        client.post(f"/claims/{cid}/investigation/tasks/T1", json=task).status_code
+        == 200
+    )
     assert decide(client, cid, "clear", reason="Provider confirmed.").status_code == 200
     assert claim(client, cid)["status"] == "in_review"
     assert (view(client, cid), client.get(f"/claims/{cid}/messages").json()) == before
