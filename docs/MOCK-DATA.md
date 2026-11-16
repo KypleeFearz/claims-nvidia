@@ -12,8 +12,19 @@ All data is invented. No real person, no real policy. The documents must look re
 | C-1002 Marco Bianchi | TRV-2026-0721 | Travel | 2026-02-01 to 2027-01-31 | CHF 5,000 | CHF 100 | 0 | illness, cancellation |
 | C-1003 Lukas Meier | ACC-2026-2210 | Accident | 2026-10-20 to 2027-10-19 | CHF 4,500 | 0 | 10% | accident |
 | C-1003 Lukas Meier | HH-2026-0102 | Household | 2026-01-15 to 2027-01-14 | CHF 10,000 | CHF 500 | 0 | water, fire, theft (not breakage) |
+| C-1004 Elena Rossi | TRV-2026-0850 | Travel | 2026-03-01 to 2027-02-28 | CHF 5,000 | 0 | 0 | illness, luggage, cancellation |
 
 The terms (issue #86) are in `data/mock/policies.json`. `data/mock/policy_wordings.json` holds the mock general conditions of each line: the articles that a line of a settlement proposal names. They are invented, as all the rest.
+
+## History and links (issue #90)
+
+`data/mock/history.json`, written by hand, all invented. The accounts (`MOCK-ACCT-…`) and the phones (`+41 00 000 …`) have formats that cannot be real.
+
+- **Persons**: the four customers and two persons who are not customers of the demo (Reto Vogel, Sandra Hug). Each has a payout account, a phone and an address.
+- **Earlier claims**: one paid claim for Anna, Marco and Lukas (no signal). Two claims closed as fraud for Reto Vogel and one for Sandra Hug. Two of them name the provider "Sanitaer Blitz GmbH".
+- **The link**: Elena Rossi has the payout account and the phone of Reto Vogel. Her documents are clean; her claim goes to `investigation` because of R008 (40) and R009 (20).
+
+The signals R006 to R010 read this file (`docs/FRAUD.md`). The claims made in the demo do not count as history.
 
 ## The settlement of each kit story
 
@@ -31,6 +42,7 @@ Calculated by hand, in `data/mock/settlements.json`. `backend/tests/test_settlem
 | `kit-marco-bathroom`, CHF 4,740 | the lines give 1,740, not 4,740; − 200 deductible | CHF 1,540.00 | yes |
 | `kit-lukas-clean`, CHF 840 | 840 − 10% | CHF 756.00 | no |
 | `kit-lukas-household`, CHF 1,260 | breakage is not covered by this policy | CHF 0.00 | yes |
+| `kit-elena-travel`, CHF 1,750 | 2,150 − 400 | CHF 1,750.00 | no (the investigation comes from the links) |
 
 ## The three demo claim files
 
@@ -64,7 +76,7 @@ Expected signals: R003, R004, R005, T001, T002, T003, C001. Score above 60. Frau
 
 ## The document kit (D14, issue #23)
 
-The three claim files above and six more scenarios: 24 documents in 9 folders of `data/mock/`, and 9 hard versions in `data/mock/hard/`. `data/mock/index.json` is the source of this table (the generator writes it). A visitor picks an account, types the story of a row, uploads its documents and types "done". `backend/tests/test_document_kit.py` plays every row in `local` mode and checks the exact signals and outcome.
+The three claim files above and seven more scenarios: 26 documents in 10 folders of `data/mock/`, and 9 hard versions in `data/mock/hard/`. `data/mock/index.json` is the source of this table (the generator writes it). A visitor picks an account, types the story of a row, uploads its documents and types "done". `backend/tests/test_document_kit.py` plays every row in `local` mode and checks the exact signals and outcome.
 
 | Folder | Account, policy | Story to type | Docs | Signals | Outcome |
 |---|---|---|---|---|---|
@@ -75,6 +87,7 @@ The three claim files above and six more scenarios: 24 documents in 9 folders of
 | `kit-anna-theft` | Anna, HH-2025-1182 | Burglary at my flat on 9 October 2026: the front door was forced. I claim CHF 2,640. | 5 | none | `handler_review` |
 | `kit-marco-travel` | Marco, TRV-2026-0721 | I had to cancel my trip to Sicily on 12 July 2026 because of a family emergency. I claim CHF 2,300. | 2 | none | `straight_through` |
 | `kit-marco-travel` | same | The same story, but I claim CHF 3,200 (the full trip price, not price minus refund of CHF 900). | | C003 | `handler_review` |
+| `kit-elena-travel` | Elena, TRV-2026-0850 | I had to cancel my trip to Lisbon on 2 June 2026 because of a family emergency. I claim CHF 1,750. | 2 | R008, R009 (clean documents: the links) | `investigation` |
 | `kit-marco-bathroom` | Marco, HH-2024-0933 | A leaking pipe flooded my bathroom on 3 November 2026. I claim CHF 4,740. | 2 | T001, T002, T003 | `investigation` |
 | `kit-lukas-clean` | Lukas, ACC-2026-2210 | I fell off my bike on 6 November 2026 and hurt my wrist. I claim CHF 840. | 2 | none | `straight_through` |
 | `kit-lukas-household` | Lukas, HH-2026-0102 | A football broke the living-room window on 14 September 2026. I claim CHF 1,260. | 1 | R001 (no photo) | `handler_review` |

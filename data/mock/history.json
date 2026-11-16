@@ -1,0 +1,103 @@
+{
+  "_note": "Mock history for the fraud signals R006 to R010 (issue #90). All invented: no real person, no real account, no real phone. The accounts and phones have formats that cannot be real.",
+  "persons": {
+    "C-1001": {
+      "name": "Anna Keller",
+      "account": "MOCK-ACCT-1001",
+      "phone": "+41 00 000 10 01",
+      "address": "Rosenweg 7, 3011 Bern"
+    },
+    "C-1002": {
+      "name": "Marco Bianchi",
+      "account": "MOCK-ACCT-1002",
+      "phone": "+41 00 000 10 02",
+      "address": "Via Nassa 18, 6900 Lugano"
+    },
+    "C-1003": {
+      "name": "Lukas Meier",
+      "account": "MOCK-ACCT-1003",
+      "phone": "+41 00 000 10 03",
+      "address": "Hirschengasse 9, 8032 Zurich"
+    },
+    "C-1004": {
+      "name": "Elena Rossi",
+      "account": "MOCK-ACCT-9001",
+      "phone": "+41 00 000 90 01",
+      "address": "Rebgasse 12, 4058 Basel"
+    },
+    "X-9001": {
+      "name": "Reto Vogel",
+      "account": "MOCK-ACCT-9001",
+      "phone": "+41 00 000 90 01",
+      "address": "Klybeckstrasse 77, 4057 Basel"
+    },
+    "X-9002": {
+      "name": "Sandra Hug",
+      "account": "MOCK-ACCT-9002",
+      "phone": "+41 00 000 90 02",
+      "address": "Bahnhofplatz 3, 6300 Zug"
+    }
+  },
+  "claims": [
+    {
+      "id": "H-2025-0311",
+      "person": "C-1001",
+      "date": "2025-07-02",
+      "line": "Travel",
+      "cause": "luggage",
+      "amount": 240.0,
+      "result": "paid",
+      "provider": null
+    },
+    {
+      "id": "H-2025-0618",
+      "person": "C-1002",
+      "date": "2025-02-11",
+      "line": "Household",
+      "cause": "breakage",
+      "amount": 380.0,
+      "result": "paid",
+      "provider": "Vetro Ticino SA"
+    },
+    {
+      "id": "H-2024-0907",
+      "person": "C-1003",
+      "date": "2024-12-03",
+      "line": "Household",
+      "cause": "theft",
+      "amount": 910.0,
+      "result": "paid",
+      "provider": null
+    },
+    {
+      "id": "H-2025-1120",
+      "person": "X-9001",
+      "date": "2025-09-19",
+      "line": "Travel",
+      "cause": "cancellation",
+      "amount": 4100.0,
+      "result": "fraud",
+      "provider": "Reisebuero Morgenrot AG"
+    },
+    {
+      "id": "H-2026-0214",
+      "person": "X-9001",
+      "date": "2026-02-27",
+      "line": "Household",
+      "cause": "water",
+      "amount": 6800.0,
+      "result": "fraud",
+      "provider": "Sanitaer Blitz GmbH"
+    },
+    {
+      "id": "H-2026-0330",
+      "person": "X-9002",
+      "date": "2026-03-30",
+      "line": "Household",
+      "cause": "water",
+      "amount": 5200.0,
+      "result": "fraud",
+      "provider": "Sanitaer Blitz GmbH"
+    }
+  ]
+}

@@ -26,7 +26,7 @@ def test_outcome_has_exactly_three_values() -> None:
 
 def test_customers(client: TestClient) -> None:
     customers = client.get("/customers").json()
-    assert [c["id"] for c in customers] == ["C-1001", "C-1002", "C-1003"]
+    assert [c["id"] for c in customers] == ["C-1001", "C-1002", "C-1003", "C-1004"]
 
 
 def new_claim(client: TestClient, customer: str = "C-1001") -> dict[str, object]:

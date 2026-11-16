@@ -29,6 +29,11 @@ WHY: dict[str, str | tuple[str, str]] = {
     "R003": "the incident is within 14 days of the policy start",
     "R004": "the claimed amount is almost the whole coverage limit",
     "R005": "an invoice is dated before the incident",
+    "R006": "the customer made many claims in 12 months",
+    "R007": "an earlier claim of the customer was closed as fraud",
+    "R008": "the payout account is also the account of another person",
+    "R009": "the phone or the address is shared with a person known for fraud",
+    "R010": "a provider on the {doc} has claims closed as fraud",
     "T001": "the {doc} was edited after it was issued",
     "T002": (
         "the {doc} was changed long after it was created",
@@ -55,6 +60,12 @@ NEXT_STEPS = {
     "rule": "Check the policy period and the coverage limit against the claim.",
 }
 CATEGORY_ORDER = list(NEXT_STEPS)
+# R006 to R010 (issue #90): the history of the customer and the links between persons
+HISTORY_CODES = {"R006", "R007", "R008", "R009", "R010"}
+HISTORY_STEP = (
+    "Read the earlier claims and the linked persons, and check who owns the "
+    "payout account before any payment."
+)
 
 
 def _rank(s: Signal) -> tuple[int, str]:
@@ -130,5 +141,6 @@ def write_report(
             NEXT_STEPS[c]
             for c in CATEGORY_ORDER
             if any(s.category == c for s in signals)
-        ],
+        ]
+        + ([HISTORY_STEP] if any(s.code in HISTORY_CODES for s in signals) else []),
     )

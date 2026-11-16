@@ -71,6 +71,21 @@ const stub = (decision: (body: { action: string }) => Response = () => Response.
     if (url === '/claims') return Promise.resolve(Response.json(rows))
     if (url === '/handlers') return Promise.resolve(Response.json(['Sofia Brunner', 'David Frei']))
     if (url === '/claims/CL-review/messages') return Promise.resolve(Response.json(messages))
+    if (url === '/claims/CL-review/history')
+      return Promise.resolve(
+        Response.json({
+          person: { name: 'Marco Bianchi', account: 'MOCK-ACCT-1002', phone: '+41 00 000 10 02', address: 'Via Nassa 18, 6900 Lugano' },
+          earlier_claims: [{ id: 'H-2025-0618', date: '2025-02-11', line: 'Household', cause: 'breakage', amount: 380, result: 'paid', provider: 'Vetro Ticino SA' }],
+          links: [
+            {
+              person: 'X-9001',
+              name: 'Reto Vogel',
+              shared: ['account', 'phone'],
+              claims: [{ id: 'H-2025-1120', date: '2025-09-19', line: 'Travel', cause: 'cancellation', amount: 4100, result: 'fraud', provider: null }],
+            },
+          ],
+        }),
+      )
     if (url === '/claims/CL-review/decisions' && init?.method === 'POST') {
       const res = decision(JSON.parse(init.body as string) as { action: string })
       if (res.ok) status = 'approved'
@@ -156,4 +171,17 @@ test('no claim picked: the case panel says what to do', async () => {
   stub()
   render(<HandlerDesk />)
   expect(await screen.findByText('Pick a claim in the queue.')).toBeInTheDocument()
+})
+
+test('the case page shows the earlier claims of the customer and the persons linked to him', async () => {
+  stub()
+  render(<HandlerDesk />)
+  const page = await open()
+  const section = await within(page).findByLabelText('History and links')
+  expect(section).toHaveTextContent('Payout account MOCK-ACCT-1002')
+  expect(within(section).getByLabelText('Earlier claims')).toHaveTextContent('H-2025-0618 · 2025-02-11 · Household, breakage · CHF 380.00')
+  const link = within(section).getByLabelText('Link to Reto Vogel')
+  expect(link).toHaveTextContent('same account, phone')
+  expect(link).toHaveTextContent('H-2025-1120')
+  expect(within(link).getByText('fraud')).toHaveClass('pill-bad')
 })

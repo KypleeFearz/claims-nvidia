@@ -31,7 +31,12 @@ def is_image_based(p: Path) -> bool:
 
 # written by hand, not by the generator: the policies, their wordings (issue #86) and
 # the settlement of each kit story
-BY_HAND = {"policies.json", "policy_wordings.json", "settlements.json"}
+BY_HAND = {
+    "policies.json",
+    "policy_wordings.json",
+    "settlements.json",
+    "history.json",  # issue #90: earlier claims and links between persons
+}
 
 
 def exact(folder: Path) -> dict[str, str]:

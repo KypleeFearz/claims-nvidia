@@ -16,6 +16,11 @@
 | R003 | rule | Incident within 14 days of the policy start | medium | 20 |
 | R004 | rule | Claimed amount at 95% or more of the coverage limit | low | 10 |
 | R005 | rule | Invoice dated before the incident | medium | 20 |
+| R006 | rule | Three or more earlier claims in the 12 months before the incident | medium | 20 |
+| R007 | rule | An earlier claim of this customer was closed as fraud | high | 40 |
+| R008 | rule | The payout account is also the account of another person | high | 40 |
+| R009 | rule | Phone or address shared with a person who has a claim closed as fraud | medium | 20 |
+| R010 | rule | A provider on a document has earlier claims closed as fraud | medium | 20 |
 | T001 | tampering | PDF last written by an editing tool | medium | 20 |
 | T002 | tampering | PDF modified more than one day after its creation | low | 10 |
 | T003 | tampering | Line items do not add up to the total | high | 30 |
@@ -25,6 +30,8 @@
 | C004 | consistency | Photo or report does not fit the declared damage (VLM) | medium | 20 |
 
 The points are a first guess. Tune them on the mock test set.
+
+R006 to R010 (issue #90) do not read a document of the claim: they read the history of the customer and the links between persons (`backend/app/checks/history.py`, `data/mock/history.json`). They run inside `run_checks`. Only R010 has a document as evidence (the page that names the provider); the others name the earlier claim or the other person in their detail. The handler reads the same data on the case page, section "History and links".
 
 ## Routing
 
@@ -49,4 +56,4 @@ A template writes the text from the signals, in every mode. It adds no fact. Lat
 
 ## Later (not in the first version)
 
-Duplicate invoices and photos across claims, photo forensics (edited or reused photos, EXIF data), font and pixel analysis of scans, links between claims (same provider, same bank account).
+Duplicate invoices and photos across claims, photo forensics (edited or reused photos, EXIF data), font and pixel analysis of scans. For the history and the links: the claims of the demo itself as history, a graph view, the investigation case with tasks and a conclusion, signals per line of business.

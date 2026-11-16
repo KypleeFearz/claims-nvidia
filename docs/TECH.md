@@ -216,7 +216,7 @@ This is the confined agent. It is the most complex part. Read `docs/ARCHITECTURE
 
 ### 2.9 Checks (zone 03)
 
-- What: 12 signals in one table (`SIGNALS` in `backend/app/checks/rules.py`). Each signal has a code, a category, a severity, points, a title and an "expected" text.
+- What: 17 signals in one table (R006 to R010, added on 2026-11-16, read the history of the customer and the links between persons: `backend/app/checks/history.py`) (`SIGNALS` in `backend/app/checks/rules.py`). Each signal has a code, a category, a severity, points, a title and an "expected" text.
 - Three tools run them: `run_checks` (rules R001 to R005 and the rules of the workflow), `check_tampering` (T001 to T003), `check_consistency` (C001 to C003).
 - Tampering reads the real bytes of the stored PDF with pypdf: the producer, the creator, the creation and modification dates. T003 compares the line items with the total.
 - Every signal carries evidence: the document and page it comes from.
@@ -589,7 +589,7 @@ You are expected to question these choices. For each one: what we chose, why it 
 
 ### 5.2 Fixed points and thresholds
 
-- **Chosen:** 12 signals with fixed points, `investigation` at 60, `handler_review` at 20 (D34). `docs/FRAUD.md` says "a first guess".
+- **Chosen:** 17 signals with fixed points, `investigation` at 60, `handler_review` at 20 (D34). `docs/FRAUD.md` says "a first guess".
 - **May be wrong:** the weights have no data behind them. Two medium signals (40) do not reach 60. A signal of 10 points (R004, T002) alone does not even send a claim to review.
 - **Test:** change `SIGNALS` in `backend/app/checks/rules.py`. Re-run `test_document_kit.py`: it names the story that moves. Measure on more seeded cases. A model score would be less explainable. Keep the reasons.
 
@@ -662,7 +662,7 @@ You are expected to question these choices. For each one: what we chose, why it 
 ### 5.14 Evaluation numbers
 
 - **Chosen:** we measured the agent with the fixture reader.
-- **May be wrong:** the 9 of 9 says nothing about extraction. The test set is 24 documents and 9 hard versions of mock claims that we generated ourselves. A model trained on such PDFs may do better than on real ones.
+- **May be wrong:** the 9 of 9 says nothing about extraction. The test set is 26 documents and 9 hard versions of mock claims that we generated ourselves. A model trained on such PDFs may do better than on real ones.
 - **Test:** the harness (#19) is the first step. Add documents with different layouts, languages and handwriting. Keep the rule: mock data only.
 
 ### 5.15 A fixture reader hides the hard part
@@ -680,7 +680,7 @@ These parts are simple on purpose. Replace one only when the "when" is true.
 | Part | Today | Replace when |
 |---|---|---|
 | Fixture reader | Reads `expected.json` by SHA-256 | Always, for the real demo. It stays as the base for tests. |
-| Mock data | 3 customers, 6 policies, 24 documents, 9 hard versions | You need more cases, real photographs, other layouts. Never real data. |
+| Mock data | 4 customers, 7 policies, 26 documents, 9 hard versions, a mock history | You need more cases, real photographs, other layouts. Never real data. |
 | Damage photos | Simple drawings (D35) | You build C004. |
 | SQLite store | One file, one connection, one lock | More than one backend process, or real traffic. |
 | Event stream | The server reads the store every 0.3 s | Many clients, or latency matters. Push from the gateway. |

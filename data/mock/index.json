@@ -203,6 +203,35 @@
       ]
     },
     {
+      "folder": "kit-elena-travel",
+      "customer_id": "C-1004",
+      "policy": "TRV-2026-0850",
+      "title": "Trip to Lisbon cancelled",
+      "documents": [
+        {
+          "file": "booking-confirmation.pdf",
+          "document_type": "booking_confirmation"
+        },
+        {
+          "file": "cancellation-confirmation.pdf",
+          "document_type": "cancellation_confirmation"
+        }
+      ],
+      "stories": [
+        {
+          "text": "I had to cancel my trip to Lisbon on 2 June 2026 because of a family emergency. I claim CHF 1,750.",
+          "incident_date": "2026-06-02",
+          "amount": 1750,
+          "cause": "cancellation",
+          "signals": [
+            "R008",
+            "R009"
+          ],
+          "outcome": "investigation"
+        }
+      ]
+    },
+    {
       "folder": "kit-marco-bathroom",
       "customer_id": "C-1002",
       "policy": "HH-2024-0933",

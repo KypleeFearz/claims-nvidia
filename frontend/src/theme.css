@@ -1228,4 +1228,11 @@ table th[scope='row'] {
   font-weight: 400;
   font-size: var(--fs-xs);
 }
+.desk-link {
+  padding: 10px 12px;
+}
+.desk-link p,
+.desk-link ul {
+  margin: 0 0 4px;
+}
 

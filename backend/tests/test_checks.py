@@ -20,9 +20,10 @@ def test_claim_file_1_has_no_signal() -> None:
     assert run_rules(travel_claim(), TRAVEL) == []
 
 
-def test_signal_table_has_the_twelve_signals_of_the_fraud_doc() -> None:
+def test_signal_table_has_the_seventeen_signals_of_the_fraud_doc() -> None:
     assert sorted(SIGNALS) == [
         "C001", "C002", "C003", "C004", "R001", "R002", "R003", "R004", "R005",
+        "R006", "R007", "R008", "R009", "R010",  # issue #90: history and links
         "T001", "T002", "T003",
     ]  # fmt: skip
     assert [SIGNALS[c].points for c in ("R001", "R002", "R003", "R004", "R005")] == [
