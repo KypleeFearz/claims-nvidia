@@ -7,6 +7,7 @@ fraudster that the system flagged the claim.
 """
 
 from collections.abc import Iterable
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -19,6 +20,14 @@ MESSAGES = {
     Outcome.handler_review: TO_A_PERSON,
     Outcome.investigation: TO_A_PERSON,
 }
+# After the decision of a handler (issue #84): fixed texts. The customer never reads
+# the reason that the handler wrote; a letter gives the reasons (package B6).
+APPROVED = "Your claim is approved. You will receive a confirmation by e-mail."
+DECIDED = (
+    "A claims specialist has decided on your claim. "
+    "You will receive a letter with the decision and the reasons."
+)
+AFTER_DECISION = {"approve": APPROVED, "refuse": DECIDED}
 # A required document is missing (signal R001): the customer reads what to send. It
 # depends only on the documents, never on the outcome, and R001 always goes to a person.
 WAITING = "We still need: {missing} You can upload here at any time. "
@@ -29,6 +38,8 @@ STATUS = {
     ClaimStatus.validated: "validated",
     ClaimStatus.in_review: "in_review",
     ClaimStatus.in_investigation: "in_review",
+    ClaimStatus.approved: "approved",
+    ClaimStatus.refused: "decided",
 }
 
 
@@ -47,14 +58,18 @@ def customer_message(outcome: Outcome, signals: Iterable[Signal] = ()) -> str:
     return WAITING.format(missing=missing.removeprefix("Missing: ")) + TO_A_PERSON
 
 
+def _message(claim: Claim) -> str | None:
+    if claim.decisions and claim.status in (ClaimStatus.approved, ClaimStatus.refused):
+        return AFTER_DECISION[claim.decisions[-1].action]
+    return customer_message(claim.outcome, claim.signals) if claim.outcome else None
+
+
 def customer_view(claim: Claim) -> CustomerView:
     return CustomerView(
         claim_id=claim.id,
         policy_number=claim.policy.number if claim.policy else None,
         status=STATUS[claim.status],
-        message=(
-            customer_message(claim.outcome, claim.signals) if claim.outcome else None
-        ),
+        message=_message(claim),
         step=claim.agent_state,
     )
 
@@ -70,6 +85,8 @@ class ClaimRow(BaseModel):
     status: ClaimStatus
     outcome: Outcome | None
     score: int | None
+    reasons: list[str]
+    opened_at: datetime | None
 
 
 def claim_row(claim: Claim) -> ClaimRow:
@@ -82,4 +99,6 @@ def claim_row(claim: Claim) -> ClaimRow:
         status=claim.status,
         outcome=claim.outcome,
         score=claim.score,
+        reasons=claim.outcome_reasons,
+        opened_at=claim.opened_at,
     )

@@ -19,6 +19,8 @@ from app.agent.sandbox_panel import SandboxView, clean, policy_view
 from app.bench import router as bench_router
 from app.demo import router as demo_router
 from app.docintel.reader import get_reader
+from app.handler import HANDLERS, BadDecision, decide
+from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Customer, Document, Message, Policy
 from app.store import Store
 from app.stream import event_stream
@@ -47,6 +49,12 @@ class NewMessage(BaseModel):
 
 class ClaimPolicy(BaseModel):
     policy_number: str
+
+
+class NewDecision(BaseModel):
+    action: str
+    by: str
+    reason: str = Field(default="", max_length=2000)
 
 
 async def mcp_endpoint(scope: Scope, receive: Receive, send: Send) -> None:
@@ -154,6 +162,25 @@ def create_app() -> FastAPI:
     def list_claims(request: Request) -> list[ClaimRow]:
         """The list for a handler. The customer panel never calls it."""
         return [claim_row(c) for c in store(request).list_claims()]
+
+    @app.get("/handlers")
+    def handlers() -> list[str]:
+        return HANDLERS
+
+    @app.post("/claims/{claim_id}/decisions")
+    def post_decision(claim_id: str, body: NewDecision, request: Request) -> Claim:
+        """A handler decides (issue #84). The customer panel never calls it."""
+        with claim_lock(request, claim_id):
+            try:
+                return decide(
+                    store(request), claim_id, body.action, body.by, body.reason
+                )
+            except KeyError:
+                raise HTTPException(404, "unknown claim") from None
+            except BadDecision as e:
+                raise HTTPException(422, str(e)) from None
+            except IllegalMove as e:
+                raise HTTPException(409, str(e)) from None
 
     @app.get("/claims/{claim_id}")
     def get_claim(claim_id: str, request: Request) -> Claim:

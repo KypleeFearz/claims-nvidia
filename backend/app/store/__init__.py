@@ -15,6 +15,7 @@ from app.models import (
     ClaimStatus,
     ClaimType,
     Customer,
+    Decision,
     Document,
     FraudReport,
     LineOfBusiness,
@@ -98,7 +99,11 @@ class Store:
         customer = next((c for c in self.get_customers() if c.id == customer_id), None)
         if customer is None:
             return None
-        claim = Claim(id=f"CL-{uuid.uuid4().hex[:8]}", customer=customer)
+        claim = Claim(
+            id=f"CL-{uuid.uuid4().hex[:8]}",
+            customer=customer,
+            opened_at=datetime.now(UTC),
+        )
         self._save_claim(claim)
         return claim
 
@@ -224,6 +229,22 @@ class Store:
             }
             return self._move(claim, ClaimStatus.open, by, "a new document", fields)
 
+    def decide(
+        self, claim_id: str, status: ClaimStatus, decision: Decision
+    ) -> Claim | None:
+        """The decision of a handler: the new status and the decision in one write,
+        and one event with the actor `handler`. Called by `app/handler.py` only."""
+        with self.lock:
+            claim = self.get_claim(claim_id)
+            if claim is None:
+                return None
+            check_move(claim.status, status)  # the same status again is refused too
+            decisions = [*claim.decisions, decision]
+            fields = {"decisions": [d.model_dump(mode="json") for d in decisions]}
+            return self._move(
+                claim, status, decision.by, decision.reason, fields, decision.action
+            )
+
     def _move(
         self,
         claim: Claim,
@@ -231,6 +252,7 @@ class Store:
         by: str,
         why: str,
         fields: dict[str, Any],
+        action: str | None = None,
     ) -> Claim | None:
         """The one place a status changes: the check, the write with `fields`, and one
         event that says from, to, who and why. The same status again is no move."""
@@ -240,8 +262,10 @@ class Store:
         saved = self._update(claim.id, {**fields, "status": status.value})
         if status != before:
             self.append_event(
-                claim.id, "system", "status", f"Status: {before} → {status}",
-                {"from": before.value, "to": status.value, "by": by},
+                claim.id, "handler" if action else "system", "status",
+                f"Status: {before} → {status}",
+                {"from": before.value, "to": status.value, "by": by}
+                | ({"action": action} if action else {}),
                 {
                     "why": why,
                     "outcome_before": claim.outcome.value if claim.outcome else None,
@@ -271,7 +295,7 @@ class Store:
     def append_event(
         self,
         claim_id: str,
-        actor: Literal["agent", "tool", "workflow", "sandbox", "system"],
+        actor: Literal["agent", "tool", "workflow", "sandbox", "system", "handler"],
         stage: str,
         title: str,
         inputs: dict[str, Any] | None = None,

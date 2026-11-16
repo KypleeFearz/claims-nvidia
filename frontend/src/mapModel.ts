@@ -227,6 +227,19 @@ export const BOXES: MapBox[] = [
     issues: [],
   },
   {
+    id: 'desk',
+    zone: 'observe',
+    title: 'Handler desk',
+    line: 'The queue of the claims that wait for a person, and the decisions of a handler.',
+    status: 'built',
+    icon: 'shield',
+    detail:
+      'The system routes a claim and never refuses one. A handler approves, refuses with a written reason, asks the customer, or sends to investigation. Each decision is one event with the name of the handler. The correction of a field (issue 28) goes on the case page.',
+    files: ['frontend/src/HandlerDesk.tsx', 'backend/app/handler.py', 'backend/app/lifecycle.py', 'backend/tests/test_handler.py'],
+    issues: [{ n: 28, label: 'field correction' }],
+    check: { cmd: 'cd backend && uv run pytest tests/test_handler.py tests/test_no_auto_rejection.py' },
+  },
+  {
     id: 'evaluation',
     zone: 'observe',
     title: 'Evaluation',

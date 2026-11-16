@@ -85,6 +85,8 @@ Done: issue #72 (D63). How it works: `docs/ARCHITECTURE.md`, section 5b. Not don
 
 ### B3. Handler workbench (L)
 
+Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (approve, refuse, ask the customer, investigate, clear). Left: the settlement proposal on the page (needs B2), authority levels and the second approval, the field correction (#28, the intern).
+
 **Practice.** The handler works from a queue. He opens a case, reads a summary, checks, decides.
 
 **Build.**

@@ -105,3 +105,24 @@ test('New claim goes back to the account choice; Reset demo asks, calls the API 
   expect(await screen.findByRole('heading', { name: '1. Pick an account' })).toBeInTheDocument()
   expect(fetchMock.mock.calls.some(([u, i]) => u === '/demo/reset' && i?.method === 'POST')).toBe(true)
 })
+
+test('a closed chat asks again for the messages: a handler can write after the routing', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  let texts = ['A claims specialist will review your case and contact you.']
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      if (url === '/claims/CL-1/messages') return Promise.resolve(Response.json(texts.map((text) => ({ role: 'agent', text, time: '2026-11-16T08:00:00Z' }))))
+      if (url.startsWith('/demo/scenarios')) return Promise.resolve(Response.json([]))
+      return Promise.resolve(Response.json({ ...view, step: 'closed', status: 'in_review' }))
+    }),
+  )
+  render(<Chat claimId="CL-1" policy="TRV-1" />)
+  await screen.findByText('A claims specialist will review your case and contact you.')
+  texts = [...texts, 'Your claim is approved. You will receive a confirmation by e-mail.']
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5100)
+  })
+  expect(await screen.findByText('Your claim is approved. You will receive a confirmation by e-mail.')).toBeInTheDocument()
+  vi.useRealTimers()
+})

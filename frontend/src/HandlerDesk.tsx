@@ -1,0 +1,267 @@
+import { useCallback, useEffect, useState } from 'react'
+import { send } from './api'
+import { ChecksSection, ExtractedSection, FraudReportSection, OutcomeSection } from './PipelineSections'
+import type { PipelineClaim } from './PipelineSections'
+
+// The handler desk (issue #84, package B3): the queue of the claims that wait for a person, and the
+// case page with the decisions of a handler. The system never refuses a claim: a handler does, here.
+type Row = {
+  claim_id: string
+  customer: string
+  policy_number: string | null
+  type: string | null
+  claimed_amount: number | null
+  status: string
+  outcome: string | null
+  score: number | null
+  reasons: string[]
+  opened_at: string | null
+}
+type Decision = { action: string; by: string; reason: string; time: string }
+type Case = PipelineClaim & {
+  id: string
+  customer: { name: string }
+  policy: { number: string; line_of_business: string } | null
+  description: string | null
+  incident_date: string | null
+  claimed_amount: number | null
+  cause: string | null
+  status: string
+  decisions: Decision[]
+}
+type Message = { role: string; text: string; time: string }
+
+// most urgent first; a status that is not here does not wait for a handler
+const TO_DO = ['in_investigation', 'in_review', 'waiting_customer']
+const STATUS_PILL: Record<string, string> = {
+  in_investigation: 'pill-bad',
+  in_review: 'pill-warn',
+  waiting_customer: 'pill-attention',
+  approved: 'pill-ok',
+  validated: 'pill-ok',
+  refused: 'pill-idle',
+  open: 'pill-idle',
+}
+const label = (status: string) => status.replace(/_/g, ' ')
+const chf = (n: number | null) => (n === null ? '—' : `CHF ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`)
+const rank = (r: Row) => (TO_DO.includes(r.status) ? TO_DO.indexOf(r.status) : TO_DO.length)
+const byUrgency = (a: Row, b: Row) => rank(a) - rank(b) || (a.opened_at ?? '').localeCompare(b.opened_at ?? '')
+
+function age(opened: string | null) {
+  if (!opened) return '—'
+  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(opened)) / 60000))
+  if (minutes < 60) return `${minutes} min`
+  return minutes < 2880 ? `${Math.round(minutes / 60)} h` : `${Math.round(minutes / 1440)} d`
+}
+
+const ACTIONS: { action: string; text: string; className?: string; when: (status: string) => boolean }[] = [
+  { action: 'approve', text: 'Approve', className: 'btn-primary', when: () => true },
+  { action: 'request', text: 'Ask the customer', when: (s) => s !== 'waiting_customer' },
+  { action: 'investigate', text: 'Send to investigation', when: (s) => s !== 'in_investigation' },
+  { action: 'clear', text: 'Clear the investigation', when: (s) => s === 'in_investigation' },
+  { action: 'refuse', text: 'Refuse', className: 'btn-danger', when: () => true },
+]
+
+export default function HandlerDesk() {
+  const [rows, setRows] = useState<Row[]>([])
+  const [all, setAll] = useState(false)
+  const [picked, setPicked] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  const load = useCallback(
+    () =>
+      send<Row[]>('/claims')
+        .then((r) => {
+          setRows(Array.isArray(r) ? r : [])
+          setError('')
+        })
+        .catch(() => setError('The server did not answer.')),
+    [],
+  )
+  useEffect(() => {
+    void load()
+    // ponytail: the queue asks again every 5 s; an event stream of all claims if the desk grows
+    const timer = setInterval(() => void load(), 5000)
+    return () => clearInterval(timer)
+  }, [load])
+
+  const shown = rows.filter((r) => all || TO_DO.includes(r.status)).sort(byUrgency)
+  return (
+    <>
+      <header className="page-head">
+        <div className="title">
+          <span className="eyebrow">Handler</span>
+          <h1>Handler desk</h1>
+          <p>The claims that wait for a person. The system routes a claim; a handler decides.</p>
+        </div>
+      </header>
+      <div className="panels">
+        <section className="card panel panel-customer" aria-label="Queue">
+          <header className="panel-head">
+            <span className="eyebrow">{`Queue · ${rows.filter((r) => TO_DO.includes(r.status)).length} to do`}</span>
+            <label className="desk-all">
+              <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} aria-label="Show every claim" />
+              All
+            </label>
+          </header>
+          <div className="panel-body">
+            {error && <p className="pill pill-bad">{error}</p>}
+            {shown.length === 0 && !error && <p className="muted">No claim waits for a handler.</p>}
+            {shown.map((r) => (
+              <button key={r.claim_id} type="button" className="desk-row" aria-current={r.claim_id === picked ? 'true' : undefined} onClick={() => setPicked(r.claim_id)}>
+                <span className="desk-row-top">
+                  <span className="mono">{r.claim_id}</span>
+                  <span className={`pill ${STATUS_PILL[r.status] ?? 'pill-idle'}`}>{label(r.status)}</span>
+                </span>
+                <span>{`${r.customer} · ${r.type ?? 'no policy yet'} · ${chf(r.claimed_amount)}`}</span>
+                <span className="muted">{`${age(r.opened_at)}${r.score === null ? '' : ` · score ${r.score}`}${r.reasons[0] ? ` · ${r.reasons[0]}` : ''}`}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="card panel panel-pipeline" aria-label="Case">
+          {picked ? (
+            <CasePage key={picked} claimId={picked} onDecided={load} />
+          ) : (
+            <div className="panel-body">
+              <p className="muted">Pick a claim in the queue.</p>
+            </div>
+          )}
+        </section>
+      </div>
+    </>
+  )
+}
+
+function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => unknown }) {
+  const [claim, setClaim] = useState<Case | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [handlers, setHandlers] = useState<string[]>([])
+  const [by, setBy] = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const fail = () => setError('The server did not answer.')
+    send<Case>(`/claims/${claimId}`).then(setClaim).catch(fail)
+    send<Message[]>(`/claims/${claimId}/messages`).then(setMessages).catch(fail)
+    send<string[]>('/handlers')
+      .then((h) => {
+        setHandlers(h)
+        setBy((b) => b || h[0] || '')
+      })
+      .catch(fail)
+  }, [claimId])
+
+  const decide = async (action: string) => {
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch(`/claims/${claimId}/decisions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, by, reason }),
+      })
+      const body = (await res.json()) as Case & { detail?: string }
+      if (!res.ok) {
+        setError(typeof body.detail === 'string' ? body.detail : 'The decision was not saved.')
+        return
+      }
+      setClaim(body)
+      setReason('')
+      setMessages(await send<Message[]>(`/claims/${claimId}/messages`))
+      onDecided()
+    } catch {
+      setError('The server did not answer.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!claim) return <div className="panel-body">{error ? <p className="pill pill-bad">{error}</p> : <p className="muted">Loading…</p>}</div>
+  const canDecide = TO_DO.includes(claim.status)
+  return (
+    <>
+      <header className="panel-head">
+        <h2 className="desk-title">
+          <span className="mono">{claim.id}</span> <span className={`pill ${STATUS_PILL[claim.status] ?? 'pill-idle'}`}>{label(claim.status)}</span>
+        </h2>
+      </header>
+      <div className="panel-body">
+        <dl className="desk-facts" aria-label="Summary">
+          <dt>Customer</dt>
+          <dd>{claim.customer.name}</dd>
+          <dt>Policy</dt>
+          <dd className="mono">{claim.policy ? `${claim.policy.number} · ${claim.policy.line_of_business}` : '—'}</dd>
+          <dt>What happened</dt>
+          <dd>{claim.description ?? '—'}</dd>
+          <dt>Cause</dt>
+          <dd>{claim.cause ?? '—'}</dd>
+          <dt>Date</dt>
+          <dd className="mono">{claim.incident_date ?? '—'}</dd>
+          <dt>Claimed</dt>
+          <dd className="mono">{chf(claim.claimed_amount)}</dd>
+        </dl>
+
+        {canDecide && (
+          <div className="stack" aria-label="Decision">
+            <h3>Decision</h3>
+            <label className="desk-field">
+              <span>Handler</span>
+              <select aria-label="Handler" value={by} disabled={busy} onChange={(e) => setBy(e.target.value)}>
+                {handlers.map((h) => (
+                  <option key={h}>{h}</option>
+                ))}
+              </select>
+            </label>
+            <label className="desk-field">
+              <span>Reason, or text for the customer</span>
+              <textarea aria-label="Reason, or text for the customer" rows={2} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} />
+            </label>
+            <p className="muted">
+              A reason is required to refuse, to send to investigation and to clear. The customer never reads it. “Ask the customer” sends this text to the customer: write it in neutral
+              words.
+            </p>
+            <div className="desk-actions">
+              {ACTIONS.filter((a) => a.when(claim.status)).map((a) => (
+                <button key={a.action} type="button" className={a.className} disabled={busy} onClick={() => void decide(a.action)}>
+                  {a.text}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {error && <p className="pill pill-bad">{error}</p>}
+
+        {claim.decisions.length > 0 && (
+          <div className="stack" aria-label="Decisions">
+            <h3>Decisions</h3>
+            <ol className="desk-history">
+              {claim.decisions.map((d) => (
+                <li key={d.time}>
+                  <span className="mono muted">{d.time.slice(0, 16).replace('T', ' ')}</span> {[d.action, d.by, d.reason].filter(Boolean).join(' · ')}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {claim.fraud_report && <FraudReportSection report={claim.fraud_report} />}
+        <OutcomeSection claim={claim} />
+        <ChecksSection claim={claim} ran={claim.outcome !== null} />
+        <ExtractedSection docs={claim.documents} claimId={claim.id} />
+        {/* issue #28 (the intern): confirm or correct a field goes here, next to its source page */}
+
+        <div className="stack" aria-label="Conversation">
+          <h3>Conversation</h3>
+          {messages.map((m, i) => (
+            <p key={i} className={`bubble bubble-${m.role}`}>
+              {m.text}
+            </p>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}

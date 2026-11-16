@@ -51,8 +51,9 @@ def say(client: TestClient, cid: str, text: str) -> str:
 
 def test_every_status_has_its_moves_and_only_a_wait_opens_again() -> None:
     assert set(MOVES) == set(ClaimStatus)
-    assert MOVES[ClaimStatus.waiting_customer] == {ClaimStatus.open}
-    for end in ("validated", "in_review", "in_investigation"):
+    for status, moves in MOVES.items():  # only a claim that waits opens again
+        assert (ClaimStatus.open in moves) == (status == ClaimStatus.waiting_customer)
+    for end in ("validated", "approved", "refused"):
         assert MOVES[ClaimStatus(end)] == set()
 
 
@@ -155,6 +156,7 @@ def test_the_list_of_claims(client: TestClient) -> None:
     other = client.post("/claims", json={"customer_id": "C-1001"}).json()["claim_id"]
     rows = client.get("/claims").json()
     assert [r["claim_id"] for r in rows] == [cid, other]
+    assert rows[0].pop("opened_at") and rows[0].pop("reasons")
     assert rows[0] == {
         "claim_id": cid,
         "customer": "Lukas Meier",

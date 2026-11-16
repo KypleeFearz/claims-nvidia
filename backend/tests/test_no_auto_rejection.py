@@ -104,3 +104,18 @@ def test_the_backend_source_has_no_rejection_outcome(path: Path) -> None:
         if forbidden.search(s) and s != phrases.FORBIDDEN.pattern
     ]
     assert found == []
+
+
+def test_only_a_handler_reaches_approved_or_refused() -> None:
+    """A person decides (issue #84). The routing and the tools of the agent cannot:
+    the two statuses are written in one module only, and the store method that sets
+    them is called from that module only."""
+    root = Path(app.__file__).parent
+    writers = {
+        p.relative_to(root).as_posix()
+        for p in root.rglob("*.py")
+        if re.search(r"ClaimStatus\.(approved|refused)|\.decide\(", p.read_text())
+    }
+    assert writers == {"handler.py", "views.py"}  # views: the text for the customer
+    routing = (root / "lifecycle.py").read_text()
+    assert "AFTER = {" in routing and "S.refused" not in routing.split("AFTER = {")[1]

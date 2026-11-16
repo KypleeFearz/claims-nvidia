@@ -29,7 +29,7 @@ The UI is one screen with two panels.
 - the extracted claim data, each field with its source page;
 - the checks, the fraud signals and the fraud report.
 
-Later the right panel also becomes the handler review screen (confirm or correct each field).
+The handler has his own page, "Handler desk": the queue of the claims that wait for a person, and the case page where he decides (issue #84). Later the case page also lets him confirm or correct each field (issue #28).
 
 ## The claim flow: type first, then risk
 
