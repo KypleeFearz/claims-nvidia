@@ -97,13 +97,18 @@ mkdir -p "$units"
 cat >"$units/claims-backend.service" <<UNIT
 [Unit]
 Description=claims-nvidia backend (FastAPI, 127.0.0.1:8000)
-After=openshell-gateway.service
+# No After=openshell-gateway.service: that unit says After=default.target, and
+# default.target wants this one. systemd then finds a cycle at boot and does not
+# start the backend. The backend stops when the gateway is not ready, so it
+# starts again every 5 seconds, with no limit, until the gateway answers.
+StartLimitIntervalSec=0
 
 [Service]
 WorkingDirectory=$ROOT/backend
 Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=$HOME/.local/bin/uv run uvicorn app.main:app --env-file ../.env --host 127.0.0.1 --port 8000
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=default.target

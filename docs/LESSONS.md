@@ -74,3 +74,11 @@
 - The chat step lives in two places in `nim` mode: on the claim (`agent_state`) and in the checkpoint of the graph (`step`). When trusted code changes the first, the second is stale. The claim is the truth: the backend corrects the step in the input of the turn.
 - A new event with the actor `workflow` breaks every test and view that reads the node events. A new kind of event gets its own actor (`system`).
 - A frontend test that checks "the button is enabled" passes before the data is loaded. Wait for the load first, and check that the test fails without the feature.
+
+
+## Restart of the VM (2026-11-16)
+
+- Test a restart of the VM before you say that a deploy is done. Ours left the backend down for one hour, and the page still loaded: the frontend and the password door hide a dead API.
+- Read the unit of a service before you order your unit on it. The OpenShell gateway unit says `After=default.target`: an `After=` on it from a unit that `default.target` wants is a cycle, and systemd breaks a cycle by deleting one start job with only a line in the journal.
+- For "start after the other service is ready", prefer a restart loop (`Restart=on-failure`, `RestartSec=5`, `StartLimitIntervalSec=0`) to an ordering: an ordering waits for the start of the process, not for the service to answer.
+- A network can block the SSH port of Brev (a high port on the Brev relay) while `brev login` and `brev ls` still work, because they use port 443. Test the port with `nc` before you look for another cause.
