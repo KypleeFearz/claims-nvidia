@@ -27,7 +27,7 @@ Target: a working demo on real-looking mock claim files at the Q1 2027 event.
 
 2026-11-13: M0 to M3 are built (issues #2 to #16). The full claim flow works in the three modes: `local` (the default, and CI), `nim` (the LangGraph agent in the backend) and `sandbox` (the same graph in OpenShell). The demo runs in `sandbox` mode on the Brev VM `claims-nvidia` (`docs/DEPLOY.md`). The three mock claim files give `straight_through`, `handler_review` and `investigation` (`docs/EVALUATION.md`). The demo can be watched at a public URL behind a password (D61). Nikola, the intern, has his access and starts M4 in a fork (D62): the document reading pipeline behind the `Reader` contract, its evaluation and the rails (`docs/NIKOLA.md`).
 
-2026-11-16: the base starts its own track (`docs/BASE-ROADMAP.md`). B1, the claim lifecycle, is built (issue #72, D63): a claim has a status with allowed moves, and a claim with a missing document waits for the customer.
+2026-11-16: the base starts its own track (`docs/BASE-ROADMAP.md`). B1, the claim lifecycle, is built (issue #72, D63): a claim has a status with allowed moves, and a claim with a missing document waits for the customer. Also built that day: tools for the intern (`scripts/check.sh`, `scripts/dev.sh`, the page "Reader bench", issues #80 and #82) and the first slice of B3, the page "Handler desk" where a handler decides (issue #84, D65).
 
 ## Commands (target, same as NemoForge)
 

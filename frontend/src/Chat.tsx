@@ -65,6 +65,20 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
       .then(show)
       .catch(() => undefined)
   }, [claimId])
+  // After the routing the next message comes from a handler (a request, a decision), not from a turn
+  // of this chat: ask again every 5 s. ponytail: a poll; an event stream for the customer if needed.
+  useEffect(() => {
+    if (step !== 'closed') return
+    const timer = setInterval(() => {
+      send<Message[]>(`/claims/${claimId}/messages`)
+        .then((m) => setMessages((old) => (m.length > old.length ? m : old)))
+        .catch(() => undefined)
+      send<{ step?: string; status?: string }>(`/claims/${claimId}/customer`)
+        .then(show)
+        .catch(() => undefined)
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [claimId, step])
   useEffect(() => {
     send<Case[]>(`/demo/scenarios?policy=${encodeURIComponent(policy)}`)
       .then(setCases)

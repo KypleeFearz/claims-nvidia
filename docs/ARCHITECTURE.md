@@ -99,7 +99,8 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 
 - `Customer`, `Policy` (number, line of business, start, end, coverage limit).
 - `Claim`: id, customer, policy, type, description, incident date, claimed amount, documents, signals, score, outcome, fraud report, status.
-- `ClaimStatus` (issue #72): `open`, `waiting_customer`, `validated`, `in_review`, `in_investigation`. See "Claim lifecycle" below.
+- `ClaimStatus` (issues #72 and #84): `open`, `waiting_customer`, `validated`, `in_review`, `in_investigation`, `approved`, `refused`. See "Claim lifecycle" below.
+- `Decision`: action, handler, reason, time. A claim keeps the list of its decisions.
 - `Document`: id, file, document type, pages, fields, line items, file metadata.
 - `ExtractedField`: name, value, confidence, `source` (document id, page, text snippet or box). The source is required.
 - `Signal`: code, category (`rule`, `tampering`, `consistency`), severity, points, title, detail, evidence (list of sources).
@@ -113,7 +114,7 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 
 ### 5a. Routes
 
-`GET /health`, `GET /customers`, `POST /claims`, `GET /claims` (the list of claims, for a handler: id, customer, policy, type, amount, status, outcome, score), `GET /claims/{id}` (the full claim, for the pipeline panel), `GET /claims/{id}/customer` (the customer view), `GET /claims/{id}/policies`, `PUT /claims/{id}/policy`, `GET` and `POST /claims/{id}/messages`, `POST /claims/{id}/documents`, `GET /claims/{id}/documents/{doc}/file`, `GET /claims/{id}/events` (the event stream), `GET /claims/{id}/sandbox`, `POST /claims/{id}/sandbox/probe`, `POST /bench/read` (the reader bench: one kit document read by the active reader and compared with its `expected.json`; it calls the `Reader` contract only and stores nothing; `backend/app/bench.py`), and under `/demo`: `GET /kit`, `GET /scenarios`, `GET /kit/{folder}/{file}`, `POST /reset`. The MCP server of the sandbox is mounted at `/mcp/<token>`. The code is `backend/app/main.py` and `backend/app/demo.py`.
+`GET /health`, `GET /customers`, `POST /claims`, `GET /claims` (the list of claims, for a handler: id, customer, policy, type, amount, status, outcome, score, reasons, opening time), `GET /handlers`, `POST /claims/{id}/decisions` (a decision of a handler), `GET /claims/{id}` (the full claim, for the pipeline panel), `GET /claims/{id}/customer` (the customer view), `GET /claims/{id}/policies`, `PUT /claims/{id}/policy`, `GET` and `POST /claims/{id}/messages`, `POST /claims/{id}/documents`, `GET /claims/{id}/documents/{doc}/file`, `GET /claims/{id}/events` (the event stream), `GET /claims/{id}/sandbox`, `POST /claims/{id}/sandbox/probe`, `POST /bench/read` (the reader bench: one kit document read by the active reader and compared with its `expected.json`; it calls the `Reader` contract only and stores nothing; `backend/app/bench.py`), and under `/demo`: `GET /kit`, `GET /scenarios`, `GET /kit/{folder}/{file}`, `POST /reset`. The MCP server of the sandbox is mounted at `/mcp/<token>`. The code is `backend/app/main.py` and `backend/app/demo.py`.
 
 ### 5b. Claim lifecycle (issue #72)
 
@@ -123,12 +124,20 @@ The status of a claim says where it is in its life. `backend/app/lifecycle.py` h
 open ──routing──► validated | in_review | in_investigation
 open ──routing, a required document is missing (R001)──► waiting_customer
 waiting_customer ──the customer uploads a document──► open
+
+a handler, on a claim that is in_review, in_investigation or waiting_customer (issue #84):
+  approve ──► approved          refuse (reason) ──► refused
+  request (text for the customer) ──► waiting_customer
+  investigate (reason) ──► in_investigation     clear (reason) ──► in_review
 ```
 
 - **The claim waits.** When R001 is in the signals, the status after the routing is `waiting_customer`, whatever the outcome. The outcome and the report stay on the claim for the pipeline panel. The customer message names the missing documents and then gives the usual text. The wait depends only on the documents, so it tells nothing about the outcome (non-negotiable 2).
 - **The claim opens again.** An upload to a claim that waits calls `reopen`: status `open`, chat step `ask_documents`, no outcome, no score, no report (the event keeps the old outcome). The agent reads the document as in a first visit. When the customer says "done", the three checks and the routing run again. An upload to a claim that does not wait is still a 409.
 - **The three modes.** `local`: the scripted agent reads its step from the claim, so it needs no change. `nim`: the checkpoint of the graph still says `closed`, so `graph_agent.py` sets the step to `documents` when the claim is open. `sandbox`: the first sandbox was deleted at the routing; the turn starts a new one, and the checks node reads every document again. The graph file did not change, so the sandbox image is the same.
-- **Later.** The moves of a handler and the statuses after the decision (paid, closed) come with B3 and B7 of `docs/BASE-ROADMAP.md`.
+- **The decisions of a handler (issue #84).** `backend/app/handler.py` is the only way to `approved` and `refused`: a known handler (two mock names, no login), and a written reason to refuse, to investigate and to clear. `POST /claims/{id}/decisions` `{action, by, reason}`; `GET /handlers`. The decision goes on the claim (`decisions`) and is one event with the actor `handler`. The outcome of the routing does not change: it stays what the system said. A test checks that no other module writes these two statuses.
+- **What the customer reads after a decision.** Approve and refuse: a fixed text in the chat and in the customer view (`approved`, `decided`); never the reason of the handler. A request: the text of the handler, which must pass the word filter of the agent (a text with "fraud", "score" or "investigation" is a 422). Investigate and clear: nothing changes for the customer. An upload after a request opens the claim again, as for a missing document.
+- **The page.** "Handler desk" (`frontend/src/HandlerDesk.tsx`): the queue (investigations first, then reviews, then the claims that wait; it asks again every 5 seconds) and the case page (facts, decision form, decisions, fraud report, outcome, signals, fields with their source, conversation). A closed chat of the customer asks again for its messages every 5 seconds, so the customer sees a decision.
+- **Later.** The settlement proposal (B2), authority levels and a second approval, the statuses after the decision (paid, closed: B7).
 
 ## 6. Workflows
 

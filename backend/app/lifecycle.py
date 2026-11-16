@@ -4,8 +4,10 @@
 `in_investigation`, or `waiting_customer` when a required document is missing
 (signal R001), whatever the outcome: the wait must say nothing about the outcome
 (non-negotiable 2). A claim that waits opens again when the customer adds a document.
-The moves of a handler (decide, pay, close) come with packages B3 and B7 of
-`docs/BASE-ROADMAP.md`.
+A handler decides on a claim that is with a person (issue #84, `app/handler.py`):
+`approved` or `refused`, a request to the customer (`waiting_customer`), or a move
+between `in_review` and `in_investigation`. The system never sets `approved` or
+`refused`. Pay and close come with package B7 of `docs/BASE-ROADMAP.md`.
 """
 
 from collections.abc import Iterable
@@ -13,12 +15,16 @@ from collections.abc import Iterable
 from app.models import ClaimStatus, Outcome, Signal
 
 S = ClaimStatus
+DECIDED = (S.approved, S.refused)  # by a handler only: app/handler.py
 MOVES: dict[ClaimStatus, set[ClaimStatus]] = {
     S.open: {S.waiting_customer, S.validated, S.in_review, S.in_investigation},
-    S.waiting_customer: {S.open},
+    # a claim that waits opens again with a document; a handler can also stop the wait
+    S.waiting_customer: {S.open, S.in_review, S.in_investigation, *DECIDED},
+    S.in_review: {S.waiting_customer, S.in_investigation, *DECIDED},
+    S.in_investigation: {S.waiting_customer, S.in_review, *DECIDED},
     S.validated: set(),
-    S.in_review: set(),
-    S.in_investigation: set(),
+    S.approved: set(),
+    S.refused: set(),
 }
 AFTER = {
     Outcome.straight_through: S.validated,

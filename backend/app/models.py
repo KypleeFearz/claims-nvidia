@@ -26,6 +26,8 @@ class ClaimStatus(StrEnum):
     validated = "validated"
     in_review = "in_review"  # a handler has the case
     in_investigation = "in_investigation"
+    approved = "approved"  # a handler decided (app/handler.py), never the system
+    refused = "refused"  # a handler decided, with a written reason
 
 
 class Customer(BaseModel):
@@ -134,7 +136,7 @@ class FraudReport(BaseModel):
 class PipelineEvent(BaseModel):
     sequence: int
     time: datetime
-    actor: Literal["agent", "tool", "workflow", "sandbox", "system"]
+    actor: Literal["agent", "tool", "workflow", "sandbox", "system", "handler"]
     stage: str
     title: str
     inputs: dict[str, Any] = {}
@@ -155,6 +157,15 @@ class SandboxRecord(BaseModel):
     closed: bool = False
 
 
+class Decision(BaseModel):
+    """What a handler did on a claim, and why (issue #84)."""
+
+    action: Literal["approve", "refuse", "request", "investigate", "clear"]
+    by: str
+    reason: str = ""
+    time: datetime
+
+
 class Claim(BaseModel):
     id: str
     customer: Customer
@@ -172,6 +183,8 @@ class Claim(BaseModel):
     outcome_reasons: list[str] = []
     fraud_report: FraudReport | None = None
     status: ClaimStatus = ClaimStatus.open
+    decisions: list[Decision] = []
+    opened_at: datetime | None = None  # None: a claim made before issue #84
 
 
 class Message(BaseModel):
