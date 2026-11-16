@@ -22,7 +22,7 @@ The rule of the model, taken from NemoForge: **a workflow decides, a tool acts, 
              ├─ get_customer_policies      mock policy DB
              ├─ get_claim_summary          the claim as the agent may see it
              ├─ update_claim               save the story, the date, the amount
-             ├─ required_documents         documents the workflow asks for
+             ├─ required_documents         documents the workflow asks for, with what is present and what is missing
              ├─ classify_document          fixture reader (the VLM is M4)
              ├─ extract_document           fixture reader → JSON with sources (the VLM is M4)
              ├─ run_checks                 rule engine (deterministic)

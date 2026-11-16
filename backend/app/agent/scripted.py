@@ -146,7 +146,7 @@ class ScriptedAgent:
         else:  # ready_for_checks: an earlier turn stopped before the result
             return [self._close(claim_id, node=False)]
 
-        missing = self._missing(claim_id, s)
+        missing = self._missing(claim_id)
         state = next_state(s)
         if state != s["agent_state"]:
             self._call(claim_id, "update_claim", agent_state=state)
@@ -190,10 +190,8 @@ class ScriptedAgent:
         name = TYPE_NAMES.get(kind, kind.replace("_", " "))
         return f"Thank you. I read this as {name}."
 
-    def _missing(self, claim_id: str, s: dict[str, Any]) -> list[str]:
-        required = self._call(claim_id, "required_documents")["documents"]
-        have = set(s["document_types"])
-        return [r["label"] for r in required if not have & set(r["any_of"])]
+    def _missing(self, claim_id: str) -> list[str]:
+        return list(self._call(claim_id, "required_documents")["missing"])
 
     def _question(self, state: str, missing: list[str]) -> str:
         if state == "ask_story":

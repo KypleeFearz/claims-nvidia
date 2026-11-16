@@ -82,3 +82,8 @@
 - Read the unit of a service before you order your unit on it. The OpenShell gateway unit says `After=default.target`: an `After=` on it from a unit that `default.target` wants is a cycle, and systemd breaks a cycle by deleting one start job with only a line in the journal.
 - For "start after the other service is ready", prefer a restart loop (`Restart=on-failure`, `RestartSec=5`, `StartLimitIntervalSec=0`) to an ordering: an ordering waits for the start of the process, not for the service to answer.
 - A network can block the SSH port of Brev (a high port on the Brev relay) while `brev login` and `brev ls` still work, because they use port 443. Test the port with `nc` before you look for another cause. A way around it: a machine of your own on another network as an SSH jump (`ssh -J user@machine claims-nvidia`), for example through Tailscale. The key stays on your computer.
+
+## A model that must compare two lists (issue #78, 2026-11-16)
+
+- When the model must compare two lists (the required documents and the uploaded documents), it can get it wrong, and it uses many reasoning tokens. Do the comparison in the tool and give the result (`missing`). A model finds facts, code computes: this holds for small things too.
+- A fault of this kind hides while the conversation is in memory: the model repeats what it said before. It shows when the agent starts with no conversation (a new sandbox). Test a turn with an empty memory.
