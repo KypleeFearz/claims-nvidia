@@ -64,10 +64,10 @@ git pull upstream main            # start from the current base
 git push origin main              # keep the main of your fork equal to upstream
 git switch -c 17-document-schemas # <issue number>-<short name>
 # work: one failing test, make it pass, refactor
-cd backend && uv run pytest && uv run mypy . && uv run ruff check . ../scripts && uv run ruff format --check . ../scripts
-cd ../frontend && npm test && npm run typecheck && npm run lint   # if you changed the frontend
+scripts/dev.sh                    # see your change: backend and frontend of this checkout, Ctrl-C stops both
+scripts/check.sh                  # every check of the CI: lint, types, tests, build (or: scripts/check.sh backend)
 git push -u origin 17-document-schemas
-gh pr create --repo PaulClement6/claims-nvidia --title "Pydantic schema per document type" --body "Closes #17 ..."
+gh pr create --repo PaulClement6/claims-nvidia --title "Pydantic schema per document type" --body-file /tmp/pr.md   # /tmp/pr.md: the template, filled in
 ```
 
 Rules:
@@ -75,7 +75,7 @@ Rules:
 - One issue = one branch = one pull request. The body says `Closes #<number>`.
 - Never commit on `main`, in your fork too. The `main` of your fork is a copy of upstream.
 - A pull request is small. If an issue is large, cut it in steps and send one pull request per step (`Part of #18`), and `Closes #18` on the last one.
-- The body of the pull request holds: what you built, the commands you ran, **the numbers**, what you did not test, and what you think is wrong elsewhere.
+- The body of the pull request holds: what you built, the commands you ran, **the numbers**, what you did not test, and what you think is wrong elsewhere. GitHub fills the body with the template `.github/pull_request_template.md`: keep its sections. With `gh pr create`, copy the template to a file outside the repository, fill it in and give it with `--body-file`.
 - CI (`checks`) runs on your pull request in `local` mode, with no key. GitHub can ask Paul to approve the first CI run of a new contributor: tell him if the check does not start.
 - Paul or his coordinating agent reviews and merges. You do not merge.
 - After a merge: `git switch main && git pull upstream main && git push origin main`, then delete the branch.
@@ -142,7 +142,7 @@ Good habits with an agent:
 | The Brev VM `claims-nvidia` | `sandbox` mode with OpenShell, long evaluation runs, the rails next to the real sandbox | `docs/DEPLOY.md`, "For the intern" |
 | The public demo URL | To watch the demo of `main` in `sandbox` mode | Paul gives the URL and the password |
 
-On the VM, do not work in `~/claims-nvidia`: that folder is the demo. Clone **your fork** in `~/work/claims-nvidia` and use other ports (8001 and 5174).
+On the VM, do not work in `~/claims-nvidia`: that folder is the demo. Clone **your fork** in `~/work/claims-nvidia` and use other ports: `scripts/dev.sh 8001 5174` starts your backend and your frontend there, next to the demo.
 
 The hosted model has a rate limit: about 40 requests per minute with a free key. Use your own key. An evaluation run on the 24 documents fits in the limit if you make one call at a time.
 
@@ -299,7 +299,7 @@ M5 holds the next tasks, in `docs/BACKLOG.md`: the specialised chain (#24), the 
 ## 10. Before you say "done"
 
 - [ ] The "Done when" list of the issue is checked, each line with its proof.
-- [ ] Tests, types and lint pass (the commands of `AGENTS.md`).
+- [ ] `scripts/check.sh` passes (tests, types, lint and build, as in the CI).
 - [ ] `local` mode works with no key.
 - [ ] The numbers are in the pull request and in `docs/EVALUATION.md`, with the command.
 - [ ] `frontend/src/mapModel.ts` is right: a box that you built changes from `yours` to `built`.

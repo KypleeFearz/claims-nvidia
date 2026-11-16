@@ -51,7 +51,7 @@ The method in five lines:
 
 If a piece is missing, the backend stops at startup and names `infra/sandbox/setup.sh`. The demo reset deletes the sandboxes of this app. The tests that need OpenShell: `cd backend && uv run pytest -m sandbox` (the three claim files with the real model, and the confinement checks).
 
-Checks (run each one before you open a pull request):
+Checks: `scripts/check.sh` runs all of them, in the order of the CI (`scripts/check.sh backend` for the backend only). One by one:
 
 | Check | Backend (`cd backend`) | Frontend (`cd frontend`) |
 |---|---|---|
