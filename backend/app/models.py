@@ -28,6 +28,7 @@ class ClaimStatus(StrEnum):
     in_investigation = "in_investigation"
     approved = "approved"  # a handler decided (app/handler.py), never the system
     refused = "refused"  # a handler decided, with a written reason
+    paid = "paid"  # the mock payment is made and the claim is exported (issue #94)
 
 
 class Customer(BaseModel):
@@ -188,6 +189,15 @@ class Decision(BaseModel):
     time: datetime
 
 
+class Payment(BaseModel):
+    """A mock payment (issue #94): no real money, no real account."""
+
+    amount: float
+    account: str
+    reference: str
+    time: datetime
+
+
 class InvestigationTask(BaseModel):
     id: str
     text: str
@@ -240,6 +250,10 @@ class Claim(BaseModel):
     status: ClaimStatus = ClaimStatus.open
     decisions: list[Decision] = []
     investigation: Investigation | None = None
+    reserve: float | None = (
+        None  # the expected cost; for the insurer, never the customer
+    )
+    payment: Payment | None = None
     opened_at: datetime | None = None  # None: a claim made before issue #84
 
 

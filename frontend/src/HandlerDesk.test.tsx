@@ -250,3 +250,23 @@ test('after the conclusion the case is read-only and says how the investigation 
   // back with the handler: he decides
   expect(within(page).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
 })
+
+test('a paid claim shows the reserve, the payment and the link to the exported record', async () => {
+  const paid = { ...full('paid'), reserve: 0, payment: { amount: 3000, account: 'MOCK-ACCT-1002', reference: 'PAY-CL-review', time: '2026-11-16T09:00:00Z' } }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) =>
+      Promise.resolve(url.endsWith('/history') ? new Response('', { status: 404 }) : Response.json(url === '/claims' ? rows : url === '/handlers' ? ['Sofia Brunner'] : url === '/claims/CL-review' ? paid : [])),
+    ),
+  )
+  render(<HandlerDesk />)
+  const page = await open()
+  const section = await within(page).findByLabelText('Reserve and payment')
+  expect(section).toHaveTextContent('CHF 0.00')
+  expect(section).toHaveTextContent('CHF 3,000.00 · 2026-11-16 09:00')
+  expect(section).toHaveTextContent('MOCK-ACCT-1002')
+  expect(section).toHaveTextContent('PAY-CL-review')
+  expect(within(section).getByRole('link', { name: 'Exported record (JSON)' })).toHaveAttribute('href', '/claims/CL-review/export')
+  expect(within(page).getByRole('heading', { level: 2 })).toHaveTextContent('paid')
+  expect(within(page).queryByRole('button', { name: 'Approve' })).toBeNull() // paid is the end
+})

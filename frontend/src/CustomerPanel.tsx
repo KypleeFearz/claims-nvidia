@@ -19,7 +19,7 @@ type View = {
 }
 
 const money = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const STATUS_PILL: Record<string, string> = { waiting_customer: 'pill-attention', validated: 'pill-ok', approved: 'pill-ok' }
+const STATUS_PILL: Record<string, string> = { waiting_customer: 'pill-attention', validated: 'pill-ok', approved: 'pill-ok', paid: 'pill-ok' }
 
 // What the customer follows after the chat (issue #88): where the claim is, what is asked, and the
 // settlement. The same for a review and for an investigation: the server sends the same view.

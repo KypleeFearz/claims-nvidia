@@ -48,7 +48,7 @@ The handler has his own page, "Handler desk": the queue of the claims that wait 
    - `handler_review`: a handler confirms or corrects;
    - `investigation`: strong fraud signals. The system writes a fraud report.
 9. **Answer to the customer.** For `handler_review` and for `investigation` the customer sees the same exact message: "A claims specialist will review your case and contact you." A different message would tell a fraudster that the system flagged the claim. The pipeline panel shows the fraud flag and the report.
-10. **Export.** Validated data goes to the claims system (a mock in the demo).
+10. **Payment and export.** A claim that is validated or approved is paid (a mock payment) and its data goes to the claims system (one JSON file per paid claim in the demo). Built: issue #94.
 
 **The system never rejects a claim.** A person decides every refusal.
 

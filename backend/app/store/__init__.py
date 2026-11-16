@@ -209,12 +209,18 @@ class Store:
             return self._move(claim, status, "system", "routing", fields)
 
     def set_status(
-        self, claim_id: str, status: ClaimStatus, by: str, why: str = ""
+        self,
+        claim_id: str,
+        status: ClaimStatus,
+        by: str,
+        why: str = "",
+        fields: dict[str, Any] | None = None,
     ) -> Claim | None:
-        """One status move. `IllegalMove` when `app/lifecycle.py` does not allow it."""
+        """One status move, with `fields` saved in the same write. `IllegalMove` when
+        `app/lifecycle.py` does not allow it."""
         with self.lock:
             claim = self.get_claim(claim_id)
-            return self._move(claim, status, by, why, {}) if claim else None
+            return self._move(claim, status, by, why, fields or {}) if claim else None
 
     def reopen(self, claim_id: str, by: str) -> Claim | None:
         """A claim that waits for the customer opens again: the old outcome goes (it

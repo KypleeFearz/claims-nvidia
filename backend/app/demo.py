@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
+from app.payment import exports_dir
 from app.store import DATA, Store
 
 router = APIRouter(prefix="/demo")
@@ -141,6 +142,9 @@ def reset(request: Request) -> dict[str, int]:
     agent = request.app.state.agent
     if hasattr(agent, "reset"):
         agent.reset()  # the checkpoints of the LangGraph agent hold the conversations
+    exports = _safe_uploads(exports_dir())  # the files of the mock claims system
+    if exports.is_dir():
+        shutil.rmtree(exports)
     with store.lock:
         counts = store.reset()
         files = 0

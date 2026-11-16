@@ -18,6 +18,7 @@ from app.fraud.routing import route
 from app.fraud.routing import score as sum_points
 from app.investigation import open_case
 from app.models import Claim, Outcome
+from app.payment import set_reserve, settle
 from app.settlement import propose
 from app.tools.gateway import Gateway
 from app.views import customer_message
@@ -51,6 +52,7 @@ def register(gateway: Gateway) -> None:
             gateway.store.save_routing(
                 claim_id, total, outcome, reasons, proposal=proposal
             )
+        _reserve_and_pay(claim_id)
         return {
             "score": total,
             "outcome": outcome.value,
@@ -58,6 +60,15 @@ def register(gateway: Gateway) -> None:
             "proposal": proposal.model_dump(mode="json") if proposal else None,
             "customer_message": customer_message(outcome, claim.signals),
         }
+
+    def _reserve_and_pay(claim_id: str) -> None:
+        """After the routing (issue #94): the reserve follows the proposal, and a claim
+        that the system validated alone is paid at once."""
+        routed = load(claim_id)
+        payable = routed.proposal.payable if routed.proposal else None
+        expected = payable if payable is not None else routed.claimed_amount
+        set_reserve(gateway.store, claim_id, expected or 0.0, "routing")
+        settle(gateway.store, claim_id)
 
     def write_fraud_report(claim_id: str) -> dict[str, Any]:
         """Writes the report and saves it with the outcome, score and reasons that

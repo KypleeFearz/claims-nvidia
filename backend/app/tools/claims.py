@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.payment import set_reserve
 from app.tools.gateway import Gateway
 from app.workflows import WORKFLOWS
 
@@ -58,6 +59,8 @@ def register(gateway: Gateway) -> None:
                 )
         if gateway.store.update_claim(claim_id, changes) is None:
             raise KeyError(f"unknown claim: {claim_id}")
+        if claimed_amount is not None:  # the first reserve: what the customer claims
+            set_reserve(gateway.store, claim_id, claimed_amount, "first notice")
         return {"updated": sorted(changes)}
 
     gateway.register(

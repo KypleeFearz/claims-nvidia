@@ -229,6 +229,19 @@ export const BOXES: MapBox[] = [
     check: { cmd: 'cd backend && uv run pytest tests/test_settlement.py' },
   },
   {
+    id: 'payment',
+    zone: 'tools',
+    title: 'Payment & export',
+    line: 'The reserve, the payee check, a mock payment, and one export file per paid claim.',
+    status: 'built',
+    icon: 'box',
+    detail:
+      'The reserve follows the claim: the claimed amount, the proposal, the approved amount, then zero. A claim that is validated or approved is paid at once (a record, no real money) and exported as one JSON file for the mock claims system. The system does not pay alone to an account that it cannot confirm: the claim then goes to a handler.',
+    files: ['backend/app/payment.py', 'backend/tests/test_payment.py'],
+    issues: [],
+    check: { cmd: 'cd backend && uv run pytest tests/test_payment.py' },
+  },
+  {
     id: 'pipeline',
     zone: 'observe',
     title: 'Pipeline panel',

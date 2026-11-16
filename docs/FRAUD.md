@@ -37,7 +37,7 @@ R006 to R010 (issue #90) do not read a document of the claim: they read the hist
 
 1. Score = sum of the points.
 2. `investigation` if the score is 60 or more.
-3. `handler_review` if the score is 20 or more, or a required document is missing, or the claimed amount is above the straight-through limit of the workflow, or a field has low confidence, or the settlement proposal needs a person (`docs/WORKFLOWS.md`, "Settlement").
+3. `handler_review` if the score is 20 or more, or a required document is missing, or the claimed amount is above the straight-through limit of the workflow, or a field has low confidence, or the settlement proposal needs a person (`docs/WORKFLOWS.md`, "Settlement"), or the payout account is not known or is shared with another person (issue #94).
 4. `straight_through` in all other cases.
 
 When a required document is missing (R001), the claim also waits for the customer (status `waiting_customer`, issue #72). The customer can upload the document later: the checks and the routing run again and give a new score and a new outcome. See `docs/ARCHITECTURE.md`, section 5b.

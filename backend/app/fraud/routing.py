@@ -5,6 +5,7 @@ returns one of them.
 """
 
 from app.models import Claim, Outcome, Signal
+from app.payment import payee_problem
 from app.settlement import propose
 from app.workflows.engine import Workflow
 
@@ -52,4 +53,7 @@ def route(
     proposal = propose(claim)
     if proposal is not None and claim.documents:
         reasons += [f"Settlement: {why}" for why in proposal.needs_person]
+    # nor to an account that it cannot confirm (issue #94)
+    if claim.policy is not None and (why := payee_problem(claim)):
+        reasons.append(f"Payment: {why}")
     return (Outcome.handler_review if reasons else Outcome.straight_through), reasons

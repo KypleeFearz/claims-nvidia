@@ -158,7 +158,8 @@ def test_the_story_of_elena_to_the_end(client: TestClient) -> None:
     res = client.post(
         f"/claims/{cid}/decisions", json={"action": "approve", "by": SOFIA}
     )
-    assert res.status_code == 200 and claim(client, cid)["status"] == "approved"
+    # paid to the account that the investigator checked (issue #94)
+    assert res.status_code == 200 and claim(client, cid)["status"] == "paid"
     last = client.get(f"/claims/{cid}/messages").json()[-1]["text"]
     assert last == APPROVED.format(amount=1750)
 

@@ -144,6 +144,8 @@ Done: issue #88. Left: the letter after a refusal (it needs a reason written for
 
 ### B7. Payment, reserve, export (M)
 
+Done: issue #94 (D70). Left: the status `closed`, a payment to the repair company on the invoice, a payment in steps.
+
 **Build.** A reserve set at the first notice and updated at each step. A payee check before payment (the account belongs to the insured, or to the repair company on the invoice). A mock payment. The export of step 10 of `docs/PRODUCT.md`: one JSON file per closed claim for the mock claims system.
 
 **Done when.** Claim file 1 ends as "paid" with an export file, with no person in the loop, and the file validates against a schema.

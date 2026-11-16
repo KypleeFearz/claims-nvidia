@@ -53,8 +53,10 @@ def test_every_status_has_its_moves_and_only_a_wait_opens_again() -> None:
     assert set(MOVES) == set(ClaimStatus)
     for status, moves in MOVES.items():  # only a claim that waits opens again
         assert (ClaimStatus.open in moves) == (status == ClaimStatus.waiting_customer)
-    for end in ("validated", "approved", "refused"):
+    for end in ("refused", "paid"):
         assert MOVES[ClaimStatus(end)] == set()
+    for payable in ("validated", "approved"):  # issue #94: only the payment follows
+        assert MOVES[ClaimStatus(payable)] == {ClaimStatus.paid}
 
 
 def test_a_claim_with_a_missing_document_waits_and_tells_the_customer_what_is_missing(

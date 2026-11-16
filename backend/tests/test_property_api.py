@@ -116,7 +116,7 @@ def test_a_water_claim_needs_no_police_report(client: TestClient) -> None:
     c = claim(client, cid)
     # no R001, and the amount differs from the invoice total: C003 only
     assert [s["code"] for s in c["signals"]] == ["C003"] and c["score"] == 15
-    assert c["outcome"] == "straight_through" and c["status"] == "validated"
+    assert c["outcome"] == "straight_through" and c["status"] == "paid"
 
 
 @pytest.mark.parametrize(

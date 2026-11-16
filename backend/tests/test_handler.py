@@ -76,7 +76,8 @@ def test_approve_is_a_decision_with_a_name_one_event_and_a_text_for_the_customer
     res = decide(client, cid, "approve", reason="The invoice fits the damage.")
     assert res.status_code == 200
     c = claim(client, cid)
-    assert c["status"] == "approved" and c["outcome"] == "handler_review"
+    # approved, then paid at once (issue #94): two status moves
+    assert c["status"] == "paid" and c["outcome"] == "handler_review"
     [d] = c["decisions"]
     assert (d["action"], d["by"]) == ("approve", SOFIA)
     assert d["reason"] == "The invoice fits the damage." and d["time"]
@@ -93,8 +94,8 @@ def test_approve_is_a_decision_with_a_name_one_event_and_a_text_for_the_customer
     assert d["amount"] == 3000.0  # the proposal: 3,200 less the deductible of 200
     assert last_message(client, cid) == PAID
     v = view(client, cid)
-    assert (v["status"], v["message"], v["step"]) == ("approved", PAID, "closed")
-    assert v["status_line"] == "Your claim is approved. We prepare the payment."
+    assert (v["status"], v["message"], v["step"]) == ("paid", PAID, "closed")
+    assert v["status_line"] == "Paid: CHF 3,000.00 to your account ending 1002."
     # the letter: the amount and the two lines of the proposal (issue #88)
     assert v["letter"]["amount"] == 3000.0 and v["letter"]["note"] == ""
     assert [(x["label"], x["amount"]) for x in v["letter"]["lines"]] == [
@@ -132,7 +133,7 @@ def test_a_decision_is_final_and_an_unknown_handler_or_action_is_refused(
     assert decide(client, cid, "clear", reason="x").status_code == 409  # not in SIU
     assert decide(client, cid, "approve").status_code == 200
     assert decide(client, cid, "refuse", reason="changed my mind").status_code == 409
-    assert claim(client, cid)["status"] == "approved"
+    assert claim(client, cid)["status"] == "paid"
     known = {"action": "approve", "by": SOFIA}
     assert client.post("/claims/CL-none/decisions", json=known).status_code == 404
 
@@ -214,7 +215,7 @@ def test_a_handler_can_decide_on_a_claim_that_waits(client: TestClient) -> None:
     decide(client, cid, "request", reason="Please send the original invoice.")
     assert decide(client, cid, "approve", by=DAVID).status_code == 200
     c = claim(client, cid)
-    assert c["status"] == "approved" and c["decisions"][-1]["by"] == DAVID
+    assert c["status"] == "paid" and c["decisions"][-1]["by"] == DAVID
     # decided: the claim does not open again
     assert upload(client, cid, MOCK / "claim-2-property" / "repair-invoice.pdf") == 409
 
