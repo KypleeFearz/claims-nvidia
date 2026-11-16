@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 import CustomerPanel from './CustomerPanel'
@@ -251,4 +251,53 @@ test('the typing dots go and the list comes back when the policy is not set', as
   expect(await screen.findByText('The policy was not set.')).toBeInTheDocument()
   expect(screen.queryByText('The agent is typing')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: /TRV-2026-0417/ })).toBeInTheDocument()
+})
+
+const stubChat = (extra: (url: string) => Response | undefined) => vi.stubGlobal('fetch', withChat(extra))
+
+test('after the decision the panel shows the status line and the settlement letter, line by line', async () => {
+  stubChat((url) =>
+    url === '/claims/CL-1/customer'
+      ? Response.json({
+          ...view('HH-2024-0933'),
+          status: 'approved',
+          step: 'closed',
+          status_line: 'Your claim is approved. We prepare the payment.',
+          requests: [],
+          letter: {
+            amount: 3000,
+            note: '',
+            lines: [
+              { label: 'Documented loss', amount: 3200, reason: 'Total of the repair invoice.', article: 'Art. 5.1: The insurer pays the cost of the repair.' },
+              { label: 'Deductible', amount: -200, reason: 'Deductible of the policy: 200.00.', article: 'Art. 8.1: The deductible.' },
+            ],
+          },
+        })
+      : undefined,
+  )
+  render(<CustomerPanel claimId="CL-1" onClaim={() => {}} />)
+  const follow = await screen.findByLabelText('Your claim')
+  expect(within(follow).getByText('Your claim is approved. We prepare the payment.')).toHaveClass('pill-ok')
+  const letter = within(follow).getByLabelText('Settlement')
+  expect(within(letter).getByRole('heading', { level: 3 })).toHaveTextContent('We pay CHF 3,000.00')
+  expect(within(letter).getByRole('row', { name: /^Deductible/ })).toHaveTextContent('-200.00')
+  expect(within(letter).getByRole('row', { name: /^Deductible/ })).toHaveTextContent('Art. 8.1')
+  expect(follow).not.toHaveTextContent(/fraud|score|signal/i)
+})
+
+test('a claim that waits shows what is still needed; a claim in the chat shows no status line', async () => {
+  stubChat((url) =>
+    url === '/claims/CL-1/customer'
+      ? Response.json({ ...view('TRV-2026-0417'), status: 'waiting_customer', step: 'closed', status_line: 'We wait for you: see what we still need.', requests: ['a damage photo'], letter: null })
+      : undefined,
+  )
+  const { unmount } = render(<CustomerPanel claimId="CL-1" onClaim={() => {}} />)
+  const needs = await screen.findByLabelText('What we still need')
+  expect(within(needs).getByText('a damage photo')).toBeInTheDocument()
+  expect(screen.queryByLabelText('Settlement')).toBeNull()
+  unmount()
+  stubChat((url) => (url === '/claims/CL-1/customer' ? Response.json({ ...view('TRV-2026-0417'), status: 'open', step: 'ask_date', status_line: 'We are taking your claim.' }) : undefined))
+  render(<CustomerPanel claimId="CL-1" onClaim={() => {}} />)
+  await screen.findByRole('textbox', { name: 'Message' })
+  expect(screen.queryByLabelText('Your claim')).toBeNull()
 })

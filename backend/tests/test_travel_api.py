@@ -65,12 +65,17 @@ def test_claim_file_1_gives_no_signal_score_0_and_straight_through(
     last = client.get(f"/claims/{cid}/messages").json()[-1]
     assert last["role"] == "agent" and VALIDATED in last["text"]
     view = client.get(f"/claims/{cid}/customer").json()
+    letter = view.pop("letter")  # issue #88: the amount and its calculation
+    assert letter["amount"] == 1500.0 and letter["note"] == ""
+    assert [x["label"] for x in letter["lines"]] == ["Documented loss"]
     assert view == {
         "claim_id": cid,
         "policy_number": "TRV-2026-0417",
         "status": "validated",
         "message": VALIDATED,
         "step": "closed",
+        "status_line": "Your claim is validated. We prepare the payment.",
+        "requests": [],
     }
 
 

@@ -44,7 +44,7 @@ These lists are a first reading of a typical claims flow. Paul must confirm them
 
 ## Settlement: what the policy pays (issue #86)
 
-A first reading of the practice, as the lists above (O12). The code is `backend/app/settlement.py`; the calculation by hand of the 10 kit stories is `data/mock/settlements.json`.
+Confirmed by Paul on 2026-11-16 (D67). The code is `backend/app/settlement.py`; the calculation by hand of the 10 kit stories is `data/mock/settlements.json`.
 
 | Step | Rule | Article key |
 |---|---|---|

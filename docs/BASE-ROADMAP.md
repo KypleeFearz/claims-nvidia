@@ -134,6 +134,8 @@ Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (ap
 
 ### B6. Customer follow-up (S)
 
+Done: issue #88. Left: the letter after a refusal (it needs a reason written for the customer, not the internal reason of the handler), a reminder when the customer does not answer, and a way for the customer to find his claim again from a new browser session.
+
 **Build.** A status line in the customer panel in customer words ("We wait for your photo", "A specialist reviews your case", "Paid on …"). The list of open requests. The final letter: the amount, and the reason of each deduction in plain words. Non-negotiable 2 stays: the same words for `handler_review` and `investigation`.
 
 **Done when.** `test_customer_view.py` covers every new status and still finds no forbidden word.

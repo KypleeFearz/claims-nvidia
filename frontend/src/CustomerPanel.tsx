@@ -1,11 +1,68 @@
 import { useEffect, useState } from 'react'
 import { json, send } from './api'
 import Chat, { Typing } from './Chat'
+import type { ChatView } from './Chat'
 
 type Customer = { id: string; name: string }
 type Policy = { number: string; line_of_business: string }
 // the customer endpoint: claim id, policy, status and the result text, nothing else
-type View = { claim_id: string; policy_number: string | null; status: string; message: string | null }
+type LetterLine = { label: string; amount: number; reason: string; article: string }
+type Letter = { amount: number; lines: LetterLine[]; note: string }
+type View = {
+  claim_id: string
+  policy_number: string | null
+  status: string
+  message: string | null
+  status_line?: string
+  requests?: string[]
+  letter?: Letter | null
+}
+
+const money = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const STATUS_PILL: Record<string, string> = { waiting_customer: 'pill-attention', validated: 'pill-ok', approved: 'pill-ok' }
+
+// What the customer follows after the chat (issue #88): where the claim is, what is asked, and the
+// settlement. The same for a review and for an investigation: the server sends the same view.
+function FollowUp({ view }: { view: View }) {
+  if (!view.status_line || view.status === 'open') return null
+  return (
+    <div className="follow-up" aria-label="Your claim">
+      <p className={`pill ${STATUS_PILL[view.status] ?? 'pill-idle'}`}>{view.status_line}</p>
+      {view.requests && view.requests.length > 0 && (
+        <ul aria-label="What we still need">
+          {view.requests.map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+      )}
+      {view.letter && (
+        <div className="card letter" aria-label="Settlement">
+          <h3>{`We pay CHF ${money(view.letter.amount)}`}</h3>
+          {view.letter.note && <p>{view.letter.note}</p>}
+          {view.letter.lines.length > 0 && (
+            <table>
+              <tbody>
+                {view.letter.lines.map((l) => (
+                  <tr key={l.label}>
+                    <th scope="row">
+                      {l.label}
+                      <span className="muted letter-why">{`${l.reason} ${l.article}`}</span>
+                    </th>
+                    <td className="mono">{money(l.amount)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <th scope="row">To pay</th>
+                  <td className="mono">{money(view.letter.amount)}</td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function CustomerPanel({ claimId, onClaim }: { claimId: string | null; onClaim: (id: string | null) => void }) {
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -87,7 +144,8 @@ export default function CustomerPanel({ claimId, onClaim }: { claimId: string | 
         ) : claim?.policy_number ? (
           <>
             <p className="mono claim-line">{`Claim ${claim.claim_id} · ${claim.policy_number}`}</p>
-            <Chat claimId={claim.claim_id} policy={claim.policy_number} />
+            <FollowUp view={claim} />
+            <Chat claimId={claim.claim_id} policy={claim.policy_number} onView={(v: ChatView) => setClaim((c) => (c ? { ...c, ...v } : c))} />
           </>
         ) : claim && starting ? (
           <div className="chat-list" role="log" aria-label="Conversation">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { json, send } from './api'
 
@@ -37,7 +37,10 @@ export function Typing() {
 const BEFORE_DOCUMENTS = ['ask_story', 'ask_date', 'ask_amount']
 const DONE_HELP = 'Press Done when you have uploaded your documents.'
 
-export default function Chat({ claimId, policy }: { claimId: string; policy: string }) {
+// the part of the customer view that the chat needs; the panel above reads the rest (issue #88)
+export type ChatView = { step?: string; status?: string }
+
+export default function Chat({ claimId, policy, onView }: { claimId: string; policy: string; onView?: (view: ChatView) => void }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -48,10 +51,17 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
   const [sent, setSent] = useState<string[]>([]) // sample documents uploaded in this claim
   const [step, setStep] = useState('') // the chat step of the customer view; Done needs it
   const [waits, setWaits] = useState(false) // the claim waits for a document: an upload opens it again
-  const show = (v: { step?: string; status?: string }) => {
+  // the panel above shows the status line, the requests and the letter of the same answer; the
+  // callback of the parent changes at every render, so a ref keeps `show` stable for the effects
+  const toPanel = useRef(onView)
+  useEffect(() => {
+    toPanel.current = onView
+  })
+  const show = useCallback((v: ChatView) => {
     setStep(v.step ?? '')
     setWaits(v.status === 'waiting_customer')
-  }
+    toPanel.current?.(v)
+  }, [])
   const list = useRef<HTMLDivElement>(null)
   const field = useRef<HTMLInputElement>(null)
 
@@ -61,10 +71,10 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
       .catch(() => setError('The server did not answer.'))
   }, [claimId])
   useEffect(() => {
-    send<{ step?: string; status?: string }>(`/claims/${claimId}/customer`)
+    send<ChatView>(`/claims/${claimId}/customer`)
       .then(show)
       .catch(() => undefined)
-  }, [claimId])
+  }, [claimId, show])
   // After the routing the next message comes from a handler (a request, a decision), not from a turn
   // of this chat: ask again every 5 s. ponytail: a poll; an event stream for the customer if needed.
   useEffect(() => {
@@ -73,12 +83,12 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
       send<Message[]>(`/claims/${claimId}/messages`)
         .then((m) => setMessages((old) => (m.length > old.length ? m : old)))
         .catch(() => undefined)
-      send<{ step?: string; status?: string }>(`/claims/${claimId}/customer`)
+      send<ChatView>(`/claims/${claimId}/customer`)
         .then(show)
         .catch(() => undefined)
     }, 5000)
     return () => clearInterval(timer)
-  }, [claimId, step])
+  }, [claimId, step, show])
   useEffect(() => {
     send<Case[]>(`/demo/scenarios?policy=${encodeURIComponent(policy)}`)
       .then(setCases)
@@ -105,7 +115,7 @@ export default function Chat({ claimId, policy }: { claimId: string; policy: str
     }
     try {
       setMessages(await send<Message[]>(`/claims/${claimId}/messages`))
-      show(await send<{ step?: string; status?: string }>(`/claims/${claimId}/customer`))
+      show(await send<ChatView>(`/claims/${claimId}/customer`))
     } catch {
       setError('The server did not answer.')
     }

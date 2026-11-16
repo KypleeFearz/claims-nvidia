@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,10 +13,11 @@ from app.agent.phrases import check_message
 from app.checks import rules
 from app.lifecycle import after_routing
 from app.main import create_app
-from app.models import Claim, FraudReport, Outcome
+from app.models import Claim, ClaimStatus, Decision, FraudReport, Outcome
+from app.settlement import propose
 from app.views import CustomerView, customer_view
 from tests import test_health_api, test_property_api
-from tests.builders import signal, travel_claim
+from tests.builders import TRAVEL_POLICY, signal, travel_claim, travel_documents
 from tests.fake_model import use_fake_model
 
 VALIDATED = "Your claim is validated. You will receive a confirmation by e-mail."
@@ -36,7 +38,7 @@ def routed(outcome: Outcome | None) -> Claim:
     )
 
 
-def test_the_view_holds_five_things_and_nothing_else() -> None:
+def test_the_view_holds_eight_things_and_nothing_else() -> None:
     view = customer_view(routed(Outcome.investigation))
     assert set(CustomerView.model_fields) == {
         "claim_id",
@@ -44,6 +46,9 @@ def test_the_view_holds_five_things_and_nothing_else() -> None:
         "status",
         "message",
         "step",
+        "status_line",  # issue #88: the status in the words of a customer
+        "requests",  # what the customer must still send
+        "letter",  # the amount and its calculation, after the decision
     }
     assert view.claim_id == "CL-test" and view.policy_number == "TRV-2026-0417"
 
@@ -162,3 +167,91 @@ def test_the_customer_view_of_claim_file_3_equals_the_one_of_claim_file_2(
     assert (
         a["policy_number"] == "HH-2024-0933" and b["policy_number"] == "ACC-2026-2210"
     )
+
+
+# ---- the follow-up of the customer (issue #88) --------------------------------------
+
+
+def decided(status: str, amount: float | None, **more: Any) -> Claim:
+    """Claim file 1 with its proposal (1,500 less a deductible of 150), then decided."""
+    claim = travel_claim(policy=TRAVEL_POLICY.model_copy(update={"deductible": 150}))
+    claim.proposal = propose(claim)
+    claim.outcome, claim.score = Outcome.handler_review, 0
+    claim.status = ClaimStatus(status)
+    if status in ("approved", "refused"):
+        action = "approve" if status == "approved" else "refuse"
+        claim.decisions = [
+            Decision(
+                action=action,  # type: ignore[arg-type]
+                by="Sofia Brunner",
+                reason="Looks like fraud to me, score too high.",
+                amount=amount,
+                time=datetime(2026, 11, 16, tzinfo=UTC),
+            )
+        ]
+    return claim.model_copy(update=more)
+
+
+def test_the_status_line_is_in_customer_words_and_the_same_for_review_and_siu() -> None:
+    lines = {s.value: customer_view(decided(s, None)).status_line for s in ClaimStatus}
+    assert lines["in_review"] == lines["in_investigation"]
+    assert lines["in_review"] == "A claims specialist reviews your case."
+    assert lines["waiting_customer"] == "We wait for you: see what we still need."
+    assert len(set(lines.values())) == len(ClaimStatus) - 1  # each other one differs
+    for line in lines.values():
+        assert not re.search(r"fraud|score|signal|investigat|_", line, re.I), line
+
+
+def test_the_letter_of_an_approval_gives_the_amount_and_each_line_of_the_proposal() -> (
+    None
+):
+    letter = customer_view(decided("approved", 1350.0)).letter
+    assert letter is not None and letter.amount == 1350.0 and letter.note == ""
+    assert [(x.label, x.amount) for x in letter.lines] == [
+        ("Documented loss", 1500.0),
+        ("Deductible", -150.0),
+    ]
+    assert letter.lines[1].reason == "Deductible of the policy: 150.00."
+    assert letter.lines[1].article.startswith("Art. 6.1")
+    # a claim that the system validated alone has the same letter, with no handler
+    alone = customer_view(decided("validated", None)).letter
+    assert alone is not None and alone.amount == 1350.0 and len(alone.lines) == 2
+
+
+def test_another_amount_than_the_proposal_gives_no_line_and_never_the_reason() -> None:
+    view = customer_view(decided("approved", 900.0))
+    assert view.letter is not None and view.letter.amount == 900.0
+    assert view.letter.lines == []
+    assert "by post" in view.letter.note
+    assert "fraud" not in view.model_dump_json().lower()
+
+
+def test_no_letter_before_the_decision_and_none_after_a_refusal() -> None:
+    for status in ("open", "waiting_customer", "in_review", "in_investigation"):
+        assert customer_view(decided(status, None)).letter is None, status
+    refused = customer_view(decided("refused", None))
+    assert refused.letter is None and "fraud" not in refused.model_dump_json().lower()
+
+
+def test_the_requests_are_the_missing_documents_and_the_last_request_of_a_handler() -> (
+    None
+):
+    assert customer_view(decided("in_review", None)).requests == []
+    waits = decided("waiting_customer", None, documents=travel_documents()[:2])
+    assert customer_view(waits).requests == ["a medical certificate"]
+    ask = Decision(
+        action="request",
+        by="Sofia Brunner",
+        reason="Please send the original invoice.",
+        time=datetime(2026, 11, 16, tzinfo=UTC),
+    )
+    asked = decided("waiting_customer", None, decisions=[ask])
+    assert customer_view(asked).requests == ["Please send the original invoice."]
+    # a request that is answered (the claim does not wait) is not shown again
+    assert customer_view(decided("in_review", None, decisions=[ask])).requests == []
+
+
+def test_the_follow_up_is_the_same_for_review_and_for_investigation() -> None:
+    a = customer_view(decided("in_review", None))
+    b = customer_view(decided("in_investigation", None, outcome=Outcome.investigation))
+    assert a == b
