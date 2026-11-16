@@ -1115,3 +1115,28 @@ td {
 .sandbox td {
   overflow-wrap: anywhere;
 }
+
+/* Reader bench (issue #82): the document under its picker, and the result line of pills. */
+.bench-doc {
+  flex: 1 1 320px;
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: #fff; /* a PDF page is white in both themes */
+  object-fit: contain;
+}
+.bench-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin: 0;
+}
+.bench-bad {
+  color: var(--bad);
+}
+table th[scope='row'] {
+  color: var(--text);
+  font-size: inherit;
+}
+

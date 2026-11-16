@@ -5,6 +5,7 @@ import ClaimMap from './ClaimMap'
 import Demo from './Demo'
 import { HealthRows, useHealth } from './Health'
 import { Icon, type IconName } from './Icon'
+import ReaderBench from './ReaderBench'
 
 // What every page can read: the claim of the demo, the reset round and the backend mode.
 export type Shared = { claimId: string | null; onClaim: (id: string | null) => void; round: number; mode: string | null }
@@ -14,6 +15,7 @@ type Page = { id: string; label: string; icon: IconName; render: (shared: Shared
 const PAGES: Page[] = [
   { id: 'demo', label: 'Claim demo', icon: 'activity', render: (s) => <Demo {...s} /> },
   { id: 'map', label: 'Map', icon: 'grid', render: () => <ClaimMap /> },
+  { id: 'bench', label: 'Reader bench', icon: 'list', render: () => <ReaderBench /> },
 ]
 
 function useTheme() {

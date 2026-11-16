@@ -37,7 +37,7 @@ What you do not need to change: the agent, the checks, the fraud score, the rout
 
 1. Fork the repository and clone your fork (section 4).
 2. Run the app in `local` mode (`README.md`). Play the three claim files in the page "Claim demo".
-3. Open the page "Map". Click each lime box: it gives the files, the issue and the check.
+3. Open the page "Map". Click each lime box: it gives the files, the issue and the check. Then open the page "Reader bench" and read one document: with the fixture reader every field is right. It is the page where you will see the errors of your reader (section 7).
 4. Run the checks: `cd backend && uv run pytest` and `cd frontend && npm test`. All must pass before you change a line.
 5. Get your own free key on https://build.nvidia.com and put it in `.env` as `NVIDIA_KEY` (`README.md`, "The model").
 6. Read `backend/app/docintel/reader.py`, `backend/app/docintel/fixture.py` and `backend/tests/reader_contract.py`. They are the contract of your work.
@@ -149,6 +149,8 @@ The hosted model has a rate limit: about 40 requests per minute with a free key.
 ## 7. How to run an experiment
 
 You will compare many variants. Use the same method each time, so that two numbers can be compared.
+
+**To see one error fast: the page "Reader bench".** Start your copy with your reader (`CLAIMS_READER=omni` in `.env`, then `scripts/dev.sh`), open the page, pick one document of the kit and press Read. You see the document, and each field: the expected value, the value your reader gave, the source page, and right, wrong, missing or extra, with the time of the read. A reader that raises shows its error there. The bench reads one document, once: it is to understand an error, not to report a number. The numbers come from your harness (issue #19), on the whole kit, with three runs. The comparison of one value is `compare` in `backend/app/bench.py`: use it in your harness, or replace it and say why.
 
 1. **One question per experiment.** Example: "Does 150 DPI read amounts better than 100 DPI?"
 2. **One change at a time.** Keep every other setting fixed, and write the fixed settings down.

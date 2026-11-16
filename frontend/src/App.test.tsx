@@ -16,11 +16,11 @@ test('shows the brand, the two panels and the backend health', async () => {
   expect(await screen.findByText('ok', { selector: '.pill' })).toBeInTheDocument()
 })
 
-test('the nav is built from the pages: the demo first, then the map, and a page header', async () => {
+test('the nav is built from the pages: the demo first, then the map and the bench, and a page header', async () => {
   stub({ status: 'ok', mode: 'sandbox' })
   render(<App />)
   const nav = screen.getByRole('navigation', { name: 'Main' })
-  expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Claim demo', 'Map'])
+  expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Claim demo', 'Map', 'Reader bench'])
   expect(within(nav).getByRole('button', { name: 'Claim demo' })).toHaveAttribute('aria-current', 'page')
   expect(screen.getByRole('heading', { level: 1, name: 'Claim demo' })).toBeInTheDocument()
   expect(await screen.findByText('Demo · mode sandbox')).toBeInTheDocument()

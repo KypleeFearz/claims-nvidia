@@ -129,7 +129,7 @@ export const BOXES: MapBox[] = [
     status: 'yours',
     icon: 'activity',
     detail:
-      'The Reader contract: classify(document, data) and extract(document, data, workflow). Every field carries its document and page. Today FixtureReader returns expected.json. You build OmniReader (Nemotron 3 Nano Omni).',
+      'The Reader contract: classify(document, data) and extract(document, data, workflow). Every field carries its document and page. Today FixtureReader returns expected.json. You build OmniReader (Nemotron 3 Nano Omni). The page Reader bench reads one kit document with the active reader and shows each field next to the expected value.',
     files: ['backend/app/docintel/reader.py', 'backend/app/docintel/fixture.py', 'backend/tests/reader_contract.py'],
     issues: [
       { n: 17, label: 'schemas' },

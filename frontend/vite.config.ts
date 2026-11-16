@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     // ponytail: one proxy per backend path; move the API under /api when the list grows
     proxy: Object.fromEntries(
-      ['/health', '/customers', '/claims', '/demo'].map((p) => [
+      ['/health', '/customers', '/claims', '/demo', '/bench'].map((p) => [
         p,
         { target: process.env.BACKEND_URL ?? 'http://localhost:8000' },
       ]),
