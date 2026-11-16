@@ -9,7 +9,7 @@ from app.checks.rules import (
     sources,
 )
 from app.models import Claim, Signal
-from app.workflows.engine import RequiredDocument, Workflow
+from app.workflows.engine import Question, RequiredDocument, Workflow
 
 
 def required_documents(cause: str | None) -> list[RequiredDocument]:
@@ -17,12 +17,24 @@ def required_documents(cause: str | None) -> list[RequiredDocument]:
     if cause == "luggage":
         proof.append("luggage_report")  # the airline report of a lost bag
     docs: list[RequiredDocument] = [
-        {"label": "a booking confirmation", "any_of": ["booking_confirmation"]},
-        {"label": "a cancellation confirmation or a receipt", "any_of": proof},
+        {
+            "label": "a booking confirmation",
+            "any_of": ["booking_confirmation"],
+            "why": "it gives the price of the trip",
+        },
+        {
+            "label": "a cancellation confirmation or a receipt",
+            "any_of": proof,
+            "why": "it gives what you lost or what was paid back",
+        },
     ]
     if cause == "illness":
         docs.append(
-            {"label": "a medical certificate", "any_of": ["medical_certificate"]}
+            {
+                "label": "a medical certificate",
+                "any_of": ["medical_certificate"],
+                "why": "it confirms that you could not travel",
+            }
         )
     return docs
 
@@ -68,6 +80,35 @@ WORKFLOW = Workflow(
         ("luggage", r"\b(luggage|baggage)\b"),
     ),
     default_cause="cancellation",
+    questions={
+        "illness": (
+            Question(
+                "ill_who",
+                "Who was ill: you, or a person who travels with you?",
+                "The cover depends on who is ill.",
+            ),
+            Question(
+                "ill_first_seen",
+                "On what date did a doctor first see the illness?",
+                "An illness known before the booking can be excluded.",
+            ),
+        ),
+        "luggage": (
+            Question(
+                "luggage_reported",
+                "Did you report the loss to the airline at the airport? "
+                "Do you have a file number?",
+                "The airline pays first; the report proves the loss.",
+            ),
+        ),
+        "cancellation": (
+            Question(
+                "cancel_reason",
+                "What made you cancel the trip?",
+                "Only some reasons to cancel are covered.",
+            ),
+        ),
+    },
     rules=[
         Rule("C002", cancellation_between_incident_and_departure),
         Rule("C003", amount_is_price_minus_refund),

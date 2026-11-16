@@ -48,6 +48,10 @@ const full = (status: string, decisions: object[] = []) => ({
     },
   ],
   fraud_report: null,
+  notice: [
+    { key: 'water_source', question: 'Where did the water come from: a pipe, an appliance, the roof?', why: 'A slow leak and water from outside can be excluded.', answer: 'A pipe under the sink.' },
+    { key: 'water_noticed', question: 'When did you first see the damage?', why: 'A late notice can make the damage larger.', answer: null },
+  ],
   proposal: {
     wording: 'General conditions Household, edition 2024',
     payable: 3000,
@@ -128,6 +132,11 @@ test('the case page shows the facts, why the claim is here, the fields with thei
   expect(within(page).getByLabelText('Outcome')).toHaveTextContent('above the straight-through limit')
   expect(within(page).getByLabelText('Extracted data')).toHaveTextContent('page 1 · “CHF 3,200.00”')
   expect(within(page).getByLabelText('Conversation')).toHaveTextContent('Water damage in the kitchen.')
+  // the first notice: each question with why the insurer asks it, and the answer or its absence
+  const notice = within(page).getByLabelText('First notice')
+  expect(notice).toHaveTextContent('Where did the water come from: a pipe, an appliance, the roof? A slow leak and water from outside can be excluded.')
+  expect(notice).toHaveTextContent('A pipe under the sink.')
+  expect(within(notice).getByText('not answered')).toHaveClass('pill-warn')
   // the proposal: each line with its article and its source, and the amount ready in the form
   const proposal = within(page).getByLabelText('Settlement proposal')
   expect(proposal).toHaveTextContent('CHF 3,000.00')

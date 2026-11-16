@@ -580,3 +580,21 @@ def test_a_claim_that_waits_gets_a_new_sandbox_when_the_document_comes(
     assert rig.store.get_claim(rig.cid).status == "open"
     last = rig.client.get(f"/claims/{rig.cid}/messages").json()[-1]["text"]
     assert last == "Thank you. Another one?"
+
+
+def test_a_customer_who_asks_for_a_person_gets_one_and_the_sandbox_is_deleted(
+    make: Any,
+) -> None:
+    """Issue #98. The backend answers, not the sandbox, and the sandbox goes."""
+    rig = make()
+    assert len(rig.shell.sandboxes) == 1  # the greeting made it
+    turns = len(rig.shell.names("exec"))
+    reply = rig.say("I want to speak to a person")
+    assert reply == "I pass your case to a claims specialist, who will contact you."
+    assert len(rig.shell.names("exec")) == turns  # no turn ran for this message
+    assert rig.shell.sandboxes == {}
+    assert rig.sandbox_stages()[-1] == "deleted"
+    claim = rig.store.get_claim(rig.cid)
+    assert claim.status == "in_review" and claim.outcome is None
+    assert rig.say("Hello?") == CLOSED  # a person has the case: no new sandbox
+    assert rig.shell.sandboxes == {}

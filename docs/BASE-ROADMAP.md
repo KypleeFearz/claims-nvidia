@@ -122,6 +122,8 @@ Slice 1 is done: issue #90 (D68): the mock history, the signals R006 to R010, th
 
 ### B5. First notice of loss: a better interview (M)
 
+Done: issue #98 (D72): the questions per cause, why each document, a way to a person, the tone. Left: a summary that the customer confirms before the checks, signals from the answers, the measure with the facts in a random order.
+
 **Practice.** A call centre uses a question list per cause. The quality of the first notice decides the rest.
 
 **Build.**

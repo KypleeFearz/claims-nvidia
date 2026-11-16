@@ -76,6 +76,7 @@ NODE_TOOLS = {
         "get_claim_summary",
         "customer_is_done",
         "update_claim",
+        "save_answer",  # the questions of the first notice (issue #98)
     ),
 }
 # What the documents node may save with update_claim: the customer corrects a fact.
@@ -123,6 +124,9 @@ How to talk:
 - Ask one question at a time.
 - Write identifiers with plain ASCII characters (a normal hyphen).
 - You may make several tool calls in one reply. They run in the order you give.
+- If the customer is hurt, shocked or upset (an injury, a burglary), write one short \
+kind sentence first. Then go on.
+- If the customer asks for a human, tell them to write: I want to speak to a person.
 
 Never:
 - Never promise payment or a result. Never judge the claim: do not say if it is good, \
@@ -166,6 +170,14 @@ document, then ask the customer for what is missing (what happened, the date, th
 amount in CHF).
 6. If the customer corrects the date, the amount or the story, save it with \
 update_claim (incident_date as YYYY-MM-DD, claimed_amount, description).
+7. The claim summary below may hold `open_questions`. After you asked for the \
+documents, ask these questions, one in each message, in their order, in short plain \
+words. When the customer answers one, save it with save_answer (the `key` of the \
+question, and the answer in the customer's words). Never ask a question that is not \
+in `open_questions`. The questions never stop the customer: if they say they are \
+done, step 4 applies.
+8. When you ask for a document, say in a few words what it is for (`why` in the \
+result of required_documents).
 """
 )
 

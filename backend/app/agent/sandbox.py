@@ -381,6 +381,13 @@ class SandboxAgent:
             )  # fmt: skip
         self.gateway.store.save_sandbox(record.model_copy(update={"closed": True}))
 
+    def release(self, claim_id: str) -> None:
+        """A person took the case in the middle of the chat (issue #98): the sandbox
+        of the claim is not needed any more."""
+        record = self.gateway.store.get_sandbox(claim_id)
+        if record is not None and not record.closed:
+            self._close(claim_id, record, "a person has the case")
+
     def reset(self) -> None:
         """The demo reset: the sandboxes this app made, and only those (a record in
         the store and the prefix), and their policy files."""

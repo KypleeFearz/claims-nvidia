@@ -140,7 +140,13 @@ class ScriptedAgent:
                 out.append("I could not read the amount.")
             if changes:
                 self._call(claim_id, "update_claim", **changes)
-            s = {**s, **changes}
+                s = self._call(claim_id, "get_claim_summary")  # with the questions
+            elif asked == "ask_documents" and s["open_questions"]:
+                # the first notice (issue #98): a message that is not "done" is the
+                # answer to the question the agent asked last
+                key = s["open_questions"][0]["key"]
+                self._call(claim_id, "save_answer", key=key, answer=text)
+                s = self._call(claim_id, "get_claim_summary")
             if asked != "ask_documents" and next_state(s) == "ask_documents":
                 self._node(claim_id, "documents")  # the three facts are known
         else:  # ready_for_checks: an earlier turn stopped before the result
@@ -151,6 +157,8 @@ class ScriptedAgent:
         if state != s["agent_state"]:
             self._call(claim_id, "update_claim", agent_state=state)
         out.append(self._question(state, missing))
+        if state == "ask_documents" and s["open_questions"]:
+            out.append(s["open_questions"][0]["text"])  # one question at a time
         return [" ".join(out)]  # one chat message per turn
 
     def _close(self, claim_id: str, node: bool = True) -> str:
@@ -191,7 +199,13 @@ class ScriptedAgent:
         return f"Thank you. I read this as {name}."
 
     def _missing(self, claim_id: str) -> list[str]:
-        return list(self._call(claim_id, "required_documents")["missing"])
+        """The documents still to send, each with what it is for (issue #98)."""
+        required = self._call(claim_id, "required_documents")["documents"]
+        return [
+            f"{r['label']} ({r['why']})" if r.get("why") else r["label"]
+            for r in required
+            if not r["present"]
+        ]
 
     def _question(self, state: str, missing: list[str]) -> str:
         if state == "ask_story":

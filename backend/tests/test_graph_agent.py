@@ -285,6 +285,7 @@ def test_all_the_facts_in_one_message_go_from_intake_to_documents_in_one_turn(
         "get_claim_summary",
         "customer_is_done",
         "update_claim",
+        "save_answer",
     ]
 
 
@@ -363,6 +364,7 @@ def test_the_model_never_gets_a_tool_that_checks_or_routes(rig: Rig) -> None:
         "classify_document",
         "extract_document",
         "customer_is_done",
+        "save_answer",  # issue #98: an answer of the customer, never a check
     }
     seen = {t for names in rig.fake.bound for t in names}
     assert seen == allowed
@@ -1066,3 +1068,32 @@ def test_a_document_sent_after_the_routing_opens_the_claim_and_the_graph_again(
     second = rig.say("done")  # decided in code: the step is `documents` again
     assert "a booking confirmation" not in second and "a medical certificate" in second
     assert rig.claim()["status"] == "waiting_customer"
+
+
+# ---- the first notice of loss (issue #98) -----------------------------------------
+
+
+def test_the_documents_node_sees_the_open_questions_and_saves_an_answer(
+    rig: Rig,
+) -> None:
+    rig.start()
+    rig.fake.replies += [story(), calls(("required_documents", {})), text("Upload.")]
+    rig.say("I was ill, 3 August 2026, CHF 1500")
+    assert [n["key"] for n in rig.claim()["notice"]] == ["ill_who", "ill_first_seen"]
+    seen = rig.fake.seen[-1][0].content  # the system prompt of the documents node
+    assert '"open_questions": [{"key": "ill_who"' in seen
+    rig.fake.replies += [
+        calls(("save_answer", {"key": "ill_who", "answer": "It was me."})),
+        text("Thank you. On what date did a doctor first see it?"),
+    ]
+    assert "doctor" in rig.say("It was me.")
+    assert rig.claim()["notice"][0]["answer"] == "It was me."
+    # the answer does not make the checks stale, and done still closes
+    assert rig.say("done").endswith(TO_A_PERSON)  # no document: R001
+
+
+def test_save_answer_is_a_tool_of_the_documents_node_only(rig: Rig) -> None:
+    from app.agent.graph import GRAPH_TOOLS, NODE_TOOLS
+
+    assert "save_answer" in NODE_TOOLS["documents"] and "save_answer" in GRAPH_TOOLS
+    assert "save_answer" not in NODE_TOOLS["intake"]

@@ -47,3 +47,10 @@ def hand_over_if_stuck(store: Any, claim_id: str) -> str | None:
 
 def is_handed_over(claim: Any) -> bool:
     return claim is not None and claim.outcome is None and claim.status == "in_review"
+
+
+def hand_over_on_request(store: Any, claim_id: str) -> None:
+    """The customer asked for a person (issue #98): the claim goes to a handler at
+    once, with no outcome. The system decides nothing here."""
+    store.update_claim(claim_id, {"agent_state": "closed"})
+    store.set_status(claim_id, ClaimStatus.in_review, "customer", "asked for a person")

@@ -48,7 +48,7 @@ The claim flow is a graph of five nodes (`backend/app/agent/graph.py`). The orde
 | Node | Does | Tools |
 |---|---|---|
 | `intake` | Model. Asks for the story, the date and the amount, and saves them. | `get_claim_summary`, `update_claim` |
-| `documents` | Model. Asks for the required documents and reads each upload. | `required_documents`, `classify_document`, `extract_document`, `get_claim_summary`, `update_claim`, `customer_is_done` |
+| `documents` | Model. Asks for the required documents and reads each upload. | `required_documents`, `classify_document`, `extract_document`, `get_claim_summary`, `update_claim`, `save_answer`, `customer_is_done` |
 | `checks` | Code. Reads any document the model left unread, then `run_checks`, `check_tampering`, `check_consistency`. | none for the model |
 | `route` | Code. `assess_and_route`. For `investigation` it writes the fraud report. | none for the model |
 | `answer` | Code. Sends the `customer_message` word for word, closes the claim. | none for the model |
@@ -155,6 +155,15 @@ an investigator, on a claim that is in_investigation (issue #92):
   - *Export*: one JSON file per paid claim in `CLAIMS_EXPORTS` (default `.dev-data/exports`), built from the model `ExportRecord`, which is its schema: the claim, the amounts, who decided, the lines of the proposal and every field with its document and page. `GET /claims/{id}/export` gives the same record. The demo reset deletes the files.
   - A paid claim cannot be routed or decided again.
 - **Later.** Authority levels and a second approval, the status `closed`, a payment to a repair company, the conclusions as input to tune the points.
+
+### 5d. First notice of loss (issue #98)
+
+- **Questions per cause.** Each workflow holds `questions`: for a cause, a list of `Question` (key, text, why the insurer asks). When the cause of a claim is saved, `update_claim` puts the questions of that cause on the claim (`notice`: key, question, why, answer). The claim summary gives `open_questions` (key and text, no reason) and `answers`.
+- **The agent asks them one at a time**, after it asked for the documents. `local`: the scripted agent appends the first open question to its message, and takes the next message that is not "done" as the answer. `nim` and `sandbox`: step 7 of the prompt of the documents node, and the tool `save_answer` (the key, the answer). Each answer is one tool event. An answer does not make the checks stale.
+- **They do not block.** "done" closes the claim with open questions; the handler sees "not answered" on the case page, section "First notice".
+- **Why each document.** A required document has a `why`; `required_documents` returns it and the agent says it.
+- **A way to a person.** A message of a customer that asks for a person (`wants_person` in `agent/phrases.py`, a narrow pattern) is answered by the backend, before any agent: the claim goes to `in_review` with no outcome, a fixed text, and in `sandbox` mode the sandbox is deleted. Only while the claim is `open`.
+- **Tone.** Two lines of the shared prompt: one kind sentence first for a customer who is hurt or shocked, and how to ask for a person.
 
 ### 5c. Business numbers (issue #96)
 

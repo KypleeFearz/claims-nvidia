@@ -47,6 +47,20 @@ def is_done(text: str) -> bool:
     return " ".join(words.lower().split()) in DONE
 
 
+# A customer who asks for a person gets one (issue #98). Narrow on purpose: "a person
+# broke my window" and "I spoke to the police" are not a request.
+PERSON = re.compile(
+    r"\b(speak|talk)\s+(to|with)\s+(an?\s+)?(real\s+)?(person|human|someone|somebody)\b"
+    r"|\breal\s+person\b|\bhuman\s+being\b",
+    re.I,
+)
+TO_A_SPECIALIST = "I pass your case to a claims specialist, who will contact you."
+
+
+def wants_person(text: str) -> bool:
+    return PERSON.search(text) is not None
+
+
 def next_state(s: dict[str, Any]) -> str:
     """The chat step of a claim summary. The Done button of the chat needs it."""
     for slot, state in (

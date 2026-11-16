@@ -15,6 +15,8 @@ from pypdf import PdfReader
 from starlette.types import Receive, Scope, Send
 
 from app.agent import Agent, get_agent
+from app.agent.handover import hand_over_on_request
+from app.agent.phrases import TO_A_SPECIALIST, wants_person
 from app.agent.sandbox_panel import SandboxView, clean, policy_view
 from app.bench import router as bench_router
 from app.checks.history import profile
@@ -129,18 +131,22 @@ def create_app() -> FastAPI:
         with locks.setdefault(claim_id, threading.Lock()):
             yield
 
-    def run_agent(
-        request: Request, claim_id: str, text: str | None, document_id: str | None
-    ) -> list[Message]:
-        """The agent answers; each answer is stored and shown in the pipeline."""
-        agent: Agent = request.app.state.agent
+    def say(request: Request, claim_id: str, replies: list[str]) -> list[Message]:
+        """Each answer for the customer is stored and shown in the pipeline."""
         out = []
-        for reply in agent.handle(claim_id, text, document_id):
+        for reply in replies:
             store(request).append_event(
                 claim_id, "agent", "message", reply[:80], outputs={"text": reply}
             )
             out.append(store(request).add_message(claim_id, "agent", reply))
         return out
+
+    def run_agent(
+        request: Request, claim_id: str, text: str | None, document_id: str | None
+    ) -> list[Message]:
+        """The agent answers."""
+        agent: Agent = request.app.state.agent
+        return say(request, claim_id, agent.handle(claim_id, text, document_id))
 
     @app.get("/health")
     def health() -> dict[str, str | None]:
@@ -292,6 +298,14 @@ def create_app() -> FastAPI:
             if not text:
                 raise HTTPException(422, "empty message")
             store(request).add_message(claim_id, "customer", text)
+            claim = claim_or_404(request, claim_id)
+            if claim.status == ClaimStatus.open and wants_person(text):
+                # a way to a person at any time (issue #98): trusted code, no model
+                hand_over_on_request(store(request), claim_id)
+                agent = request.app.state.agent
+                if hasattr(agent, "release"):
+                    agent.release(claim_id)
+                return say(request, claim_id, [TO_A_SPECIALIST])
             return run_agent(request, claim_id, text, None)
 
     @app.post("/claims/{claim_id}/documents", status_code=201)
