@@ -99,8 +99,9 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 
 - `Customer`, `Policy` (number, line of business, start, end, coverage limit).
 - `Claim`: id, customer, policy, type, description, incident date, claimed amount, documents, signals, score, outcome, fraud report, status.
-- `ClaimStatus` (issues #72 and #84): `open`, `waiting_customer`, `validated`, `in_review`, `in_investigation`, `approved`, `refused`. See "Claim lifecycle" below.
+- `ClaimStatus` (issues #72 and #84): `open`, `waiting_customer`, `validated`, `in_review`, `in_investigation`, `approved`, `refused`, `paid`. See "Claim lifecycle" below.
 - `Decision`: action, handler, reason, amount (for an approval), time. A claim keeps the list of its decisions.
+- `Payment` (issue #94): amount, account, reference, time. A claim also has a `reserve`: the expected cost.
 - `Investigation` (issue #92): tasks (text, the signal codes it answers, done, by, note), notes of the evidence log, and the conclusion (confirmed or not confirmed, by, text).
 - `Policy` terms (issue #86): deductible, coinsurance (the share the customer pays), covered causes. The mock policies are read from `data/mock/policies.json` at every start of the backend.
 - `Proposal`: the name of the general conditions, the lines (label, amount, reason, article, sources), the amount to pay, and why a person must decide. Computed by `backend/app/settlement.py` (pure code) inside `assess_and_route`, saved with the outcome, shown in the pipeline panel and on the case page. A handler approves the proposed amount, or another amount with a written reason; the customer reads the approved amount.
@@ -118,7 +119,7 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 
 ### 5a. Routes
 
-`GET /health`, `GET /customers`, `POST /claims`, `GET /claims` (the list of claims, for a handler: id, customer, policy, type, amount, status, outcome, score, reasons, opening time), `GET /handlers`, `POST /claims/{id}/decisions` (a decision of a handler), `GET /claims/{id}/history` (for the handler: the contact data of the customer, his earlier claims and the linked persons), `GET /claims/{id}` (the full claim, for the pipeline panel), `GET /claims/{id}/customer` (the customer view), `GET /claims/{id}/policies`, `PUT /claims/{id}/policy`, `GET` and `POST /claims/{id}/messages`, `POST /claims/{id}/documents`, `GET /claims/{id}/documents/{doc}/file`, `GET /claims/{id}/events` (the event stream), `GET /claims/{id}/sandbox`, `POST /claims/{id}/sandbox/probe`, `POST /bench/read` (the reader bench: one kit document read by the active reader and compared with its `expected.json`; it calls the `Reader` contract only and stores nothing; `backend/app/bench.py`), and under `/demo`: `GET /kit`, `GET /scenarios`, `GET /kit/{folder}/{file}`, `POST /reset`. The MCP server of the sandbox is mounted at `/mcp/<token>`. The code is `backend/app/main.py` and `backend/app/demo.py`.
+`GET /health`, `GET /customers`, `POST /claims`, `GET /claims` (the list of claims, for a handler: id, customer, policy, type, amount, status, outcome, score, reasons, opening time), `GET /handlers`, `POST /claims/{id}/decisions` (a decision of a handler), `GET /claims/{id}/export` (the record of a paid claim for the mock claims system), `GET /claims/{id}/history` (for the handler: the contact data of the customer, his earlier claims and the linked persons), `GET /claims/{id}` (the full claim, for the pipeline panel), `GET /claims/{id}/customer` (the customer view), `GET /claims/{id}/policies`, `PUT /claims/{id}/policy`, `GET` and `POST /claims/{id}/messages`, `POST /claims/{id}/documents`, `GET /claims/{id}/documents/{doc}/file`, `GET /claims/{id}/events` (the event stream), `GET /claims/{id}/sandbox`, `POST /claims/{id}/sandbox/probe`, `POST /bench/read` (the reader bench: one kit document read by the active reader and compared with its `expected.json`; it calls the `Reader` contract only and stores nothing; `backend/app/bench.py`), and under `/demo`: `GET /kit`, `GET /scenarios`, `GET /kit/{folder}/{file}`, `POST /reset`. The MCP server of the sandbox is mounted at `/mcp/<token>`. The code is `backend/app/main.py` and `backend/app/demo.py`.
 
 ### 5b. Claim lifecycle (issue #72)
 
@@ -126,6 +127,7 @@ The status of a claim says where it is in its life. `backend/app/lifecycle.py` h
 
 ```
 open ──routing──► validated | in_review | in_investigation
+validated ──mock payment──► paid          approved ──mock payment──► paid   (issue #94)
 open ──routing, a required document is missing (R001)──► waiting_customer
 waiting_customer ──the customer uploads a document──► open
 
@@ -146,7 +148,13 @@ an investigator, on a claim that is in_investigation (issue #92):
 - **What the customer reads after a decision.** Approve and refuse: a fixed text in the chat and in the customer view (`approved`, `decided`); never the reason of the handler. A request: the text of the handler, which must pass the word filter of the agent (a text with "fraud", "score" or "investigation" is a 422). Investigate and clear: nothing changes for the customer. An upload after a request opens the claim again, as for a missing document.
 - **The page.** "Handler desk" (`frontend/src/HandlerDesk.tsx`): the queue (investigations first, then reviews, then the claims that wait; it asks again every 5 seconds) and the case page (facts, decision form, decisions, fraud report, outcome, signals, fields with their source, conversation). A closed chat of the customer asks again for its messages every 5 seconds, so the customer sees a decision.
 - **The investigation case (issue #92).** `backend/app/investigation.py`. A claim that goes to `in_investigation` (by the routing or by a handler) gets a plan: one task per kind of signal (`TASKS`), strongest first; a claim with no signal gets one task with the reason of the handler. `POST /claims/{id}/investigation/tasks/{task}` `{by, done, note}` ticks a task; `POST /claims/{id}/investigation/notes` `{by, text}` adds a note to the evidence log. Each change is one event with the actor `handler` and the stage `investigation`. The conclusion is a decision: `clear` (not confirmed) or `confirm` (fraud confirmed), with a text, refused while a task is open. Both send the claim back to `in_review`: the investigator reports, the handler decides. A claim in investigation cannot be approved or refused. The conclusion is saved on the case in the same write as the status. Nothing of the case reaches the customer.
-- **Later.** Authority levels and a second approval, the statuses after the decision (paid, closed: B7), the conclusions as input to tune the points.
+- **Reserve, payment and export (issue #94).** `backend/app/payment.py`.
+  - *Reserve*: the claimed amount when the customer gives it (`update_claim`), the proposal at the routing, the approved amount at the approval, zero after a refusal or a payment. Each change is one event (`system`, `reserve`).
+  - *Payee check*: the payout account must be known (`data/mock/history.json`) and must belong to the customer only. When it is not, the routing adds a reason "Payment: ..." and the claim goes to a handler.
+  - *Payment*: a claim that is `validated` or `approved` with an amount above zero moves to `paid` in the same call, with a `Payment` record. No real money and no real account. An amount of zero pays nothing and the status stays.
+  - *Export*: one JSON file per paid claim in `CLAIMS_EXPORTS` (default `.dev-data/exports`), built from the model `ExportRecord`, which is its schema: the claim, the amounts, who decided, the lines of the proposal and every field with its document and page. `GET /claims/{id}/export` gives the same record. The demo reset deletes the files.
+  - A paid claim cannot be routed or decided again.
+- **Later.** Authority levels and a second approval, the status `closed`, a payment to a repair company, the conclusions as input to tune the points.
 
 ## 6. Workflows
 

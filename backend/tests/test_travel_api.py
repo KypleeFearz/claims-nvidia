@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.lifecycle import IllegalMove
 from app.main import create_app
 from app.workflows import WORKFLOWS
 from tests.reader_contract import MOCK
@@ -61,7 +62,7 @@ def test_claim_file_1_gives_no_signal_score_0_and_straight_through(
     c = claim(client, cid)
     assert c["signals"] == [] and c["score"] == 0
     assert c["outcome"] == "straight_through" and c["outcome_reasons"] == []
-    assert c["agent_state"] == "closed" and c["status"] == "validated"
+    assert c["agent_state"] == "closed" and c["status"] == "paid"  # issue #94
     last = client.get(f"/claims/{cid}/messages").json()[-1]
     assert last["role"] == "agent" and VALIDATED in last["text"]
     view = client.get(f"/claims/{cid}/customer").json()
@@ -71,10 +72,10 @@ def test_claim_file_1_gives_no_signal_score_0_and_straight_through(
     assert view == {
         "claim_id": cid,
         "policy_number": "TRV-2026-0417",
-        "status": "validated",
+        "status": "paid",
         "message": VALIDATED,
         "step": "closed",
-        "status_line": "Your claim is validated. We prepare the payment.",
+        "status_line": "Paid: CHF 1,500.00 to your account ending 1001.",
         "requests": [],
     }
 
@@ -111,12 +112,16 @@ def test_checks_and_routing_are_two_tool_events_without_a_model(
 def test_the_agent_gets_the_customer_message_and_nothing_else(
     client: TestClient,
 ) -> None:
-    cid = run_claim(client)
+    # before "done": a claim that is paid cannot be routed a second time (issue #94)
+    cid = run_claim(client, done=False)
     gateway = client.app.state.gateway  # type: ignore[attr-defined]
+    assert gateway.call(cid, "run_checks", {"claim_id": cid}) == {}
     assert gateway.call(cid, "assess_and_route", {"claim_id": cid}) == {
         "customer_message": VALIDATED
     }
-    assert gateway.call(cid, "run_checks", {"claim_id": cid}) == {}
+    assert claim(client, cid)["status"] == "paid"
+    with pytest.raises(IllegalMove):
+        gateway.call(cid, "assess_and_route", {"claim_id": cid})
 
 
 def test_missing_medical_certificate_and_done_gives_r001_and_handler_review(

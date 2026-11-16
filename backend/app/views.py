@@ -44,6 +44,7 @@ STATUS = {
     ClaimStatus.in_investigation: "in_review",
     ClaimStatus.approved: "approved",
     ClaimStatus.refused: "decided",
+    ClaimStatus.paid: "paid",
 }
 
 
@@ -56,6 +57,7 @@ STATUS_LINE = {
     "in_review": "A claims specialist reviews your case.",
     "approved": "Your claim is approved. We prepare the payment.",
     "decided": "A claims specialist has decided. A letter is on its way.",
+    "paid": "Paid: CHF {amount:,.2f} to your account ending {account}.",
 }
 BY_POST = (
     "A claims specialist set this amount. "
@@ -104,7 +106,8 @@ def after_decision(decision: Decision) -> str | None:
 
 
 def _message(claim: Claim) -> str | None:
-    if claim.decisions and claim.status in (ClaimStatus.approved, ClaimStatus.refused):
+    decided = (ClaimStatus.approved, ClaimStatus.refused, ClaimStatus.paid)
+    if claim.decisions and claim.status in decided:
         return after_decision(claim.decisions[-1])
     return customer_message(claim.outcome, claim.signals) if claim.outcome else None
 
@@ -127,7 +130,10 @@ def _letter(claim: Claim) -> Letter | None:
     a handler set another amount, the lines do not explain it and the reason of the
     handler is not for the customer: the letter then gives the amount alone."""
     proposed = claim.proposal.payable if claim.proposal else None
-    if claim.status == ClaimStatus.approved and claim.decisions:
+    amount: float | None
+    if claim.status == ClaimStatus.paid and claim.payment:
+        amount = claim.payment.amount
+    elif claim.status == ClaimStatus.approved and claim.decisions:
         amount = claim.decisions[-1].amount
     elif claim.status == ClaimStatus.validated:
         amount = proposed
@@ -144,6 +150,14 @@ def _letter(claim: Claim) -> Letter | None:
     return Letter(amount=amount, lines=lines)
 
 
+def _status_line(claim: Claim, status: str) -> str:
+    if status == "paid" and claim.payment:  # the last four characters of the account
+        return STATUS_LINE["paid"].format(
+            amount=claim.payment.amount, account=claim.payment.account[-4:]
+        )
+    return STATUS_LINE[status]
+
+
 def customer_view(claim: Claim) -> CustomerView:
     status = STATUS[claim.status]
     return CustomerView(
@@ -152,7 +166,7 @@ def customer_view(claim: Claim) -> CustomerView:
         status=status,
         message=_message(claim),
         step=claim.agent_state,
-        status_line=STATUS_LINE[status],
+        status_line=_status_line(claim, status),
         requests=_requests(claim),
         letter=_letter(claim),
     )

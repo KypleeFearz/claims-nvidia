@@ -24,6 +24,7 @@ from app.handler import HANDLERS, BadDecision, decide
 from app.investigation import NotAllowed, add_note, set_task
 from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Customer, Document, Message, Policy
+from app.payment import ExportRecord, export_record
 from app.store import Store
 from app.stream import event_stream
 from app.tools import checks as checks_tool
@@ -245,6 +246,14 @@ def create_app() -> FastAPI:
             body.by,
             lambda: add_note(s, claim_id, body.by, body.text),
         )
+
+    @app.get("/claims/{claim_id}/export")
+    def claim_export(claim_id: str, request: Request) -> ExportRecord:
+        """What the mock claims system received for a paid claim (issue #94)."""
+        claim = claim_or_404(request, claim_id)
+        if claim.payment is None:
+            raise HTTPException(404, "the claim is not paid")
+        return export_record(claim)
 
     @app.get("/claims/{claim_id}/history")
     def claim_history(claim_id: str, request: Request) -> dict[str, Any]:

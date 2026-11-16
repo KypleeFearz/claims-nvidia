@@ -29,6 +29,8 @@ type Case = PipelineClaim & {
   status: string
   decisions: Decision[]
   investigation?: Investigation | null
+  reserve?: number | null
+  payment?: { amount: number; account: string; reference: string; time: string } | null
 }
 type Message = { role: string; text: string; time: string }
 type Task = { id: string; text: string; codes: string[]; done: boolean; by: string | null; note: string }
@@ -92,6 +94,7 @@ const STATUS_PILL: Record<string, string> = {
   in_review: 'pill-warn',
   waiting_customer: 'pill-attention',
   approved: 'pill-ok',
+  paid: 'pill-ok',
   validated: 'pill-ok',
   refused: 'pill-idle',
   open: 'pill-idle',
@@ -387,6 +390,32 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
           </div>
         )}
         {error && <p className="pill pill-bad">{error}</p>}
+
+        {(claim.reserve != null || claim.payment) && (
+          <div className="stack" aria-label="Reserve and payment">
+            <h3>Reserve and payment</h3>
+            <dl className="desk-facts">
+              <dt>Reserve</dt>
+              <dd className="mono">{claim.reserve == null ? '—' : chf(claim.reserve)}</dd>
+              {claim.payment && (
+                <>
+                  <dt>Paid</dt>
+                  <dd className="mono">{`${chf(claim.payment.amount)} · ${claim.payment.time.slice(0, 16).replace('T', ' ')}`}</dd>
+                  <dt>To the account</dt>
+                  <dd className="mono">{claim.payment.account}</dd>
+                  <dt>Reference</dt>
+                  <dd className="mono">{claim.payment.reference}</dd>
+                  <dt>Claims system</dt>
+                  <dd>
+                    <a href={`/claims/${claim.id}/export`} target="_blank" rel="noreferrer">
+                      Exported record (JSON)
+                    </a>
+                  </dd>
+                </>
+              )}
+            </dl>
+          </div>
+        )}
 
         {claim.decisions.length > 0 && (
           <div className="stack" aria-label="Decisions">

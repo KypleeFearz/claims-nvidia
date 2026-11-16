@@ -16,6 +16,7 @@ from app.models import ClaimStatus, Outcome, Signal
 
 S = ClaimStatus
 DECIDED = (S.approved, S.refused)  # by a handler only: app/handler.py
+PAYABLE = (S.validated, S.approved)  # what the mock payment pays
 MOVES: dict[ClaimStatus, set[ClaimStatus]] = {
     S.open: {S.waiting_customer, S.validated, S.in_review, S.in_investigation},
     # a claim that waits opens again with a document; a handler can also stop the wait
@@ -23,9 +24,10 @@ MOVES: dict[ClaimStatus, set[ClaimStatus]] = {
     S.in_review: {S.waiting_customer, S.in_investigation, *DECIDED},
     # the investigator reports first: no decision while a claim is in investigation
     S.in_investigation: {S.waiting_customer, S.in_review},
-    S.validated: set(),
-    S.approved: set(),
+    S.validated: {S.paid},  # the mock payment (app/payment.py)
+    S.approved: {S.paid},
     S.refused: set(),
+    S.paid: set(),
 }
 AFTER = {
     Outcome.straight_through: S.validated,

@@ -15,6 +15,7 @@ from app.agent.phrases import check_message
 from app.investigation import conclusion, open_case
 from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Decision
+from app.payment import set_reserve, settle
 from app.store import Store
 from app.views import APPROVED as APPROVED  # re-export: the tests read them here
 from app.views import DECIDED as DECIDED
@@ -91,6 +92,12 @@ def decide(
     assert saved is not None
     if action == "investigate":
         open_case(store, claim_id, reason)  # the plan of the investigator
+    if action == "approve":  # issue #94: the reserve, then the mock payment
+        set_reserve(store, claim_id, amount or 0.0, "approved")
+        saved = settle(store, claim_id) or saved
+    elif action == "refuse":
+        set_reserve(store, claim_id, 0.0, "refused")
+        saved = store.get_claim(claim_id) or saved
     text = reason if action == "request" else after_decision(decision)
     if text:  # investigate and clear: the customer sees nothing
         store.add_message(claim_id, "agent", text)
