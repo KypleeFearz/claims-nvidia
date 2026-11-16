@@ -17,6 +17,7 @@ from starlette.types import Receive, Scope, Send
 from app.agent import Agent, get_agent
 from app.agent.sandbox_panel import SandboxView, clean, policy_view
 from app.bench import router as bench_router
+from app.checks.history import profile
 from app.demo import router as demo_router
 from app.docintel.reader import get_reader
 from app.handler import HANDLERS, BadDecision, decide
@@ -192,6 +193,12 @@ def create_app() -> FastAPI:
     def get_claim(claim_id: str, request: Request) -> Claim:
         """The pipeline view: everything. The customer panel never calls it."""
         return claim_or_404(request, claim_id)
+
+    @app.get("/claims/{claim_id}/history")
+    def claim_history(claim_id: str, request: Request) -> dict[str, Any]:
+        """The earlier claims of the customer and the persons linked to him, for the
+        handler desk (issue #90). The customer panel never calls it."""
+        return profile(claim_or_404(request, claim_id).customer.id)
 
     @app.get("/claims/{claim_id}/customer")
     def get_customer_view(claim_id: str, request: Request) -> CustomerView:

@@ -67,6 +67,42 @@ SIGNALS: dict[str, SignalKind] = {
         "Invoice dated before the incident",
         "An invoice dated on or after the incident.",
     ),
+    # R006 to R010: the history and the links (issue #90, `checks/history.py`)
+    "R006": SignalKind(
+        "rule",
+        "medium",
+        20,
+        "Three or more earlier claims in 12 months",
+        "Fewer than three claims in the 12 months before the incident.",
+    ),
+    "R007": SignalKind(
+        "rule",
+        "high",
+        40,
+        "An earlier claim of this customer was closed as fraud",
+        "No earlier claim closed as fraud.",
+    ),
+    "R008": SignalKind(
+        "rule",
+        "high",
+        40,
+        "The payout account is also the account of another person",
+        "A payout account that belongs to the customer only.",
+    ),
+    "R009": SignalKind(
+        "rule",
+        "medium",
+        20,
+        "Phone or address shared with a person who has a claim closed as fraud",
+        "No phone or address shared with such a person.",
+    ),
+    "R010": SignalKind(
+        "rule",
+        "medium",
+        20,
+        "A provider on a document has earlier claims closed as fraud",
+        "A provider with no claim closed as fraud.",
+    ),
     "T001": SignalKind(
         "tampering",
         "medium",

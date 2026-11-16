@@ -185,6 +185,27 @@ SCENARIOS = [
             ),
         ],
     ),
+    Scenario(  # clean documents: the links of the customer flag the claim (issue #90)
+        "kit-elena-travel",
+        "C-1004",
+        "TRV-2026-0850",
+        "Trip to Lisbon cancelled",
+        [
+            ("booking-confirmation.pdf", k.booking_confirmation_lisbon),
+            ("cancellation-confirmation.pdf", k.cancellation_confirmation_lisbon),
+        ],
+        [
+            Story(
+                "I had to cancel my trip to Lisbon on 2 June 2026 because of a "
+                "family emergency. I claim CHF 1,750.",
+                "2026-06-02",
+                1750,
+                "cancellation",
+                ["R008", "R009"],
+                "investigation",
+            )
+        ],
+    ),
     Scenario(
         "kit-marco-bathroom",
         "C-1002",

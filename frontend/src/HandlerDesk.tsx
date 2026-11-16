@@ -30,6 +30,53 @@ type Case = PipelineClaim & {
   decisions: Decision[]
 }
 type Message = { role: string; text: string; time: string }
+type Earlier = { id: string; date: string; line: string; cause: string; amount: number; result: string; provider: string | null }
+type History = {
+  person: { name: string; account: string; phone: string; address: string } | null
+  earlier_claims: Earlier[]
+  links: { person: string; name: string; shared: string[]; claims: Earlier[] }[]
+}
+
+const earlier = (c: Earlier) => `${c.id} · ${c.date} · ${c.line}, ${c.cause} · ${chf(c.amount)}`
+
+// The history of the customer and the persons linked to him (issue #90). The signals R006 to R010 read the same data.
+function HistorySection({ history }: { history: History }) {
+  return (
+    <div className="stack" aria-label="History and links">
+      <h3>History and links</h3>
+      {history.person && <p className="muted">{`Payout account ${history.person.account} · ${history.person.phone} · ${history.person.address}`}</p>}
+      {history.earlier_claims.length === 0 ? (
+        <p className="muted">No earlier claim of this customer.</p>
+      ) : (
+        <ul aria-label="Earlier claims">
+          {history.earlier_claims.map((c) => (
+            <li key={c.id}>
+              {earlier(c)} <span className={`pill ${c.result === 'fraud' ? 'pill-bad' : 'pill-idle'}`}>{c.result}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {history.links.length === 0 ? (
+        <p className="muted">No other person shares the account, the phone or the address.</p>
+      ) : (
+        history.links.map((l) => (
+          <div key={l.person} className="card desk-link" aria-label={`Link to ${l.name}`}>
+            <p>
+              <span className="pill pill-bad">{`same ${l.shared.join(', ')}`}</span> {`${l.name} (${l.person})`}
+            </p>
+            <ul>
+              {l.claims.map((c) => (
+                <li key={c.id}>
+                  {earlier(c)} <span className={`pill ${c.result === 'fraud' ? 'pill-bad' : 'pill-idle'}`}>{c.result}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
 
 // most urgent first; a status that is not here does not wait for a handler
 const TO_DO = ['in_investigation', 'in_review', 'waiting_customer']
@@ -136,6 +183,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
   const [claim, setClaim] = useState<Case | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [handlers, setHandlers] = useState<string[]>([])
+  const [history, setHistory] = useState<History | null>(null)
   const [by, setBy] = useState('')
   const [reason, setReason] = useState('')
   const [amount, setAmount] = useState('') // CHF to approve: the proposal, until the handler types another amount
@@ -151,6 +199,9 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
       })
       .catch(fail)
     send<Message[]>(`/claims/${claimId}/messages`).then(setMessages).catch(fail)
+    send<History>(`/claims/${claimId}/history`)
+      .then(setHistory)
+      .catch(() => setHistory(null)) // the case page works without it
     send<string[]>('/handlers')
       .then((h) => {
         setHandlers(h)
@@ -260,6 +311,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
         <ProposalSection claim={claim} />
         <OutcomeSection claim={claim} />
         <ChecksSection claim={claim} ran={claim.outcome !== null} />
+        {history && <HistorySection history={history} />}
         <ExtractedSection docs={claim.documents} claimId={claim.id} />
         {/* issue #28 (the intern): confirm or correct a field goes here, next to its source page */}
 

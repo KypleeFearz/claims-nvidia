@@ -11,6 +11,7 @@ first (it ends first): "Write fraud report" comes right before "Assess and route
 
 from typing import Any
 
+from app.checks.history import check_history
 from app.checks.rules import run_rules
 from app.fraud.report import write_report
 from app.fraud.routing import route
@@ -32,6 +33,7 @@ def register(gateway: Gateway) -> None:
     def run_checks(claim_id: str) -> dict[str, Any]:
         claim = load(claim_id)
         signals = run_rules(claim, WORKFLOWS.get(claim.type or ""))
+        signals += check_history(claim)  # R006 to R010: history and links
         dumped = [s.model_dump(mode="json") for s in signals]
         gateway.store.update_claim(claim_id, {"signals": dumped})
         return {"signals": dumped}

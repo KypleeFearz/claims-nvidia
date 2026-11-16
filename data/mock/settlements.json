@@ -49,5 +49,10 @@
     "calculation": "breakage is not a covered cause of HH-2026-0102",
     "payable": 0.0,
     "needs_person": true
+  },
+  "kit-elena-travel/1750": {
+    "calculation": "2150 - 400 = 1750; deductible 0",
+    "payable": 1750.0,
+    "needs_person": false
   }
 }

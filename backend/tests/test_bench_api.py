@@ -63,7 +63,7 @@ def test_the_fixture_reader_reads_every_kit_document_all_right(
     client: TestClient,
 ) -> None:
     kit = client.get("/demo/kit").json()
-    assert len(kit) == 33
+    assert len(kit) == 35
     for row in kit:
         out = read(client, {"folder": row["folder"], "file": row["file"]})
         where = f"{row['folder']}/{row['file']}"

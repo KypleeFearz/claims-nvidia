@@ -54,7 +54,7 @@ def test_kit_lists_the_mock_documents(client: TestClient) -> None:
     assert row["folder"] == "claim-1-travel"
     assert row["document_type"] == "booking_confirmation"
     assert row["size"] == BOOKING.stat().st_size
-    assert len(kit) == 33  # 24 documents of the scenarios and 9 hard versions
+    assert len(kit) == 35  # 26 documents of the scenarios and 9 hard versions
     assert {r["folder"] for r in kit} >= {"claim-3-health", "kit-anna-theft", "hard"}
 
 

@@ -16,6 +16,7 @@ Party = tuple[str, list[str], tuple[float, float, float]]
 
 MARCO = ["Marco Bianchi", "Via Nassa 18", "6900 Lugano", "Switzerland"]
 LUKAS = ["Lukas Meier", "Hirschengasse 9", "8032 Zurich", "Switzerland"]
+ELENA = ["Elena Rossi", "Rebgasse 12", "4058 Basel", "Switzerland"]
 UID = "UID CHE-000.000.000"
 IBAN = "IBAN CH00 0000 0000 0000 0000 0"
 
@@ -494,6 +495,43 @@ def cancellation_confirmation_sicily(path: Path) -> dict[str, Any]:
         "Family emergency of the traveller",
         3200.00,
         2300.00,
+    )
+
+
+# ---- kit-elena-travel --------------------------------------------------------
+# Clean documents. The claim is flagged by the links of the customer (issue #90):
+# data/mock/history.json gives her the payout account and the phone of another person.
+
+
+def booking_confirmation_lisbon(path: Path) -> dict[str, Any]:
+    rows = [
+        ("Return flights Basel - Lisbon", 2, 330.00),
+        ("Hotel Miradouro da Graca, double room, 6 nights", 1, 1290.00),
+        ("Airport transfers", 2, 100.00),
+    ]
+    return _booking(
+        path,
+        WOLKENPFAD,
+        ELENA,
+        "2026-03-15",
+        "WPR-515027",
+        "Lisbon, Portugal (6 nights)",
+        ("2026-06-20", "2026-06-26"),
+        rows,
+    )
+
+
+def cancellation_confirmation_lisbon(path: Path) -> dict[str, Any]:
+    return _cancellation(
+        path,
+        WOLKENPFAD,
+        ELENA,
+        "Ms Rossi",
+        "2026-06-03",
+        "WPR-515027",
+        "Family emergency of the traveller",
+        2150.00,
+        1750.00,
     )
 
 

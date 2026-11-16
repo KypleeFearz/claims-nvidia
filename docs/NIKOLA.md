@@ -144,7 +144,7 @@ Good habits with an agent:
 
 On the VM, do not work in `~/claims-nvidia`: that folder is the demo. Clone **your fork** in `~/work/claims-nvidia` and use other ports: `scripts/dev.sh 8001 5174` starts your backend and your frontend there, next to the demo.
 
-The hosted model has a rate limit: about 40 requests per minute with a free key. Use your own key. An evaluation run on the 24 documents fits in the limit if you make one call at a time.
+The hosted model has a rate limit: about 40 requests per minute with a free key. Use your own key. An evaluation run on the 26 documents fits in the limit if you make one call at a time.
 
 ## 7. How to run an experiment
 
@@ -154,7 +154,7 @@ You will compare many variants. Use the same method each time, so that two numbe
 
 1. **One question per experiment.** Example: "Does 150 DPI read amounts better than 100 DPI?"
 2. **One change at a time.** Keep every other setting fixed, and write the fixed settings down.
-3. **The same data.** The 24 documents of `data/mock/` (`index.json` lists them, with the 9 hard versions). Do not tune on 3 documents and report on the same 3.
+3. **The same data.** The 26 documents of `data/mock/` (`index.json` lists them, with the 9 hard versions). Do not tune on 3 documents and report on the same 3.
 4. **Three runs per variant.** A model does not give the same answer twice. Report the mean, the lowest and the highest.
 5. **The same four numbers**: accuracy per field (right, wrong, missing), pass rate (documents with every field right), seconds per document, and requests refused with a 429.
 6. **A wrong value is worse than a missing value.** A missing field goes to a person. A wrong amount can pay a claim. Always show the two apart.

@@ -32,7 +32,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
 
 def test_every_kit_story_has_a_calculation_by_hand() -> None:
     assert sorted(IDS) == sorted(k for k in BY_HAND if not k.startswith("_"))
-    assert len(IDS) == 10
+    assert len(IDS) == 11
 
 
 @pytest.mark.parametrize(("scenario", "story"), STORIES, ids=IDS)

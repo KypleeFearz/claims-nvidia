@@ -104,6 +104,8 @@ Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (ap
 
 ### B4. Fraud practice: history, links, investigation case (L)
 
+Slice 1 is done: issue #90 (D68): the mock history, the signals R006 to R010, the section "History and links" on the case page, and the kit story of Elena (clean documents, an investigation because of a shared account). Left: the investigation case (plan, tasks, evidence log, conclusion), a graph view, signals per line of business, a neutral question to the customer when the story and a document do not fit, the tuning of the points with the conclusions.
+
 **Practice.** Most fraud is not visible in one document. It is visible in the history of the customer, in the links between claims, and in the story. And a flag is a start, not an end: an investigator opens a case and concludes.
 
 **Build.**

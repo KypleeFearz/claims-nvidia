@@ -2,7 +2,8 @@
   "customers": [
     {"id": "C-1001", "name": "Anna Keller"},
     {"id": "C-1002", "name": "Marco Bianchi"},
-    {"id": "C-1003", "name": "Lukas Meier"}
+    {"id": "C-1003", "name": "Lukas Meier"},
+    {"id": "C-1004", "name": "Elena Rossi"}
   ],
   "policies": [
     {"number": "TRV-2026-0417", "customer_id": "C-1001", "line_of_business": "Travel", "start": "2026-01-01", "end": "2026-12-31", "coverage_limit": 5000, "deductible": 0, "coinsurance": 0, "covered_causes": ["illness", "luggage", "cancellation"]},
@@ -10,6 +11,7 @@
     {"number": "HH-2024-0933", "customer_id": "C-1002", "line_of_business": "Household", "start": "2024-06-01", "end": "2027-05-31", "coverage_limit": 15000, "deductible": 200, "coinsurance": 0, "covered_causes": ["water", "fire", "theft", "breakage"]},
     {"number": "TRV-2026-0721", "customer_id": "C-1002", "line_of_business": "Travel", "start": "2026-02-01", "end": "2027-01-31", "coverage_limit": 5000, "deductible": 100, "coinsurance": 0, "covered_causes": ["illness", "cancellation"]},
     {"number": "ACC-2026-2210", "customer_id": "C-1003", "line_of_business": "Accident", "start": "2026-10-20", "end": "2027-10-19", "coverage_limit": 4500, "deductible": 0, "coinsurance": 0.1, "covered_causes": ["accident"]},
-    {"number": "HH-2026-0102", "customer_id": "C-1003", "line_of_business": "Household", "start": "2026-01-15", "end": "2027-01-14", "coverage_limit": 10000, "deductible": 500, "coinsurance": 0, "covered_causes": ["water", "fire", "theft"]}
+    {"number": "HH-2026-0102", "customer_id": "C-1003", "line_of_business": "Household", "start": "2026-01-15", "end": "2027-01-14", "coverage_limit": 10000, "deductible": 500, "coinsurance": 0, "covered_causes": ["water", "fire", "theft"]},
+    {"number": "TRV-2026-0850", "customer_id": "C-1004", "line_of_business": "Travel", "start": "2026-03-01", "end": "2027-02-28", "coverage_limit": 5000, "deductible": 0, "coinsurance": 0, "covered_causes": ["illness", "luggage", "cancellation"]}
   ]
 }
