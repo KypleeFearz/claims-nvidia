@@ -28,8 +28,15 @@ type Case = PipelineClaim & {
   cause: string | null
   status: string
   decisions: Decision[]
+  investigation?: Investigation | null
 }
 type Message = { role: string; text: string; time: string }
+type Task = { id: string; text: string; codes: string[]; done: boolean; by: string | null; note: string }
+type Investigation = {
+  tasks: Task[]
+  notes: { by: string; text: string; time: string }[]
+  conclusion: { result: string; by: string; text: string; time: string } | null
+}
 type Earlier = { id: string; date: string; line: string; cause: string; amount: number; result: string; provider: string | null }
 type History = {
   person: { name: string; account: string; phone: string; address: string } | null
@@ -101,12 +108,82 @@ function age(opened: string | null) {
 }
 
 const ACTIONS: { action: string; text: string; className?: string; when: (status: string) => boolean }[] = [
-  { action: 'approve', text: 'Approve', className: 'btn-primary', when: () => true },
+  // the investigator reports first: no approval and no refusal while a claim is in investigation (issue #92)
+  { action: 'approve', text: 'Approve', className: 'btn-primary', when: (s) => s !== 'in_investigation' },
   { action: 'request', text: 'Ask the customer', when: (s) => s !== 'waiting_customer' },
   { action: 'investigate', text: 'Send to investigation', when: (s) => s !== 'in_investigation' },
-  { action: 'clear', text: 'Clear the investigation', when: (s) => s === 'in_investigation' },
-  { action: 'refuse', text: 'Refuse', className: 'btn-danger', when: () => true },
+  { action: 'clear', text: 'Conclude: not confirmed', className: 'btn-primary', when: (s) => s === 'in_investigation' },
+  { action: 'confirm', text: 'Conclude: fraud confirmed', className: 'btn-danger', when: (s) => s === 'in_investigation' },
+  { action: 'refuse', text: 'Refuse', className: 'btn-danger', when: (s) => s !== 'in_investigation' },
 ]
+
+// The case of an investigator (issue #92): the plan, the evidence log and the conclusion. `change` posts
+// one change and gives the new claim back; the conclusion itself is a decision (the buttons above).
+function InvestigationSection({ case_, open, change }: { case_: Investigation; open: boolean; change: (path: string, body: object) => Promise<unknown> }) {
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [entry, setEntry] = useState('')
+  const left = case_.tasks.filter((t) => !t.done).length
+  return (
+    <div className="stack" aria-label="Investigation">
+      <h3>Investigation</h3>
+      {case_.conclusion ? (
+        <p>
+          <span className={`pill ${case_.conclusion.result === 'confirmed' ? 'pill-bad' : 'pill-ok'}`}>{case_.conclusion.result === 'confirmed' ? 'fraud confirmed' : 'not confirmed'}</span>{' '}
+          {`${case_.conclusion.by}: ${case_.conclusion.text}`}
+        </p>
+      ) : (
+        <p className="muted">{left === 0 ? 'Every task is done: write the conclusion in the decision form above.' : `${left} of ${case_.tasks.length} tasks to do. The conclusion comes after the last one.`}</p>
+      )}
+      <ul className="desk-tasks" aria-label="Plan">
+        {case_.tasks.map((t) => (
+          <li key={t.id}>
+            <label>
+              <input
+                type="checkbox"
+                checked={t.done}
+                disabled={!open}
+                aria-label={`${t.id}: ${t.text}`}
+                onChange={(e) => void change(`tasks/${t.id}`, { done: e.target.checked, note: notes[t.id] ?? '' })}
+              />
+              <span>
+                {t.text} {t.codes.length > 0 && <span className="mono muted">{t.codes.join(', ')}</span>}
+              </span>
+            </label>
+            {t.done || !open ? (
+              <span className="muted">{[t.by, t.note].filter(Boolean).join(': ')}</span>
+            ) : (
+              <input aria-label={`Note for ${t.id}`} placeholder="What you found" value={notes[t.id] ?? ''} onChange={(e) => setNotes({ ...notes, [t.id]: e.target.value })} />
+            )}
+          </li>
+        ))}
+      </ul>
+      <h4>Evidence log</h4>
+      {case_.notes.length === 0 ? (
+        <p className="muted">No note yet.</p>
+      ) : (
+        <ol className="desk-history" aria-label="Evidence log">
+          {case_.notes.map((n) => (
+            <li key={n.time}>
+              <span className="mono muted">{n.time.slice(0, 16).replace('T', ' ')}</span> {`${n.by}: ${n.text}`}
+            </li>
+          ))}
+        </ol>
+      )}
+      {open && (
+        <form
+          className="desk-actions"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (entry.trim()) void change('notes', { text: entry }).then(() => setEntry(''))
+          }}
+        >
+          <input aria-label="New note" placeholder="A fact for the file" value={entry} onChange={(e) => setEntry(e.target.value)} />
+          <button type="submit">Add the note</button>
+        </form>
+      )}
+    </div>
+  )
+}
 
 export default function HandlerDesk() {
   const [rows, setRows] = useState<Row[]>([])
@@ -235,6 +312,23 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
     }
   }
 
+  // one change of the investigation case, signed by the handler picked in the decision form
+  const investigate = async (path: string, body: object) => {
+    setError('')
+    try {
+      const res = await fetch(`/claims/${claimId}/investigation/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ by, ...body }),
+      })
+      const answer = (await res.json()) as Case & { detail?: string }
+      if (res.ok) setClaim(answer)
+      else setError(typeof answer.detail === 'string' ? answer.detail : 'The change was not saved.')
+    } catch {
+      setError('The server did not answer.')
+    }
+  }
+
   if (!claim) return <div className="panel-body">{error ? <p className="pill pill-bad">{error}</p> : <p className="muted">Loading…</p>}</div>
   const canDecide = TO_DO.includes(claim.status)
   return (
@@ -307,6 +401,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
           </div>
         )}
 
+        {claim.investigation && <InvestigationSection case_={claim.investigation} open={claim.status === 'in_investigation' && !claim.investigation.conclusion} change={investigate} />}
         {claim.fraud_report && <FraudReportSection report={claim.fraud_report} />}
         <ProposalSection claim={claim} />
         <OutcomeSection claim={claim} />

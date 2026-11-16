@@ -137,7 +137,7 @@ test('the case page shows the facts, why the claim is here, the fields with thei
   expect(within(proposal).getByRole('row', { name: /^Deductible/ })).toHaveTextContent('Art. 8.1')
   expect(within(page).getByRole('spinbutton', { name: 'Amount to approve' })).toHaveValue(3000)
   // the handler never sends the case to itself: a claim in review cannot be cleared
-  expect(within(page).queryByRole('button', { name: 'Clear the investigation' })).toBeNull()
+  expect(within(page).queryByRole('button', { name: 'Conclude: not confirmed' })).toBeNull()
   expect(within(page).getByRole('button', { name: 'Send to investigation' })).toBeInTheDocument()
 })
 
@@ -184,4 +184,69 @@ test('the case page shows the earlier claims of the customer and the persons lin
   expect(link).toHaveTextContent('same account, phone')
   expect(link).toHaveTextContent('H-2025-1120')
   expect(within(link).getByText('fraud')).toHaveClass('pill-bad')
+})
+
+test('a claim in investigation shows its plan: a task is ticked with a note, a note goes in the log, and the handler concludes', async () => {
+  const task = (done: boolean) => ({ id: 'T1', text: 'Check who owns the payout account, before any payment.', codes: ['R008'], done, by: done ? 'Sofia Brunner' : null, note: done ? 'Joint account.' : '' })
+  const siu = (done: boolean, notes: object[] = []) => ({ ...full('in_investigation'), investigation: { tasks: [task(done)], notes, conclusion: null } })
+  const calls: Call[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init])
+      if (url === '/claims') return Promise.resolve(Response.json(rows))
+      if (url === '/handlers') return Promise.resolve(Response.json(['Sofia Brunner', 'David Frei']))
+      if (url === '/claims/CL-review/investigation/tasks/T1') return Promise.resolve(Response.json(siu(true)))
+      if (url === '/claims/CL-review/investigation/notes') return Promise.resolve(Response.json(siu(true, [{ by: 'Sofia Brunner', text: 'Bank letter in the file.', time: '2026-11-16T09:00:00Z' }])))
+      if (url === '/claims/CL-review') return Promise.resolve(Response.json(siu(false)))
+      if (url.endsWith('/history')) return Promise.resolve(new Response('', { status: 404 }))
+      return Promise.resolve(Response.json([]))
+    }),
+  )
+  render(<HandlerDesk />)
+  const page = await open()
+  const section = await within(page).findByLabelText('Investigation')
+  expect(section).toHaveTextContent('1 of 1 tasks to do')
+  // in investigation the investigator concludes: no approval, no refusal
+  expect(within(page).queryByRole('button', { name: 'Approve' })).toBeNull()
+  expect(within(page).queryByRole('button', { name: 'Refuse' })).toBeNull()
+  expect(within(page).getByRole('button', { name: 'Conclude: not confirmed' })).toBeInTheDocument()
+  expect(within(page).getByRole('button', { name: 'Conclude: fraud confirmed' })).toBeInTheDocument()
+
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Note for T1' }), { target: { value: 'Joint account.' } })
+  fireEvent.click(within(section).getByRole('checkbox', { name: /^T1: Check who owns the payout account/ }))
+  await waitFor(() => expect(section).toHaveTextContent('Every task is done'))
+  expect(section).toHaveTextContent('Sofia Brunner: Joint account.')
+  const sent = calls.find(([u]) => u === '/claims/CL-review/investigation/tasks/T1')![1]!
+  expect(JSON.parse(sent.body as string)).toEqual({ by: 'Sofia Brunner', done: true, note: 'Joint account.' })
+
+  fireEvent.change(within(section).getByRole('textbox', { name: 'New note' }), { target: { value: 'Bank letter in the file.' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'Add the note' }))
+  expect(await within(section).findByLabelText('Evidence log')).toHaveTextContent('Sofia Brunner: Bank letter in the file.')
+})
+
+test('after the conclusion the case is read-only and says how the investigation ended', async () => {
+  const done = {
+    ...full('in_review'),
+    investigation: {
+      tasks: [{ id: 'T1', text: 'Check who owns the payout account, before any payment.', codes: ['R008'], done: true, by: 'David Frei', note: 'Joint account.' }],
+      notes: [],
+      conclusion: { result: 'not_confirmed', by: 'David Frei', text: 'A family link.', time: '2026-11-16T10:00:00Z' },
+    },
+  }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) =>
+      Promise.resolve(url.endsWith('/history') ? new Response('', { status: 404 }) : Response.json(url === '/claims' ? rows : url === '/handlers' ? ['Sofia Brunner'] : url === '/claims/CL-review' ? done : [])),
+    ),
+  )
+  render(<HandlerDesk />)
+  const page = await open()
+  const section = await within(page).findByLabelText('Investigation')
+  expect(within(section).getByText('not confirmed')).toHaveClass('pill-ok')
+  expect(section).toHaveTextContent('David Frei: A family link.')
+  expect(within(section).getByRole('checkbox', { name: /^T1/ })).toBeDisabled()
+  expect(within(section).queryByRole('textbox', { name: 'New note' })).toBeNull()
+  // back with the handler: he decides
+  expect(within(page).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
 })

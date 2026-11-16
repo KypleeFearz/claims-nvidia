@@ -1235,4 +1235,22 @@ table th[scope='row'] {
 .desk-link ul {
   margin: 0 0 4px;
 }
+.desk-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.desk-tasks li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.desk-tasks label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
 

@@ -21,7 +21,8 @@ MOVES: dict[ClaimStatus, set[ClaimStatus]] = {
     # a claim that waits opens again with a document; a handler can also stop the wait
     S.waiting_customer: {S.open, S.in_review, S.in_investigation, *DECIDED},
     S.in_review: {S.waiting_customer, S.in_investigation, *DECIDED},
-    S.in_investigation: {S.waiting_customer, S.in_review, *DECIDED},
+    # the investigator reports first: no decision while a claim is in investigation
+    S.in_investigation: {S.waiting_customer, S.in_review},
     S.validated: set(),
     S.approved: set(),
     S.refused: set(),

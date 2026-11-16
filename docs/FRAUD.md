@@ -54,6 +54,15 @@ Written for every `investigation`. The handler must understand it in one minute.
 
 A template writes the text from the signals, in every mode. It adds no fact. Later (issue #26) an LLM can write it from the signals only, and it must add no fact.
 
+## The investigation case (issue #92)
+
+A report is a start, not an end. A claim in investigation has a case on the handler desk:
+
+- **Plan**: one task per kind of signal, in plain words ("Ask the provider for the original document", "Check who owns the payout account, before any payment"). The table is `TASKS` in `backend/app/investigation.py`.
+- **Tasks**: the investigator ticks each one, with his name and what he found.
+- **Evidence log**: free notes, each with a name and a time.
+- **Conclusion**: "fraud confirmed" or "not confirmed", with a text, when every task is done. The claim then goes back to a handler, who decides. A conclusion is never a refusal, and the customer sees nothing of the case.
+
 ## Later (not in the first version)
 
-Duplicate invoices and photos across claims, photo forensics (edited or reused photos, EXIF data), font and pixel analysis of scans. For the history and the links: the claims of the demo itself as history, a graph view, the investigation case with tasks and a conclusion, signals per line of business.
+Duplicate invoices and photos across claims, photo forensics (edited or reused photos, EXIF data), font and pixel analysis of scans. For the history and the links: the claims of the demo itself as history, a graph view, signals per line of business. For the investigation: the conclusions as input to tune the points, a confirmed fraud written to the history of the person.

@@ -2,7 +2,7 @@ import logging
 import os
 import threading
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from io import BytesIO
 from pathlib import Path
@@ -21,6 +21,7 @@ from app.checks.history import profile
 from app.demo import router as demo_router
 from app.docintel.reader import get_reader
 from app.handler import HANDLERS, BadDecision, decide
+from app.investigation import NotAllowed, add_note, set_task
 from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Customer, Document, Message, Policy
 from app.store import Store
@@ -50,6 +51,17 @@ class NewMessage(BaseModel):
 
 class ClaimPolicy(BaseModel):
     policy_number: str
+
+
+class TaskChange(BaseModel):
+    by: str
+    done: bool
+    note: str = Field(default="", max_length=2000)
+
+
+class NewNote(BaseModel):
+    by: str
+    text: str = Field(max_length=2000)
 
 
 class NewDecision(BaseModel):
@@ -193,6 +205,46 @@ def create_app() -> FastAPI:
     def get_claim(claim_id: str, request: Request) -> Claim:
         """The pipeline view: everything. The customer panel never calls it."""
         return claim_or_404(request, claim_id)
+
+    def investigate(
+        request: Request, claim_id: str, by: str, change: Callable[[], Claim]
+    ) -> Claim:
+        """One change of an investigation case, by a known handler (issue #92)."""
+        if by not in HANDLERS:
+            raise HTTPException(422, "unknown handler")
+        with claim_lock(request, claim_id):
+            try:
+                return change()
+            except KeyError:
+                raise HTTPException(404, "unknown claim") from None
+            except LookupError:
+                raise HTTPException(404, "unknown task") from None
+            except NotAllowed as e:
+                raise HTTPException(409, str(e)) from None
+
+    @app.post("/claims/{claim_id}/investigation/tasks/{task_id}")
+    def post_task(
+        claim_id: str, task_id: str, body: TaskChange, request: Request
+    ) -> Claim:
+        s = store(request)
+        return investigate(
+            request,
+            claim_id,
+            body.by,
+            lambda: set_task(s, claim_id, task_id, body.done, body.by, body.note),
+        )
+
+    @app.post("/claims/{claim_id}/investigation/notes")
+    def post_note(claim_id: str, body: NewNote, request: Request) -> Claim:
+        if not body.text.strip():
+            raise HTTPException(422, "empty note")
+        s = store(request)
+        return investigate(
+            request,
+            claim_id,
+            body.by,
+            lambda: add_note(s, claim_id, body.by, body.text),
+        )
 
     @app.get("/claims/{claim_id}/history")
     def claim_history(claim_id: str, request: Request) -> dict[str, Any]:
