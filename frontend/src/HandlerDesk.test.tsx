@@ -48,6 +48,15 @@ const full = (status: string, decisions: object[] = []) => ({
     },
   ],
   fraud_report: null,
+  proposal: {
+    wording: 'General conditions Household, edition 2024',
+    payable: 3000,
+    needs_person: [],
+    lines: [
+      { label: 'Documented loss', amount: 3200, reason: 'Total of the repair invoice.', article: 'Art. 5.1: The insurer pays the cost of the repair.', sources: [{ document_id: 'D-1', page: 1, snippet: 'CHF 3,200.00' }] },
+      { label: 'Deductible', amount: -200, reason: 'Deductible of the policy: 200.00.', article: 'Art. 8.1: The deductible.', sources: [] },
+    ],
+  },
   decisions,
 })
 const messages = [
@@ -104,21 +113,29 @@ test('the case page shows the facts, why the claim is here, the fields with thei
   expect(within(page).getByLabelText('Outcome')).toHaveTextContent('above the straight-through limit')
   expect(within(page).getByLabelText('Extracted data')).toHaveTextContent('page 1 · “CHF 3,200.00”')
   expect(within(page).getByLabelText('Conversation')).toHaveTextContent('Water damage in the kitchen.')
+  // the proposal: each line with its article and its source, and the amount ready in the form
+  const proposal = within(page).getByLabelText('Settlement proposal')
+  expect(proposal).toHaveTextContent('CHF 3,000.00')
+  expect(proposal).toHaveTextContent('the contract alone')
+  expect(within(proposal).getByRole('row', { name: /^Documented loss/ })).toHaveTextContent('repair-invoice.pdf · page 1')
+  expect(within(proposal).getByRole('row', { name: /^Deductible/ })).toHaveTextContent('-200.00')
+  expect(within(proposal).getByRole('row', { name: /^Deductible/ })).toHaveTextContent('Art. 8.1')
+  expect(within(page).getByRole('spinbutton', { name: 'Amount to approve' })).toHaveValue(3000)
   // the handler never sends the case to itself: a claim in review cannot be cleared
   expect(within(page).queryByRole('button', { name: 'Clear the investigation' })).toBeNull()
   expect(within(page).getByRole('button', { name: 'Send to investigation' })).toBeInTheDocument()
 })
 
 test('Approve sends the decision with the handler and the reason, then shows the new status and the history', async () => {
-  const fetchMock = stub(() => Response.json(full('approved', [{ action: 'approve', by: 'David Frei', reason: 'Fits.', time: '2026-11-16T09:00:00Z' }])))
+  const fetchMock = stub(() => Response.json(full('approved', [{ action: 'approve', by: 'David Frei', reason: 'Fits.', amount: 3000, time: '2026-11-16T09:00:00Z' }])))
   render(<HandlerDesk />)
   const page = await open()
   fireEvent.change(within(page).getByRole('combobox', { name: 'Handler' }), { target: { value: 'David Frei' } })
   fireEvent.change(within(page).getByRole('textbox', { name: 'Reason, or text for the customer' }), { target: { value: 'Fits.' } })
   fireEvent.click(within(page).getByRole('button', { name: 'Approve' }))
-  await waitFor(() => expect(within(page).getByLabelText('Decisions')).toHaveTextContent('approve · David Frei · Fits.'))
+  await waitFor(() => expect(within(page).getByLabelText('Decisions')).toHaveTextContent('approve · CHF 3,000.00 · David Frei · Fits.'))
   const post = (fetchMock.mock.calls as Call[]).find(([u, i]) => u === '/claims/CL-review/decisions' && i?.method === 'POST')![1]!
-  expect(JSON.parse(post.body as string)).toEqual({ action: 'approve', by: 'David Frei', reason: 'Fits.' })
+  expect(JSON.parse(post.body as string)).toEqual({ action: 'approve', by: 'David Frei', reason: 'Fits.', amount: 3000 })
   expect(within(page).getByRole('heading', { level: 2 })).toHaveTextContent('approved')
   // decided: no action left
   expect(within(page).queryByRole('button', { name: 'Approve' })).toBeNull()

@@ -5,6 +5,7 @@ returns one of them.
 """
 
 from app.models import Claim, Outcome, Signal
+from app.settlement import propose
 from app.workflows.engine import Workflow
 
 LOW_CONFIDENCE = 0.8  # below this, a field needs a person
@@ -47,4 +48,8 @@ def route(
     ]
     if low:
         reasons.append(f"A field has low confidence: {', '.join(low)}.")
+    # the system pays alone only what the contract alone gives (issue #86)
+    proposal = propose(claim)
+    if proposal is not None and claim.documents:
+        reasons += [f"Settlement: {why}" for why in proposal.needs_person]
     return (Outcome.handler_review if reasons else Outcome.straight_through), reasons

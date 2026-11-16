@@ -68,6 +68,8 @@ Done: issue #72 (D63). How it works: `docs/ARCHITECTURE.md`, section 5b. Not don
 
 ### B2. Policy terms and settlement proposal (L)
 
+Slice 1 is done: issue #86 (D66). Rules: `docs/WORKFLOWS.md`, "Settlement". Left: depreciation by age, sub-limits per category, line items left out one by one, the yearly limit less earlier payments (needs B4), the policy wording as a PDF with pages. The rules wait for the answer of Paul to O12.
+
 **Practice.** The handler does not pay the claimed amount. He pays the covered loss.
 
 **Build.**

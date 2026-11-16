@@ -1,0 +1,53 @@
+{
+  "_note": "The settlement of each kit story, calculated by hand (issue #86). `payable` is in CHF. `needs_person`: a line reduces the amount for another reason than the deductible or the share of the customer. Keys: <folder>/<claimed amount>.",
+  "claim-1-travel/1500": {
+    "calculation": "1840 - 340 = 1500; deductible 0",
+    "payable": 1500.0,
+    "needs_person": false
+  },
+  "claim-2-property/3200": {
+    "calculation": "3200 - 200 deductible",
+    "payable": 3000.0,
+    "needs_person": false
+  },
+  "claim-3-health/4450": {
+    "calculation": "the lines give 1450, not the total 4450; 1450 - 10% (145) = 1305",
+    "payable": 1305.0,
+    "needs_person": true
+  },
+  "kit-anna-luggage/787": {
+    "calculation": "389 + 398 = 787; deductible 0",
+    "payable": 787.0,
+    "needs_person": false
+  },
+  "kit-anna-theft/2640": {
+    "calculation": "2640 - 200 deductible",
+    "payable": 2440.0,
+    "needs_person": false
+  },
+  "kit-marco-travel/2300": {
+    "calculation": "3200 - 900 = 2300; - 100 deductible",
+    "payable": 2200.0,
+    "needs_person": false
+  },
+  "kit-marco-travel/3200": {
+    "calculation": "claimed 3200, the documents give 3200 - 900 = 2300; - 100 deductible",
+    "payable": 2200.0,
+    "needs_person": true
+  },
+  "kit-marco-bathroom/4740": {
+    "calculation": "the lines give 1740, not the total 4740; 1740 - 200 deductible",
+    "payable": 1540.0,
+    "needs_person": true
+  },
+  "kit-lukas-clean/840": {
+    "calculation": "840 - 10% (84)",
+    "payable": 756.0,
+    "needs_person": false
+  },
+  "kit-lukas-household/1260": {
+    "calculation": "breakage is not a covered cause of HH-2026-0102",
+    "payable": 0.0,
+    "needs_person": true
+  }
+}

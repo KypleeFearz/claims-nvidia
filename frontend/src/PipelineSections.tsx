@@ -13,7 +13,10 @@ export type FraudReport = {
   not_checked: string[]
   next_steps: string[]
 }
+export type ProposalLine = { label: string; amount: number; reason: string; article: string; sources: Source[] }
+export type Proposal = { wording: string; lines: ProposalLine[]; payable: number | null; needs_person: string[] }
 export type PipelineClaim = {
+  proposal?: Proposal | null
   documents: Doc[]
   signals: Signal[]
   score: number | null
@@ -98,6 +101,66 @@ export function OutcomeSection({ claim }: { claim: PipelineClaim }) {
 const docName = (docs: Doc[], id: string) => {
   const d = docs.find((x) => x.id === id)
   return d ? d.file_metadata.original_name || d.file : id
+}
+
+export const chf = (n: number | null) => (n === null ? '—' : `CHF ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+
+// The settlement proposal (issue #86): what the policy pays, line by line. Code computes it; a handler approves it.
+export function ProposalSection({ claim }: { claim: PipelineClaim }) {
+  const p = claim.proposal
+  if (!p) return null
+  return (
+    <div className="stack" aria-label="Settlement proposal">
+      <h3>Settlement proposal</h3>
+      <p>
+        <span className="mono">{p.payable === null ? 'No amount' : chf(p.payable)}</span>{' '}
+        <span className={`pill ${p.needs_person.length ? 'pill-warn' : 'pill-ok'}`}>{p.needs_person.length ? 'a person decides' : 'the contract alone'}</span>{' '}
+        <span className="muted">{p.wording}</span>
+      </p>
+      {p.needs_person.length > 0 && (
+        <ul>
+          {p.needs_person.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      )}
+      {p.lines.length > 0 && (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Line</th>
+                <th>CHF</th>
+                <th>Reason</th>
+                <th>Conditions</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.lines.map((l) => (
+                <tr key={l.label}>
+                  <th scope="row">{l.label}</th>
+                  <td className="mono">{l.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td>{l.reason}</td>
+                  <td className="muted">{l.article}</td>
+                  <td className="muted">
+                    {l.sources.map((s) => (
+                      <div key={`${s.document_id}-${s.page}-${s.snippet}`}>{`${docName(claim.documents, s.document_id)} · page ${s.page}`}</div>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+              <tr>
+                <th scope="row">To pay</th>
+                <td className="mono">{p.payable === null ? '—' : p.payable.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                <td colSpan={3} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // `ran`: the run_checks event arrived. Before it, nothing shows; after it, an empty list is "No signal."

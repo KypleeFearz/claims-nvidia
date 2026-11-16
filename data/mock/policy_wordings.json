@@ -1,0 +1,39 @@
+{
+  "_note": "Mock general conditions. Invented for the demo: no real insurer, no real wording. A first reading of the practice (open point O12).",
+  "Travel": {
+    "name": "General conditions Travel, edition 2026",
+    "articles": {
+      "loss": "Art. 3.1: The insurer pays the price of the trip, less every refund that the customer received. For lost luggage: the purchase price of the lost items, with receipts.",
+      "claimed": "Art. 3.4: The insurer pays at most the amount that the customer claims.",
+      "documented": "Art. 7.2: The insurer pays only a loss that a document proves.",
+      "cause": "Art. 4.1: Only the causes named in the policy are covered.",
+      "deductible": "Art. 6.1: The deductible named in the policy is taken from every payment.",
+      "limit": "Art. 6.3: The insurer pays at most the coverage limit of the policy."
+    }
+  },
+  "Household": {
+    "name": "General conditions Household, edition 2024",
+    "articles": {
+      "loss": "Art. 5.1: The insurer pays the cost of the repair, as given by an invoice or a quote of a repair company.",
+      "lines": "Art. 5.3: When the lines of an invoice do not add up to its total, the sum of the lines counts until a person has checked the invoice.",
+      "claimed": "Art. 5.4: The insurer pays at most the amount that the customer claims.",
+      "documented": "Art. 9.2: The insurer pays only a loss that a document proves.",
+      "cause": "Art. 2.1: Only the causes named in the policy are covered. Glass breakage is covered only when the policy names it.",
+      "deductible": "Art. 8.1: The deductible named in the policy is taken from every payment.",
+      "limit": "Art. 8.3: The insurer pays at most the coverage limit of the policy."
+    }
+  },
+  "Accident": {
+    "name": "General conditions Accident, edition 2026",
+    "articles": {
+      "loss": "Art. 4.1: The insurer pays the cost of the treatment after an accident, as given by the invoice of the provider.",
+      "lines": "Art. 4.3: When the lines of an invoice do not add up to its total, the sum of the lines counts until a person has checked the invoice.",
+      "claimed": "Art. 4.4: The insurer pays at most the amount that the customer claims.",
+      "documented": "Art. 8.2: The insurer pays only a loss that a document proves.",
+      "cause": "Art. 2.1: Only an accident is covered. Illness is not covered.",
+      "coinsurance": "Art. 6.2: The customer pays the share of the cost that the policy names.",
+      "deductible": "Art. 6.1: The deductible named in the policy is taken from every payment.",
+      "limit": "Art. 6.4: The insurer pays at most the coverage limit of the policy."
+    }
+  }
+}

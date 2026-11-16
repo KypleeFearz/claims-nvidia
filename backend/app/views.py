@@ -11,7 +11,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.models import Claim, ClaimStatus, Outcome, Signal
+from app.models import Claim, ClaimStatus, Decision, Outcome, Signal
 
 VALIDATED = "Your claim is validated. You will receive a confirmation by e-mail."
 TO_A_PERSON = "A claims specialist will review your case and contact you."
@@ -22,12 +22,14 @@ MESSAGES = {
 }
 # After the decision of a handler (issue #84): fixed texts. The customer never reads
 # the reason that the handler wrote; a letter gives the reasons (package B6).
-APPROVED = "Your claim is approved. You will receive a confirmation by e-mail."
+APPROVED = (
+    "Your claim is approved for CHF {amount:,.2f}. "
+    "You will receive a confirmation by e-mail."
+)
 DECIDED = (
     "A claims specialist has decided on your claim. "
     "You will receive a letter with the decision and the reasons."
 )
-AFTER_DECISION = {"approve": APPROVED, "refuse": DECIDED}
 # A required document is missing (signal R001): the customer reads what to send. It
 # depends only on the documents, never on the outcome, and R001 always goes to a person.
 WAITING = "We still need: {missing} You can upload here at any time. "
@@ -58,9 +60,16 @@ def customer_message(outcome: Outcome, signals: Iterable[Signal] = ()) -> str:
     return WAITING.format(missing=missing.removeprefix("Missing: ")) + TO_A_PERSON
 
 
+def after_decision(decision: Decision) -> str | None:
+    """What the customer reads after a decision of a handler, or None: nothing."""
+    if decision.action == "approve":
+        return APPROVED.format(amount=decision.amount or 0)
+    return DECIDED if decision.action == "refuse" else None
+
+
 def _message(claim: Claim) -> str | None:
     if claim.decisions and claim.status in (ClaimStatus.approved, ClaimStatus.refused):
-        return AFTER_DECISION[claim.decisions[-1].action]
+        return after_decision(claim.decisions[-1])
     return customer_message(claim.outcome, claim.signals) if claim.outcome else None
 
 

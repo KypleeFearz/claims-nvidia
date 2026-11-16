@@ -100,7 +100,9 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 - `Customer`, `Policy` (number, line of business, start, end, coverage limit).
 - `Claim`: id, customer, policy, type, description, incident date, claimed amount, documents, signals, score, outcome, fraud report, status.
 - `ClaimStatus` (issues #72 and #84): `open`, `waiting_customer`, `validated`, `in_review`, `in_investigation`, `approved`, `refused`. See "Claim lifecycle" below.
-- `Decision`: action, handler, reason, time. A claim keeps the list of its decisions.
+- `Decision`: action, handler, reason, amount (for an approval), time. A claim keeps the list of its decisions.
+- `Policy` terms (issue #86): deductible, coinsurance (the share the customer pays), covered causes. The mock policies are read from `data/mock/policies.json` at every start of the backend.
+- `Proposal`: the name of the general conditions, the lines (label, amount, reason, article, sources), the amount to pay, and why a person must decide. Computed by `backend/app/settlement.py` (pure code) inside `assess_and_route`, saved with the outcome, shown in the pipeline panel and on the case page. A handler approves the proposed amount, or another amount with a written reason; the customer reads the approved amount.
 - `Document`: id, file, document type, pages, fields, line items, file metadata.
 - `ExtractedField`: name, value, confidence, `source` (document id, page, text snippet or box). The source is required.
 - `Signal`: code, category (`rule`, `tampering`, `consistency`), severity, points, title, detail, evidence (list of sources).

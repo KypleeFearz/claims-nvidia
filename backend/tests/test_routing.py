@@ -53,10 +53,12 @@ def test_missing_document_is_handler_review_even_with_a_low_score() -> None:
 
 def test_amount_above_the_limit_is_handler_review() -> None:
     assert TRAVEL.straight_through_limit == 2500
-    assert route(travel_claim(claimed_amount=2500), [], TRAVEL)[0] == (
-        Outcome.straight_through
-    )
-    out, reasons = route(travel_claim(claimed_amount=2500.01), [], TRAVEL)
+    # a trip of 3,000 with no refund: the documents prove what the customer claims
+    docs = [document("D-book", "booking_confirmation", {"trip_price": 3000.0})]
+    at_limit = travel_claim(claimed_amount=2500, documents=docs)
+    assert route(at_limit, [], TRAVEL)[0] == Outcome.straight_through
+    above = travel_claim(claimed_amount=2500.01, documents=docs)
+    out, reasons = route(above, [], TRAVEL)
     assert out == Outcome.handler_review
     assert any("2,500" in r for r in reasons)
 

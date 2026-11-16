@@ -15,9 +15,9 @@ from app.agent.phrases import check_message
 from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Decision
 from app.store import Store
-from app.views import AFTER_DECISION
 from app.views import APPROVED as APPROVED  # re-export: the tests read them here
 from app.views import DECIDED as DECIDED
+from app.views import after_decision
 
 # Two mock handlers. ponytail: a name in the request, no login (D33); a real desk
 # needs accounts, and then the authority level of each handler.
@@ -36,7 +36,14 @@ class BadDecision(ValueError):
     """The request of the handler is not complete or not allowed to be sent."""
 
 
-def decide(store: Store, claim_id: str, action: str, by: str, reason: str) -> Claim:
+def decide(
+    store: Store,
+    claim_id: str,
+    action: str,
+    by: str,
+    reason: str,
+    amount: float | None = None,
+) -> Claim:
     """One decision of one handler. `KeyError`: unknown claim. `BadDecision`: the
     request is wrong. `IllegalMove`: the status of the claim does not allow it."""
     reason = reason.strip()
@@ -57,12 +64,37 @@ def decide(store: Store, claim_id: str, action: str, by: str, reason: str) -> Cl
         raise KeyError(claim_id)
     if claim.status == ClaimStatus.open:
         raise IllegalMove("the claim is still in the chat with the customer")
+    if action == "approve":
+        amount = _approved_amount(claim, amount, reason)
+    else:
+        amount = None  # an amount belongs to an approval only
     decision = Decision.model_validate(
-        {"action": action, "by": by, "reason": reason, "time": datetime.now(UTC)}
+        {
+            "action": action,
+            "by": by,
+            "reason": reason,
+            "amount": amount,
+            "time": datetime.now(UTC),
+        }
     )
     saved = store.decide(claim_id, TARGET[action], decision)
     assert saved is not None
-    text = reason if action == "request" else AFTER_DECISION.get(action)
+    text = reason if action == "request" else after_decision(decision)
     if text:  # investigate and clear: the customer sees nothing
         store.add_message(claim_id, "agent", text)
     return saved
+
+
+def _approved_amount(claim: Claim, amount: float | None, reason: str) -> float:
+    """The amount of an approval (issue #86): the proposal, or another amount with a
+    written reason. With no proposal the handler must give the amount."""
+    proposed = claim.proposal.payable if claim.proposal else None
+    if amount is None:
+        if proposed is None:
+            raise BadDecision("no proposal for this claim: give the amount")
+        return proposed
+    if amount < 0:
+        raise BadDecision("the amount cannot be below zero")
+    if (proposed is None or abs(amount - proposed) >= 0.005) and not reason:
+        raise BadDecision("another amount than the proposal needs a written reason")
+    return round(amount, 2)
