@@ -166,3 +166,20 @@ def test_the_list_of_claims(client: TestClient) -> None:
         "score": 25,
     }
     assert rows[1]["status"] == "open" and rows[1]["outcome"] is None
+
+
+def test_required_documents_says_in_code_what_is_present_and_what_is_missing(
+    client: TestClient,
+) -> None:
+    """Issue #78: the model does not work out what is missing, the tool says it."""
+    gateway = client.app.state.gateway  # type: ignore[attr-defined]
+    cid = window_claim(client)  # the repair quote, no damage photo
+    out = gateway.call(cid, "required_documents", {"claim_id": cid})
+    assert [(d["label"], d["present"]) for d in out["documents"]] == [
+        ("a repair invoice or a repair quote", True),
+        ("a damage photo", False),
+    ]
+    assert out["missing"] == ["a damage photo"]
+    upload(client, cid, MOCK / "claim-2-property" / "damage-photo-1.jpg")
+    out = gateway.call(cid, "required_documents", {"claim_id": cid})
+    assert out["missing"] == [] and all(d["present"] for d in out["documents"])
