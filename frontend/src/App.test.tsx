@@ -20,7 +20,7 @@ test('the nav is built from the pages: the demo first, then the map and the benc
   stub({ status: 'ok', mode: 'sandbox' })
   render(<App />)
   const nav = screen.getByRole('navigation', { name: 'Main' })
-  expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Claim demo', 'Handler desk', 'Map', 'Reader bench'])
+  expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Claim demo', 'Handler desk', 'Business numbers', 'Map', 'Reader bench'])
   expect(within(nav).getByRole('button', { name: 'Claim demo' })).toHaveAttribute('aria-current', 'page')
   expect(screen.getByRole('heading', { level: 1, name: 'Claim demo' })).toBeInTheDocument()
   expect(await screen.findByText('Demo · mode sandbox')).toBeInTheDocument()

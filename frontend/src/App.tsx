@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { send } from './api'
+import BusinessNumbers from './BusinessNumbers'
 import ClaimMap from './ClaimMap'
 import Demo from './Demo'
 import HandlerDesk from './HandlerDesk'
@@ -16,6 +17,7 @@ type Page = { id: string; label: string; icon: IconName; render: (shared: Shared
 const PAGES: Page[] = [
   { id: 'demo', label: 'Claim demo', icon: 'activity', render: (s) => <Demo {...s} /> },
   { id: 'desk', label: 'Handler desk', icon: 'shield', render: () => <HandlerDesk /> },
+  { id: 'numbers', label: 'Business numbers', icon: 'trend-up', render: () => <BusinessNumbers /> },
   { id: 'map', label: 'Map', icon: 'grid', render: () => <ClaimMap /> },
   { id: 'bench', label: 'Reader bench', icon: 'list', render: () => <ReaderBench /> },
 ]

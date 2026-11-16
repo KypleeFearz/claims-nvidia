@@ -24,15 +24,11 @@ from app.handler import HANDLERS, BadDecision, decide
 from app.investigation import NotAllowed, add_note, set_task
 from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Customer, Document, Message, Policy
+from app.numbers import router as numbers_router
 from app.payment import ExportRecord, export_record
 from app.store import Store
 from app.stream import event_stream
-from app.tools import checks as checks_tool
-from app.tools import claims as claims_tool
-from app.tools import documents as documents_tool
-from app.tools import policies as policies_tool
-from app.tools import requirements as requirements_tool
-from app.tools import routing as routing_tool
+from app.tools import build_gateway
 from app.tools.gateway import Gateway
 from app.views import ClaimRow, CustomerView, claim_row, customer_view
 
@@ -85,15 +81,9 @@ async def mcp_endpoint(scope: Scope, receive: Receive, send: Send) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     store = Store()  # reads CLAIMS_DB at startup
-    gateway = Gateway(store)
-    policies_tool.register(gateway)
     reader = get_reader()  # unknown CLAIMS_READER stops the startup
     uploads = Path(os.environ.get("CLAIMS_UPLOADS", "uploads"))
-    documents_tool.register(gateway, reader, uploads)
-    claims_tool.register(gateway)
-    checks_tool.register(gateway, uploads)
-    requirements_tool.register(gateway)
-    routing_tool.register(gateway)
+    gateway = build_gateway(store, reader, uploads)
     app.state.agent = get_agent(gateway)  # CLAIMS_MODE: local, nim or sandbox
     app.state.uploads = uploads
     app.state.reader = reader  # the reader bench calls it too (issue #82)
@@ -424,6 +414,7 @@ def create_app() -> FastAPI:
 
     app.include_router(demo_router)
     app.include_router(bench_router)
+    app.include_router(numbers_router)
     app.mount("/mcp", mcp_endpoint)
     return app
 

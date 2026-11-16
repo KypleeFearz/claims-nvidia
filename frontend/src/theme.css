@@ -1254,3 +1254,33 @@ table th[scope='row'] {
   gap: var(--space-2);
 }
 
+/* Business numbers (issue #96): two panels one under the other, and the stat tiles. */
+.numbers {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.numbers > .panel {
+  flex: none;
+  overflow: visible;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--space-3);
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+}
+.tile strong {
+  font-size: var(--fs-h1);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+

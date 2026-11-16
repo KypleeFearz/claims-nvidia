@@ -266,6 +266,19 @@ export const BOXES: MapBox[] = [
     check: { cmd: 'cd backend && uv run pytest tests/test_handler.py tests/test_no_auto_rejection.py' },
   },
   {
+    id: 'numbers',
+    zone: 'observe',
+    title: 'Business numbers',
+    line: 'What the business sees: claims with no person, time, money, alerts. And the kit played through the active reader.',
+    status: 'built',
+    icon: 'trend-up',
+    detail:
+      'The page has two parts. The claims of the demo: the share that passed with no person, the time to the end, the amounts claimed, proposed and paid, how the investigations ended. The kit: every story runs through the active reader, the checks, the routing and the settlement, and is compared with the expected outcome, signals and amount. With your reader it shows what a reading error costs: a wrong outcome, a missed fraud, a wrong payment.',
+    files: ['backend/app/numbers.py', 'frontend/src/BusinessNumbers.tsx', 'backend/tests/test_numbers.py'],
+    issues: [{ n: 19, label: 'evaluation of the reading' }],
+    check: { cmd: 'cd backend && uv run pytest tests/test_numbers.py' },
+  },
+  {
     id: 'evaluation',
     zone: 'observe',
     title: 'Evaluation',

@@ -49,6 +49,8 @@ class Store:
         # every read-modify-write of a claim run under this lock (reentrant: the
         # read-modify-write methods call _save_claim).
         self.lock = threading.RLock()
+        # False: a paid claim writes no export file (the kit run of app/numbers.py)
+        self.export_files = True
         self.db.executescript(
             """
             CREATE TABLE IF NOT EXISTS customers (

@@ -82,11 +82,14 @@ def settle(store: Store, claim_id: str) -> Claim | None:
     set_reserve(store, claim_id, 0.0, "paid")
     paid = store.get_claim(claim_id)
     assert paid is not None
-    path = export(paid)
-    store.append_event(
-        claim_id, "system", "export", f"Exported to the claims system: {path.name}",
-        {"reference": payment.reference}, {"file": str(path), "amount": payment.amount},
-    )  # fmt: skip
+    if store.export_files:
+        path = export(paid)
+        store.append_event(
+            claim_id, "system", "export",
+            f"Exported to the claims system: {path.name}",
+            {"reference": payment.reference},
+            {"file": str(path), "amount": payment.amount},
+        )  # fmt: skip
     return paid
 
 

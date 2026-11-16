@@ -156,6 +156,8 @@ Done: issue #94 (D70). Left: the status `closed`, a payment to the repair compan
 
 ### B9. Business numbers page (S, after #19)
 
+Done: issue #96 (D71), before #19: the page does not need the harness of the intern. Left: handler minutes per claim, numbers over time.
+
 **Build.** Nikola measures the reading (#19). We measure the business: share of straight-through claims, time from first notice to decision, handler minutes per claim (estimated), false alarms, misses, amount proposed against amount claimed. One page next to his metrics page, same style.
 
 ### B10. Demo and operations (S each)
