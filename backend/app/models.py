@@ -42,6 +42,10 @@ class Policy(BaseModel):
     start: date
     end: date
     coverage_limit: float
+    # the terms (issue #86); the defaults: a policy with no terms pays the whole loss
+    deductible: float = 0
+    coinsurance: float = Field(default=0, ge=0, le=1)  # the share the customer pays
+    covered_causes: list[str] = []  # empty: every cause
 
 
 class Source(BaseModel):
@@ -157,12 +161,30 @@ class SandboxRecord(BaseModel):
     closed: bool = False
 
 
+class ProposalLine(BaseModel):
+    label: str
+    amount: float  # CHF; a reduction is negative
+    reason: str
+    article: str = ""  # of the general conditions (data/mock/policy_wordings.json)
+    sources: list[Source] = []
+
+
+class Proposal(BaseModel):
+    """What the policy pays, line by line (issue #86). A handler approves it."""
+
+    wording: str = ""
+    lines: list[ProposalLine] = []
+    payable: float | None = None  # None: no document gives the loss
+    needs_person: list[str] = []  # why the system must not pay this alone
+
+
 class Decision(BaseModel):
     """What a handler did on a claim, and why (issue #84)."""
 
     action: Literal["approve", "refuse", "request", "investigate", "clear"]
     by: str
     reason: str = ""
+    amount: float | None = None  # CHF approved, for `approve`
     time: datetime
 
 
@@ -182,6 +204,7 @@ class Claim(BaseModel):
     outcome: Outcome | None = None
     outcome_reasons: list[str] = []
     fraud_report: FraudReport | None = None
+    proposal: Proposal | None = None
     status: ClaimStatus = ClaimStatus.open
     decisions: list[Decision] = []
     opened_at: datetime | None = None  # None: a claim made before issue #84

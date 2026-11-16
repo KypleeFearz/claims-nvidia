@@ -23,6 +23,7 @@ from app.models import (
     Outcome,
     PipelineEvent,
     Policy,
+    Proposal,
     SandboxRecord,
 )
 
@@ -66,8 +67,7 @@ class Store:
                 claim_id TEXT PRIMARY KEY, data TEXT NOT NULL);
             """
         )
-        if not self.db.execute("SELECT 1 FROM customers").fetchone():
-            self._seed()
+        self._seed()  # at every start: the file is the truth for the mock policies
 
     def _seed(self) -> None:
         data = Path(os.environ.get("CLAIMS_DATA") or DATA)
@@ -75,11 +75,12 @@ class Store:
         with self.lock, self.db:
             for c in map(Customer.model_validate, seed["customers"]):
                 self.db.execute(
-                    "INSERT INTO customers VALUES (?, ?)", (c.id, c.model_dump_json())
+                    "INSERT OR REPLACE INTO customers VALUES (?, ?)",
+                    (c.id, c.model_dump_json()),
                 )
             for p in map(Policy.model_validate, seed["policies"]):
                 self.db.execute(
-                    "INSERT INTO policies VALUES (?, ?, ?)",
+                    "INSERT OR REPLACE INTO policies VALUES (?, ?, ?)",
                     (p.number, p.customer_id, p.model_dump_json()),
                 )
 
@@ -189,6 +190,7 @@ class Store:
         outcome: Outcome,
         reasons: list[str],
         report: FraudReport | None = None,
+        proposal: Proposal | None = None,
     ) -> Claim | None:
         """Outcome, score, reasons, report and the new status in one write: an
         investigation and its report are saved together or not at all."""
@@ -201,6 +203,7 @@ class Store:
                 "outcome": outcome.value,
                 "outcome_reasons": reasons,
                 "fraud_report": report.model_dump(mode="json") if report else None,
+                "proposal": proposal.model_dump(mode="json") if proposal else None,
             }
             status = after_routing(outcome, claim.signals)
             return self._move(claim, status, "system", "routing", fields)
@@ -226,6 +229,7 @@ class Store:
                 "score": None,
                 "outcome_reasons": [],
                 "fraud_report": None,
+                "proposal": None,
             }
             return self._move(claim, ClaimStatus.open, by, "a new document", fields)
 

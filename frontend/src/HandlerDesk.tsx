@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { send } from './api'
-import { ChecksSection, ExtractedSection, FraudReportSection, OutcomeSection } from './PipelineSections'
+import { ChecksSection, chf, ExtractedSection, FraudReportSection, OutcomeSection, ProposalSection } from './PipelineSections'
 import type { PipelineClaim } from './PipelineSections'
 
 // The handler desk (issue #84, package B3): the queue of the claims that wait for a person, and the
@@ -17,7 +17,7 @@ type Row = {
   reasons: string[]
   opened_at: string | null
 }
-type Decision = { action: string; by: string; reason: string; time: string }
+type Decision = { action: string; by: string; reason: string; amount: number | null; time: string }
 type Case = PipelineClaim & {
   id: string
   customer: { name: string }
@@ -43,7 +43,6 @@ const STATUS_PILL: Record<string, string> = {
   open: 'pill-idle',
 }
 const label = (status: string) => status.replace(/_/g, ' ')
-const chf = (n: number | null) => (n === null ? '—' : `CHF ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`)
 const rank = (r: Row) => (TO_DO.includes(r.status) ? TO_DO.indexOf(r.status) : TO_DO.length)
 const byUrgency = (a: Row, b: Row) => rank(a) - rank(b) || (a.opened_at ?? '').localeCompare(b.opened_at ?? '')
 
@@ -139,12 +138,18 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
   const [handlers, setHandlers] = useState<string[]>([])
   const [by, setBy] = useState('')
   const [reason, setReason] = useState('')
+  const [amount, setAmount] = useState('') // CHF to approve: the proposal, until the handler types another amount
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     const fail = () => setError('The server did not answer.')
-    send<Case>(`/claims/${claimId}`).then(setClaim).catch(fail)
+    send<Case>(`/claims/${claimId}`)
+      .then((c) => {
+        setClaim(c)
+        setAmount(c.proposal?.payable == null ? '' : String(c.proposal.payable))
+      })
+      .catch(fail)
     send<Message[]>(`/claims/${claimId}/messages`).then(setMessages).catch(fail)
     send<string[]>('/handlers')
       .then((h) => {
@@ -161,7 +166,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
       const res = await fetch(`/claims/${claimId}/decisions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, by, reason }),
+        body: JSON.stringify({ action, by, reason, ...(action === 'approve' && amount.trim() !== '' ? { amount: Number(amount) } : {}) }),
       })
       const body = (await res.json()) as Case & { detail?: string }
       if (!res.ok) {
@@ -216,6 +221,10 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
               </select>
             </label>
             <label className="desk-field">
+              <span>Amount to approve, in CHF (the proposal, or another amount with a reason)</span>
+              <input aria-label="Amount to approve" type="number" min="0" step="0.05" value={amount} disabled={busy} onChange={(e) => setAmount(e.target.value)} />
+            </label>
+            <label className="desk-field">
               <span>Reason, or text for the customer</span>
               <textarea aria-label="Reason, or text for the customer" rows={2} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} />
             </label>
@@ -240,7 +249,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
             <ol className="desk-history">
               {claim.decisions.map((d) => (
                 <li key={d.time}>
-                  <span className="mono muted">{d.time.slice(0, 16).replace('T', ' ')}</span> {[d.action, d.by, d.reason].filter(Boolean).join(' · ')}
+                  <span className="mono muted">{d.time.slice(0, 16).replace('T', ' ')}</span> {[d.action, d.amount == null ? '' : chf(d.amount), d.by, d.reason].filter(Boolean).join(' · ')}
                 </li>
               ))}
             </ol>
@@ -248,6 +257,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
         )}
 
         {claim.fraud_report && <FraudReportSection report={claim.fraud_report} />}
+        <ProposalSection claim={claim} />
         <OutcomeSection claim={claim} />
         <ChecksSection claim={claim} ran={claim.outcome !== null} />
         <ExtractedSection docs={claim.documents} claimId={claim.id} />

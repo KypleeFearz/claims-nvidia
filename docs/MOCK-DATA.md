@@ -4,14 +4,33 @@ All data is invented. No real person, no real policy. The documents must look re
 
 ## Customers and policies
 
-| Customer | Policy | Line | Period | Limit |
-|---|---|---|---|---|
-| C-1001 Anna Keller | TRV-2026-0417 | Travel | 2026-01-01 to 2026-12-31 | CHF 5,000 |
-| C-1001 Anna Keller | HH-2025-1182 | Household | 2025-03-01 to 2027-02-28 | CHF 20,000 |
-| C-1002 Marco Bianchi | HH-2024-0933 | Household | 2024-06-01 to 2027-05-31 | CHF 15,000 |
-| C-1002 Marco Bianchi | TRV-2026-0721 | Travel | 2026-02-01 to 2027-01-31 | CHF 5,000 |
-| C-1003 Lukas Meier | ACC-2026-2210 | Accident | 2026-10-20 to 2027-10-19 | CHF 4,500 |
-| C-1003 Lukas Meier | HH-2026-0102 | Household | 2026-01-15 to 2027-01-14 | CHF 10,000 |
+| Customer | Policy | Line | Period | Limit | Deductible | Customer share | Covered causes |
+|---|---|---|---|---|---|---|---|
+| C-1001 Anna Keller | TRV-2026-0417 | Travel | 2026-01-01 to 2026-12-31 | CHF 5,000 | 0 | 0 | illness, luggage, cancellation |
+| C-1001 Anna Keller | HH-2025-1182 | Household | 2025-03-01 to 2027-02-28 | CHF 20,000 | CHF 200 | 0 | water, fire, theft, breakage |
+| C-1002 Marco Bianchi | HH-2024-0933 | Household | 2024-06-01 to 2027-05-31 | CHF 15,000 | CHF 200 | 0 | water, fire, theft, breakage |
+| C-1002 Marco Bianchi | TRV-2026-0721 | Travel | 2026-02-01 to 2027-01-31 | CHF 5,000 | CHF 100 | 0 | illness, cancellation |
+| C-1003 Lukas Meier | ACC-2026-2210 | Accident | 2026-10-20 to 2027-10-19 | CHF 4,500 | 0 | 10% | accident |
+| C-1003 Lukas Meier | HH-2026-0102 | Household | 2026-01-15 to 2027-01-14 | CHF 10,000 | CHF 500 | 0 | water, fire, theft (not breakage) |
+
+The terms (issue #86) are in `data/mock/policies.json`. `data/mock/policy_wordings.json` holds the mock general conditions of each line: the articles that a line of a settlement proposal names. They are invented, as all the rest.
+
+## The settlement of each kit story
+
+Calculated by hand, in `data/mock/settlements.json`. `backend/tests/test_settlement.py` plays every story and compares to the cent. Rules: `docs/WORKFLOWS.md`, "Settlement".
+
+| Story | Calculation | To pay | A person decides |
+|---|---|---|---|
+| `claim-1-travel`, CHF 1,500 | 1,840 − 340 | CHF 1,500.00 | no |
+| `claim-2-property`, CHF 3,200 | 3,200 − 200 deductible | CHF 3,000.00 | no (the review comes from the amount) |
+| `claim-3-health`, CHF 4,450 | the lines give 1,450, not 4,450; − 10% | CHF 1,305.00 | yes |
+| `kit-anna-luggage`, CHF 787 | 389 + 398 | CHF 787.00 | no |
+| `kit-anna-theft`, CHF 2,640 | 2,640 − 200 deductible | CHF 2,440.00 | no |
+| `kit-marco-travel`, CHF 2,300 | 3,200 − 900; − 100 deductible | CHF 2,200.00 | no |
+| `kit-marco-travel`, CHF 3,200 | the documents give 2,300; − 100 deductible | CHF 2,200.00 | yes |
+| `kit-marco-bathroom`, CHF 4,740 | the lines give 1,740, not 4,740; − 200 deductible | CHF 1,540.00 | yes |
+| `kit-lukas-clean`, CHF 840 | 840 − 10% | CHF 756.00 | no |
+| `kit-lukas-household`, CHF 1,260 | breakage is not covered by this policy | CHF 0.00 | yes |
 
 ## The three demo claim files
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import GraphStrip from './GraphStrip'
 import SandboxSection from './SandboxSection'
-import { ChecksSection, ExtractedSection, FraudReportSection, OutcomeSection } from './PipelineSections'
+import { ChecksSection, ExtractedSection, FraudReportSection, OutcomeSection, ProposalSection } from './PipelineSections'
 import type { PipelineClaim } from './PipelineSections'
 
 type PipelineEvent = {
@@ -78,6 +78,7 @@ function Events({ claimId }: { claimId: string | null }) {
         {claimId && <SandboxSection claimId={claimId} events={events} />}
         {claim?.fraud_report && <FraudReportSection report={claim.fraud_report} />}
         {claim && <OutcomeSection claim={claim} />}
+        {claim && <ProposalSection claim={claim} />}
         {claim && <ChecksSection claim={claim} ran={checksRan} />}
         {claim && <ExtractedSection docs={claim.documents} claimId={claimId!} />}
         <h3>Events</h3>

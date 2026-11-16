@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app.lifecycle import MOVES, IllegalMove
 from app.main import create_app
 from app.models import ClaimStatus, Outcome
-from app.views import TO_A_PERSON, VALIDATED
+from app.views import TO_A_PERSON
 from tests.builders import signal
 from tests.reader_contract import MOCK
 
@@ -80,10 +80,15 @@ def test_the_customer_adds_the_document_later_and_the_claim_gets_a_new_outcome(
     claim = client.get(f"/claims/{cid}").json()
     assert claim["status"] == "open" and claim["outcome"] is None
     assert claim["agent_state"] == "ask_documents"
-    assert say(client, cid, "done").endswith(VALIDATED)
+    # the file is complete now. A person still decides: the policy of Lukas does not
+    # cover breakage (issue #86), and the system never pays less alone
+    assert say(client, cid, "done").endswith(TO_A_PERSON)
     claim = client.get(f"/claims/{cid}").json()
-    assert claim["status"] == "validated" and claim["outcome"] == "straight_through"
-    assert [s["code"] for s in claim["signals"]] == []
+    assert claim["status"] == "in_review" and claim["outcome"] == "handler_review"
+    assert [s["code"] for s in claim["signals"]] == [] and claim["score"] == 0
+    assert claim["outcome_reasons"] == [
+        "Settlement: The cause (breakage) is not a covered cause of the policy."
+    ]
 
 
 def test_each_status_move_is_one_event_with_who_did_it(client: TestClient) -> None:
@@ -96,7 +101,7 @@ def test_each_status_move_is_one_event_with_who_did_it(client: TestClient) -> No
     assert [(e.inputs["from"], e.inputs["to"], e.inputs["by"]) for e in moves] == [
         ("open", "waiting_customer", "system"),
         ("waiting_customer", "open", "customer"),
-        ("open", "validated", "system"),
+        ("open", "in_review", "system"),
     ]
     # the event of the second visit keeps what the first routing said
     assert moves[1].outputs["outcome_before"] == "handler_review"
@@ -109,7 +114,7 @@ def test_a_claim_that_does_not_wait_stays_closed_for_uploads(
     photo = MOCK / "claim-2-property" / "damage-photo-1.jpg"
     upload(client, cid, photo)
     say(client, cid, "done")
-    assert client.get(f"/claims/{cid}").json()["status"] == "validated"
+    assert client.get(f"/claims/{cid}").json()["status"] == "in_review"
     assert upload(client, cid, photo) == 409
 
 

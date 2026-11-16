@@ -29,13 +29,18 @@ def is_image_based(p: Path) -> bool:
     return p.suffix == ".jpg" or p.parent.name == "hard" and p.suffix == ".pdf"
 
 
+# written by hand, not by the generator: the policies, their wordings (issue #86) and
+# the settlement of each kit story
+BY_HAND = {"policies.json", "policy_wordings.json", "settlements.json"}
+
+
 def exact(folder: Path) -> dict[str, str]:
     """SHA-256 of every file that must be byte-identical on every machine."""
     return {
         str(p.relative_to(folder)): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(folder.glob("**/*"))
         if p.suffix in {".pdf", ".json"}
-        and p.name != "policies.json"
+        and p.name not in BY_HAND
         and not is_image_based(p)
     }
 
@@ -88,7 +93,7 @@ def test_generator_is_deterministic_and_matches_the_committed_files(
     assert sorted(everything) == sorted(
         str(p.relative_to(MOCK))
         for p in MOCK.glob("**/*")
-        if p.is_file() and p.name != "policies.json"
+        if p.is_file() and p.name not in BY_HAND
     )
 
 

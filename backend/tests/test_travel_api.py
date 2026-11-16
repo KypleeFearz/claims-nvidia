@@ -139,7 +139,10 @@ def test_a_claimed_amount_of_1800_gives_c003(client: TestClient) -> None:
         "booking-confirmation",
         "cancellation-confirmation",
     }
-    assert c["score"] == 15 and c["outcome"] == "straight_through"
+    # 15 points are below the review score, but the customer claims more than the
+    # documents prove: the system does not pay less alone (issue #86)
+    assert c["score"] == 15 and c["outcome"] == "handler_review"
+    assert c["proposal"]["payable"] == 1500.0
 
 
 def test_investigation_gives_the_same_customer_text_as_handler_review(

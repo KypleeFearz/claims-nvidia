@@ -14,6 +14,7 @@ from app.views import TO_A_PERSON
 from tests.reader_contract import MOCK
 
 SOFIA, DAVID = HANDLERS
+PAID = APPROVED.format(amount=3000)
 WATER = "Water damage in the kitchen on 14 September 2026. I claim CHF 3,200."
 
 
@@ -89,12 +90,13 @@ def test_approve_is_a_decision_with_a_name_one_event_and_a_text_for_the_customer
         "action": "approve",
     }
     assert events[0].outputs["why"] == "The invoice fits the damage."
-    assert last_message(client, cid) == APPROVED
+    assert d["amount"] == 3000.0  # the proposal: 3,200 less the deductible of 200
+    assert last_message(client, cid) == PAID
     assert view(client, cid) == {
         "claim_id": cid,
         "policy_number": "HH-2024-0933",
         "status": "approved",
-        "message": APPROVED,
+        "message": PAID,
         "step": "closed",
     }
 
@@ -217,3 +219,43 @@ def test_the_list_gives_the_opening_time_and_the_reasons(client: TestClient) -> 
     assert row["reasons"] == [
         "Claimed amount CHF 3,200.00 is above the straight-through limit of CHF 2,000."
     ]
+
+
+def test_another_amount_than_the_proposal_needs_a_written_reason(
+    client: TestClient,
+) -> None:
+    cid = review_claim(client)
+    assert claim(client, cid)["proposal"]["payable"] == 3000.0
+    res = client.post(
+        f"/claims/{cid}/decisions",
+        json={"action": "approve", "by": SOFIA, "amount": 2500},
+    )
+    assert res.status_code == 422 and "written reason" in res.json()["detail"]
+    body = {
+        "action": "approve",
+        "by": SOFIA,
+        "amount": 2500,
+        "reason": "The cabinets were 12 years old: CHF 500 less.",
+    }
+    assert client.post(f"/claims/{cid}/decisions", json=body).status_code == 200
+    assert claim(client, cid)["decisions"][-1]["amount"] == 2500.0
+    assert last_message(client, cid) == APPROVED.format(amount=2500)
+    assert "cabinets" not in str(client.get(f"/claims/{cid}/messages").json())
+
+
+def test_the_proposed_amount_given_again_needs_no_reason_and_a_refusal_has_no_amount(
+    client: TestClient,
+) -> None:
+    cid = review_claim(client)
+    body = {"action": "approve", "by": DAVID, "amount": 3000.0}
+    assert client.post(f"/claims/{cid}/decisions", json=body).status_code == 200
+    other = review_claim(client)
+    body = {"action": "refuse", "by": DAVID, "amount": 99, "reason": "Exclusion 4.2."}
+    assert client.post(f"/claims/{other}/decisions", json=body).status_code == 200
+    assert claim(client, other)["decisions"][-1]["amount"] is None
+
+
+def test_a_negative_amount_is_refused(client: TestClient) -> None:
+    cid = review_claim(client)
+    body = {"action": "approve", "by": SOFIA, "amount": -1, "reason": "x"}
+    assert client.post(f"/claims/{cid}/decisions", json=body).status_code == 422

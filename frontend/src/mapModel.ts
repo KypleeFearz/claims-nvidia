@@ -216,6 +216,19 @@ export const BOXES: MapBox[] = [
     issues: [{ n: 18 }],
   },
   {
+    id: 'settlement',
+    zone: 'tools',
+    title: 'Settlement proposal',
+    line: 'What the policy pays, line by line. Code computes it; a handler approves it.',
+    status: 'built',
+    icon: 'layers',
+    detail:
+      'The documented loss, not more than the claimed amount, the share of the customer, the deductible, the coverage limit. Each line names an article of the general conditions and its source page. When a line reduces the amount for another reason than the contract alone, a person decides. It reads the fields of the reader: a wrong amount read gives a wrong proposal.',
+    files: ['backend/app/settlement.py', 'data/mock/policies.json', 'data/mock/policy_wordings.json', 'data/mock/settlements.json'],
+    issues: [],
+    check: { cmd: 'cd backend && uv run pytest tests/test_settlement.py' },
+  },
+  {
     id: 'pipeline',
     zone: 'observe',
     title: 'Pipeline panel',
