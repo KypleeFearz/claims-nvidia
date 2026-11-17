@@ -162,7 +162,7 @@ export const BOXES: MapBox[] = [
     line: 'Rules R, tampering T, consistency C. Each one gives a signal.',
     status: 'built',
     icon: 'shield',
-    detail: '17 signals in one table. R006 to R010 come from the history of the customer and from links between persons (a shared payout account, a provider known for fraud).',
+    detail: '20 signals in one table. R011 to R013 belong to one line of business. R006 to R010 come from the history of the customer and from links between persons (a shared payout account, a provider known for fraud).',
     files: ['backend/app/checks/', 'docs/FRAUD.md'],
     issues: [],
   },

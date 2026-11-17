@@ -34,6 +34,9 @@ WHY: dict[str, str | tuple[str, str]] = {
     "R008": "the payout account is also the account of another person",
     "R009": "the phone or the address is shared with a person known for fraud",
     "R010": "a provider on the {doc} has claims closed as fraud",
+    "R011": "an item was bought shortly before the loss",
+    "R012": "the total of the {doc} is a round amount",
+    "R013": "the {doc} is dated before the incident",
     "T001": "the {doc} was edited after it was issued",
     "T002": (
         "the {doc} was changed long after it was created",

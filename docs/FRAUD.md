@@ -21,6 +21,9 @@
 | R008 | rule | The payout account is also the account of another person | high | 40 |
 | R009 | rule | Phone or address shared with a person who has a claim closed as fraud | medium | 20 |
 | R010 | rule | A provider on a document has earlier claims closed as fraud | medium | 20 |
+| R011 | rule | An item on a receipt was bought less than 30 days before the loss (travel, property) | medium | 15 |
+| R012 | rule | The total of a medical invoice is a round amount, a multiple of CHF 500 (health) | low | 10 |
+| R013 | rule | A repair quote is dated before the incident (property) | medium | 20 |
 | T001 | tampering | PDF last written by an editing tool | medium | 20 |
 | T002 | tampering | PDF modified more than one day after its creation | low | 10 |
 | T003 | tampering | Line items do not add up to the total | high | 30 |
@@ -30,6 +33,8 @@
 | C004 | consistency | Photo or report does not fit the declared damage (VLM) | medium | 20 |
 
 The points are a first guess. Tune them on the mock test set.
+
+R011 to R013 (issue #109) belong to one line of business: each is a rule of its workflow (`rules` in the workflow file, code in `backend/app/checks/by_line.py`). No kit story fires them.
 
 R006 to R010 (issue #90) do not read a document of the claim: they read the history of the customer and the links between persons (`backend/app/checks/history.py`, `data/mock/history.json`). They run inside `run_checks`. Only R010 has a document as evidence (the page that names the provider); the others name the earlier claim or the other person in their detail. The handler reads the same data on the case page, section "History and links".
 
@@ -65,4 +70,4 @@ A report is a start, not an end. A claim in investigation has a case on the hand
 
 ## Later (not in the first version)
 
-Duplicate invoices and photos across claims, photo forensics (edited or reused photos, EXIF data), font and pixel analysis of scans. For the history and the links: the claims of the demo itself as history, a graph view, signals per line of business. For the investigation: the conclusions as input to tune the points, a confirmed fraud written to the history of the person.
+Duplicate invoices and photos across claims, photo forensics (edited or reused photos, EXIF data), font and pixel analysis of scans. For the history and the links: the claims of the demo itself as history, a graph view. More signals per line of business: the ones that need the free text of the first notice (a theft with no sign of entry) or a field that the reader does not give (the booking date of a trip). For the investigation: the conclusions as input to tune the points, a confirmed fraud written to the history of the person.

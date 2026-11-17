@@ -103,6 +103,28 @@ SIGNALS: dict[str, SignalKind] = {
         "A provider on a document has earlier claims closed as fraud",
         "A provider with no claim closed as fraud.",
     ),
+    # R011 to R013: per line of business (issue #109, `checks/by_line.py`)
+    "R011": SignalKind(
+        "rule",
+        "medium",
+        15,
+        "An item was bought less than 30 days before the loss",
+        "Items bought more than 30 days before the loss.",
+    ),
+    "R012": SignalKind(
+        "rule",
+        "low",
+        10,
+        "The total of a medical invoice is a round amount",
+        "A total that is not a multiple of CHF 500.",
+    ),
+    "R013": SignalKind(
+        "rule",
+        "medium",
+        20,
+        "A repair quote is dated before the incident",
+        "A quote dated on or after the incident.",
+    ),
     "T001": SignalKind(
         "tampering",
         "medium",

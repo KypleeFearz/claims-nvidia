@@ -1,5 +1,6 @@
 """Workflow C: travel (docs/WORKFLOWS.md)."""
 
+from app.checks.by_line import r011
 from app.checks.rules import (
     Rule,
     as_date,
@@ -112,5 +113,6 @@ WORKFLOW = Workflow(
     rules=[
         Rule("C002", cancellation_between_incident_and_departure),
         Rule("C003", amount_is_price_minus_refund),
+        Rule("R011", r011),  # an item bought shortly before the loss (issue #109)
     ],
 )
