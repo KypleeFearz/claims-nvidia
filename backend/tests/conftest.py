@@ -14,3 +14,5 @@ def _mode_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("CLAIMS_MODE", raising=False)
     monkeypatch.setenv("CLAIMS_CHECKPOINTS", str(tmp_path / "checkpoints.sqlite"))
     monkeypatch.setenv("CLAIMS_EXPORTS", str(tmp_path / "exports"))
+    # no real wait after a 429 of the fake model (issue #117)
+    monkeypatch.setattr("app.agent.graph.WAITS_429", (0.0, 0.0, 0.0))

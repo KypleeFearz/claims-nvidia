@@ -101,3 +101,4 @@
 - The first test with three claims at the same time found a 500 in one minute. Every test before it played one claim at a time. Test with several users before a demo with several users.
 - A store with one SQLite connection needs the lock on every read, and `fetchall()` inside the lock. A read that returns the cursor and walks it later, outside the lock, mixes the rows of two requests. Two reads had no lock: the two oldest ones.
 - Without the lock the fault is not always an error: under load the requests can also block. A test for a race needs a time limit around it.
+- After the store, the next limit was the key of the model (issue #117): at five visitors, 21 answers 429. A retry must be as long as the window of the limit: the limit is per minute and the client retried for 1.5 seconds. Measure before and after: the correction gave 5 of 5 claims in place of 3 of 5, and it made the run two times slower.
