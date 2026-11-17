@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { ReactNode } from 'react'
 import { send } from './api'
 import BusinessNumbers from './BusinessNumbers'
@@ -41,7 +41,23 @@ export default function App() {
   const [theme, toggleTheme] = useTheme()
   const health = useHealth()
   const [page, setPage] = useState(PAGES[0].id)
-  const [claimId, setClaimId] = useState<string | null>(null)
+  // the current claim stays in the browser, so a reload shows it again (issue #107)
+  const [claimId, setClaim] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('claim')
+    } catch {
+      return null // ponytail: private mode or blocked storage; the claim then lives in the page only
+    }
+  })
+  const setClaimId = useCallback((id: string | null) => {
+    setClaim(id)
+    try {
+      if (id) localStorage.setItem('claim', id)
+      else localStorage.removeItem('claim')
+    } catch {
+      // see above
+    }
+  }, [])
   const [round, setRound] = useState(0) // a reset remounts both panels
   const [resetError, setResetError] = useState('')
   const reset = () => {

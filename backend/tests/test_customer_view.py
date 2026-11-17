@@ -1,5 +1,6 @@
 """Non-negotiable 2: the customer never sees a score, a flag or the word "fraud"."""
 
+import json
 import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -257,3 +258,31 @@ def test_the_follow_up_is_the_same_for_review_and_for_investigation() -> None:
     a = customer_view(decided("in_review", None))
     b = customer_view(decided("in_investigation", None, outcome=Outcome.investigation))
     assert a == b
+
+
+# ---- a customer finds his claims again (issue #107) ---------------------------------
+
+
+def test_a_customer_gets_his_own_claims_newest_first_as_customer_views(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAIMS_DB", str(tmp_path / "claims.db"))
+    monkeypatch.setenv("CLAIMS_UPLOADS", str(tmp_path / "uploads"))
+    with TestClient(create_app()) as client:
+        first = test_health_api.run_claim(client)  # Lukas: an investigation
+        second = client.post("/claims", json={"customer_id": "C-1003"}).json()
+        client.put(
+            f"/claims/{second['claim_id']}/policy",
+            json={"policy_number": "HH-2026-0102"},
+        )
+        client.post("/claims", json={"customer_id": "C-1003"})  # no policy: not shown
+        client.post("/claims", json={"customer_id": "C-1001"})  # another customer
+        rows = client.get("/customers/C-1003/claims").json()
+        assert [r["claim_id"] for r in rows] == [second["claim_id"], first]
+        assert rows[1] == client.get(f"/claims/{first}/customer").json()
+        assert rows[1]["status_line"] == "A claims specialist reviews your case."
+        low = json.dumps(rows).lower()
+        for word in ("fraud", "score", "signal", "investigat", "outcome"):
+            assert word not in low, word
+        assert client.get("/customers/C-1001/claims").json() == []
+        assert client.get("/customers/C-none/claims").status_code == 404

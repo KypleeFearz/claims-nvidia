@@ -54,7 +54,7 @@ Order = the order to build. Size: S = one pull request, M = two or three, L = a 
 
 ### B1. Claim lifecycle (M) — first, the others need it
 
-Done: issue #72 (D63). How it works: `docs/ARCHITECTURE.md`, section 5b. Not done in #72: a reminder to the customer, and a claim that the customer opens again from a new browser session (the customer panel has no list of "my claims").
+Done: issue #72 (D63). How it works: `docs/ARCHITECTURE.md`, section 5b. Not done in #72: a reminder to the customer. The list of "my claims" came with issue #107.
 
 **Practice.** A claim has a status that a person can read: opened, waiting for the customer, in assessment, with a handler, in investigation, decided, paid, closed.
 
@@ -138,7 +138,7 @@ Done: issue #98 (D72): the questions per cause, why each document, a way to a pe
 
 ### B6. Customer follow-up (S)
 
-Done: issue #88. Left: the letter after a refusal (it needs a reason written for the customer, not the internal reason of the handler), a reminder when the customer does not answer, and a way for the customer to find his claim again from a new browser session.
+Done: issue #88. Left: the letter after a refusal (it needs a reason written for the customer, not the internal reason of the handler), and a reminder when the customer does not answer. Slice 2 is done: issue #107: a customer finds his claims again (a list after the choice of the account, and the current claim kept in the browser).
 
 **Build.** A status line in the customer panel in customer words ("We wait for your photo", "A specialist reviews your case", "Paid on …"). The list of open requests. The final letter: the amount, and the reason of each deduction in plain words. Non-negotiable 2 stays: the same words for `handler_review` and `investigation`.
 
