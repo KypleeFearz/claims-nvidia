@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 import CustomerPanel from './CustomerPanel'
@@ -33,9 +33,10 @@ test('pick an account to create the claim, then pick a policy to set it', async 
 
   expect(screen.getByText('Demo. Do not upload a real document.')).toBeInTheDocument()
   fireEvent.click(await screen.findByRole('button', { name: 'Anna Keller' }))
+  // no earlier claim of this account (the list fails here): the new claim opens at once
+  expect(await screen.findByRole('button', { name: /HH-2025-1182/ })).toBeInTheDocument()
   const post = fetchMock.mock.calls.find(([u]) => u === '/claims')![1]!
   expect(JSON.parse(post.body as string)).toEqual({ customer_id: 'C-1001' })
-  expect(await screen.findByRole('button', { name: /HH-2025-1182/ })).toBeInTheDocument()
 
   fireEvent.change(screen.getByRole('textbox', { name: 'Filter policies' }), { target: { value: 'travel' } })
   expect(screen.queryByRole('button', { name: /HH-2025-1182/ })).not.toBeInTheDocument()
@@ -300,4 +301,41 @@ test('a claim that waits shows what is still needed; a claim in the chat shows n
   render(<CustomerPanel claimId="CL-1" onClaim={() => {}} />)
   await screen.findByRole('textbox', { name: 'Message' })
   expect(screen.queryByLabelText('Your claim')).toBeNull()
+})
+
+
+test('a customer with earlier claims picks one from the list, or opens a new claim', async () => {
+  const mine = [
+    { claim_id: 'CL-9', policy_number: 'HH-2026-0102', status: 'waiting_customer', message: null, status_line: 'We wait for you: see what we still need.' },
+    { claim_id: 'CL-8', policy_number: 'ACC-2026-2210', status: 'paid', message: null, status_line: 'Paid: CHF 756.00 to your account ending 1003.' },
+  ]
+  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    if (url === '/customers') return Promise.resolve(Response.json([{ id: 'C-1003', name: 'Lukas Meier' }]))
+    if (url === '/customers/C-1003/claims') return Promise.resolve(Response.json(mine))
+    if (url === '/claims' && init?.method === 'POST') return Promise.resolve(Response.json(view(null), { status: 201 }))
+    return Promise.resolve(Response.json([]))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  const picked: (string | null)[] = []
+  render(<CustomerPanel claimId={null} onClaim={(id) => picked.push(id)} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Lukas Meier' }))
+  const list = await screen.findByLabelText('Your claims')
+  expect(within(list).getByRole('heading', { level: 3 })).toHaveTextContent('Your claims, Lukas Meier')
+  expect(within(list).getByRole('button', { name: /CL-9/ })).toHaveTextContent('We wait for you: see what we still need.')
+  expect(within(list).getByRole('button', { name: /CL-8/ })).toHaveTextContent('Paid: CHF 756.00')
+  expect(fetchMock.mock.calls.some(([u, i]) => u === '/claims' && i?.method === 'POST')).toBe(false) // nothing is created yet
+  fireEvent.click(within(list).getByRole('button', { name: /CL-9/ }))
+  expect(picked).toEqual(['CL-9'])
+  fireEvent.click(within(list).getByRole('button', { name: 'New claim' }))
+  await waitFor(() => expect(picked).toEqual(['CL-9', 'CL-1']))
+})
+
+test('a claim that does not exist any more is forgotten', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => Promise.resolve(url === '/claims/CL-gone/customer' ? new Response('', { status: 404 }) : Response.json([]))),
+  )
+  const picked: (string | null)[] = []
+  render(<CustomerPanel claimId="CL-gone" onClaim={(id) => picked.push(id)} />)
+  await waitFor(() => expect(picked).toEqual([null]))
 })

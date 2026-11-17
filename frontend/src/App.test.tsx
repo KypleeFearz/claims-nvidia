@@ -46,3 +46,32 @@ test('the theme button switches and stores the theme', async () => {
   expect(document.documentElement.dataset.theme).toBe('light')
   expect(localStorage.getItem('theme')).toBe('light')
 })
+
+test('the current claim stays in the browser: a reload shows it again, and New claim forgets it', async () => {
+  localStorage.setItem('claim', 'CL-kept')
+  const fetchMock = vi.fn((url: string) =>
+    Promise.resolve(
+      Response.json(
+        url === '/health'
+          ? { status: 'ok' }
+          : url === '/claims/CL-kept/customer'
+            ? { claim_id: 'CL-kept', policy_number: 'TRV-2026-0417', status: 'open', message: null, step: 'ask_story' }
+            : [],
+      ),
+    ),
+  )
+  vi.stubGlobal('fetch', fetchMock)
+  // the pipeline panel opens an event stream for the claim: not in the test browser
+  vi.stubGlobal(
+    'EventSource',
+    class {
+      onmessage = null
+      close() {}
+    },
+  )
+  render(<App />)
+  expect(await screen.findByText('Claim CL-kept · TRV-2026-0417')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'New claim' }))
+  expect(localStorage.getItem('claim')).toBeNull()
+  localStorage.clear()
+})

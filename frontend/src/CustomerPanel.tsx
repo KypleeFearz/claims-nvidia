@@ -71,6 +71,7 @@ export default function CustomerPanel({ claimId, onClaim }: { claimId: string | 
   const [claim, setClaim] = useState<View | null>(null)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
+  const [mine, setMine] = useState<{ customer: Customer; claims: View[] } | null>(null) // the earlier claims of the picked account
   const [starting, setStarting] = useState(false) // the policy is being set: the agent writes its first message
 
   useEffect(() => {
@@ -83,21 +84,31 @@ export default function CustomerPanel({ claimId, onClaim }: { claimId: string | 
     const fail = () => setError('The server did not answer.')
     send<View>(`/claims/${claimId}/customer`)
       .then((c) => {
+        setMine(null)
         setClaim(c)
         // the policy list goes through the gateway: it is the first event of the claim
         if (!c.policy_number) send<Policy[]>(`/claims/${claimId}/policies`).then(setPolicies).catch(fail)
       })
-      .catch(fail)
-  }, [claimId])
+      // a claim that does not exist any more (the demo was reset): forget it
+      .catch((e: Error) => (e.message === '404' ? onClaim(null) : fail()))
+  }, [claimId, onClaim])
 
-  // the claim is created when the customer picks an account, before any policy
-  const pickCustomer = (c: Customer) =>
+  // a new claim is created before any policy
+  const openClaim = (c: Customer) =>
     send<View>('/claims', json('POST', { customer_id: c.id }))
       .then((created) => {
         setName(c.name)
+        setMine(null)
         onClaim(created.claim_id)
       })
       .catch(() => setError('The claim was not created.'))
+
+  // the choice of the account (issue #107): a customer with earlier claims picks one or opens a new one;
+  // with none, a new claim opens at once
+  const pickCustomer = (c: Customer) =>
+    send<View[]>(`/customers/${c.id}/claims`)
+      .then((claims) => (Array.isArray(claims) && claims.length > 0 ? setMine({ customer: c, claims }) : openClaim(c)))
+      .catch(() => openClaim(c))
 
   const pickPolicy = (p: Policy) => {
     setStarting(true) // nim and sandbox mode: the first message takes 5 to 10 seconds
@@ -111,6 +122,7 @@ export default function CustomerPanel({ claimId, onClaim }: { claimId: string | 
   }
 
   const newClaim = () => {
+    setMine(null)
     setClaim(null)
     setPolicies([])
     onClaim(null) // no data is deleted: the old claim stays in the store
@@ -132,7 +144,20 @@ export default function CustomerPanel({ claimId, onClaim }: { claimId: string | 
       <div className="panel-body">
         <p className="notice">Demo. Do not upload a real document.</p>
         {error && <p className="pill pill-bad">{error}</p>}
-        {!claimId ? (
+        {!claimId && mine ? (
+          <div className="stack" aria-label="Your claims">
+            <h3>{`Your claims, ${mine.customer.name}`}</h3>
+            {mine.claims.map((c) => (
+              <button key={c.claim_id} type="button" className="desk-row" onClick={() => onClaim(c.claim_id)}>
+                <span className="mono">{`${c.claim_id} · ${c.policy_number}`}</span>
+                <span className="muted">{c.status_line}</span>
+              </button>
+            ))}
+            <button type="button" className="btn-primary" onClick={() => void openClaim(mine.customer)}>
+              New claim
+            </button>
+          </div>
+        ) : !claimId ? (
           <div className="stack">
             <h3>1. Pick an account</h3>
             {customers.map((c) => (

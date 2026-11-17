@@ -193,6 +193,20 @@ def create_app() -> FastAPI:
     def customers(request: Request) -> list[Customer]:
         return store(request).get_customers()
 
+    @app.get("/customers/{customer_id}/claims")
+    def customer_claims(customer_id: str, request: Request) -> list[CustomerView]:
+        """The claims of one customer, newest first, as customer views (issue #107):
+        a customer finds his claim again after he closed the page. A claim with no
+        policy yet is not shown."""
+        if customer_id not in {c.id for c in store(request).get_customers()}:
+            raise HTTPException(404, "unknown customer")
+        mine = [
+            c
+            for c in store(request).list_claims()
+            if c.customer.id == customer_id and c.policy is not None
+        ]
+        return [customer_view(c) for c in reversed(mine)]
+
     @app.post("/claims", status_code=201)
     def create_claim(body: NewClaim, request: Request) -> CustomerView:
         claim = store(request).create_claim(body.customer_id)
