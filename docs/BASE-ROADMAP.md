@@ -154,6 +154,8 @@ Done: issue #94 (D70). Left: the status `closed`, a payment to the repair compan
 
 ### B8. Experts and third parties (M, later)
 
+Done: issue #102 (D73): the expert request with its report, and the recovery. Left: the expert report as a document read by the reader, letters to the liable party.
+
 **Build.** An expert request for a large property claim (a mock report comes back as one more document, read by the reader of Nikola). A medical adviser for health. Recovery: when a third party is liable (the neighbour's pipe), a recovery task opens after the payment.
 
 ### B9. Business numbers page (S, after #19)

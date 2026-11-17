@@ -30,6 +30,23 @@ type Case = PipelineClaim & {
   notice?: { key: string; question: string; why: string; answer: string | null }[]
   decisions: Decision[]
   investigation?: Investigation | null
+  experts?: {
+    id: string
+    kind: string
+    question: string
+    asked_by: string
+    report: { expert: string; finding: string; amount: number | null } | null
+  }[]
+  recovery?: {
+    party: string
+    reason: string
+    opened_by: string
+    status: string
+    amount: number | null
+    recovered: number | null
+    closed_by: string | null
+    close_reason: string
+  } | null
   reserve?: number | null
   payment?: { amount: number; account: string; reference: string; time: string } | null
 }
@@ -189,6 +206,118 @@ function InvestigationSection({ case_, open, change }: { case_: Investigation; o
   )
 }
 
+type Post = (path: string, body: object) => Promise<unknown>
+
+// An expert request and its report (issue #102). The report form is a mock: the expert is outside the company.
+function ExpertSection({ claim, canAsk, post, onAmount }: { claim: Case; canAsk: boolean; post: Post; onAmount: (amount: number) => void }) {
+  const [question, setQuestion] = useState('')
+  const [report, setReport] = useState({ expert: '', finding: '', amount: '' })
+  const experts = claim.experts ?? []
+  if (experts.length === 0 && !canAsk) return null
+  return (
+    <div className="stack" aria-label="Expert">
+      <h3>Expert</h3>
+      {experts.map((e) => (
+        <div key={e.id} className="card desk-link" aria-label={`Request ${e.id}`}>
+          <p>
+            <span className={`pill ${e.report ? 'pill-ok' : 'pill-attention'}`}>{e.report ? 'report received' : 'waits for the report'}</span>{' '}
+            {`${e.kind} · ${e.asked_by} asked: ${e.question}`}
+          </p>
+          {e.report ? (
+            <p>
+              {`${e.report.expert}: ${e.report.finding}`}{' '}
+              {e.report.amount !== null && (
+                <button type="button" onClick={() => onAmount(e.report!.amount!)}>
+                  {`Use ${chf(e.report.amount)} in the decision`}
+                </button>
+              )}
+            </p>
+          ) : (
+            <form
+              className="desk-form"
+              onSubmit={(ev) => {
+                ev.preventDefault()
+                void post(`experts/${e.id}/report`, { expert: report.expert, finding: report.finding, ...(report.amount.trim() ? { amount: Number(report.amount) } : {}) })
+              }}
+            >
+              <span className="muted">Mock: type the report that the expert sends back.</span>
+              <input aria-label="Name of the expert" placeholder="Name of the expert" value={report.expert} onChange={(ev) => setReport({ ...report, expert: ev.target.value })} />
+              <input aria-label="Finding of the expert" placeholder="What the expert found" value={report.finding} onChange={(ev) => setReport({ ...report, finding: ev.target.value })} />
+              <input aria-label="Amount assessed" type="number" min="0" step="0.05" placeholder="Amount assessed, CHF" value={report.amount} onChange={(ev) => setReport({ ...report, amount: ev.target.value })} />
+              <button type="submit">Save the report</button>
+            </form>
+          )}
+        </div>
+      ))}
+      {canAsk && (
+        <form
+          className="desk-actions"
+          onSubmit={(ev) => {
+            ev.preventDefault()
+            if (question.trim()) void post('experts', { question }).then(() => setQuestion(''))
+          }}
+        >
+          <input aria-label="Question for the expert" placeholder="One question for the expert" value={question} onChange={(ev) => setQuestion(ev.target.value)} />
+          <button type="submit">Ask an expert</button>
+        </form>
+      )}
+    </div>
+  )
+}
+
+// A recovery (issue #102): another person is liable; the insurer asks this person to pay back what it paid.
+function RecoverySection({ claim, post }: { claim: Case; post: Post }) {
+  const [party, setParty] = useState('')
+  const [reason, setReason] = useState('')
+  const [amount, setAmount] = useState('')
+  const r = claim.recovery
+  if (!r && ['open', 'refused'].includes(claim.status)) return null
+  const pill: Record<string, string> = { planned: 'pill-idle', open: 'pill-attention', recovered: 'pill-ok', abandoned: 'pill-idle' }
+  return (
+    <div className="stack" aria-label="Recovery">
+      <h3>Recovery</h3>
+      {!r ? (
+        <form
+          className="desk-form"
+          onSubmit={(ev) => {
+            ev.preventDefault()
+            void post('recovery', { party, reason })
+          }}
+        >
+          <span className="muted">Is another person liable for the loss? See the first notice. The insurer pays its customer, then asks this person to pay back.</span>
+          <input aria-label="Liable party" placeholder="Who is liable" value={party} onChange={(ev) => setParty(ev.target.value)} />
+          <input aria-label="Why this party is liable" placeholder="Why" value={reason} onChange={(ev) => setReason(ev.target.value)} />
+          <button type="submit">Open a recovery</button>
+        </form>
+      ) : (
+        <>
+          <p>
+            <span className={`pill ${pill[r.status] ?? 'pill-idle'}`}>{r.status === 'planned' ? 'planned: starts at the payment' : r.status}</span>{' '}
+            {`${r.party} · ${r.reason} · ${r.opened_by}`}
+          </p>
+          <p className="mono">
+            {r.amount === null ? 'Nothing paid yet.' : `To ask back: ${chf(r.amount)}`}
+            {r.recovered !== null && ` · recovered: ${chf(r.recovered)}`}
+            {r.close_reason && ` · ${r.close_reason}`}
+          </p>
+          {r.status === 'open' && (
+            <form className="desk-actions" onSubmit={(ev) => ev.preventDefault()}>
+              <input aria-label="Amount recovered" type="number" min="0" step="0.05" placeholder="Amount recovered, CHF" value={amount} onChange={(ev) => setAmount(ev.target.value)} />
+              <button type="button" onClick={() => void post('recovery/result', { result: 'recovered', ...(amount.trim() ? { amount: Number(amount) } : {}) })}>
+                Recovered
+              </button>
+              <input aria-label="Reason to abandon" placeholder="Reason to abandon" value={reason} onChange={(ev) => setReason(ev.target.value)} />
+              <button type="button" onClick={() => void post('recovery/result', { result: 'abandoned', reason })}>
+                Abandon
+              </button>
+            </form>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function HandlerDesk() {
   const [rows, setRows] = useState<Row[]>([])
   const [all, setAll] = useState(false)
@@ -316,11 +445,12 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
     }
   }
 
-  // one change of the investigation case, signed by the handler picked in the decision form
-  const investigate = async (path: string, body: object) => {
+  // one change of the case that is not a decision (a task, a note, an expert, a recovery), signed by the
+  // handler picked in the decision form
+  const change = async (path: string, body: object) => {
     setError('')
     try {
-      const res = await fetch(`/claims/${claimId}/investigation/${path}`, {
+      const res = await fetch(`/claims/${claimId}/${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ by, ...body }),
@@ -447,7 +577,9 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
           </div>
         )}
 
-        {claim.investigation && <InvestigationSection case_={claim.investigation} open={claim.status === 'in_investigation' && !claim.investigation.conclusion} change={investigate} />}
+        {claim.investigation && <InvestigationSection case_={claim.investigation} open={claim.status === 'in_investigation' && !claim.investigation.conclusion} change={(path, body) => change(`investigation/${path}`, body)} />}
+        <ExpertSection claim={claim} canAsk={canDecide} post={change} onAmount={(a) => setAmount(String(a))} />
+        <RecoverySection claim={claim} post={change} />
         {claim.fraud_report && <FraudReportSection report={claim.fraud_report} />}
         <ProposalSection claim={claim} />
         <OutcomeSection claim={claim} />

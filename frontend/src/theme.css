@@ -1295,4 +1295,9 @@ table th[scope='row'] {
 .desk-notice dd {
   margin: 2px 0 0;
 }
+.desk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 

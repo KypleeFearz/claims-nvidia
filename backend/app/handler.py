@@ -17,6 +17,7 @@ from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Decision
 from app.payment import set_reserve, settle
 from app.store import Store
+from app.third_parties import open_requests
 from app.views import APPROVED as APPROVED  # re-export: the tests read them here
 from app.views import DECIDED as DECIDED
 from app.views import after_decision
@@ -70,6 +71,9 @@ def decide(
         raise KeyError(claim_id)
     if claim.status == ClaimStatus.open:
         raise IllegalMove("the claim is still in the chat with the customer")
+    if action in ("approve", "refuse") and (waits := open_requests(claim)):
+        # the expert reports first (issue #102)
+        raise IllegalMove(f"an expert request is open: {', '.join(waits)}")
     if action == "approve":
         amount = _approved_amount(claim, amount, reason)
     else:

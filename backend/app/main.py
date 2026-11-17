@@ -30,6 +30,12 @@ from app.numbers import router as numbers_router
 from app.payment import ExportRecord, export_record
 from app.store import Store
 from app.stream import event_stream
+from app.third_parties import (
+    ask_expert,
+    close_recovery,
+    expert_report,
+    open_recovery,
+)
 from app.tools import build_gateway
 from app.tools.gateway import Gateway
 from app.views import ClaimRow, CustomerView, claim_row, customer_view
@@ -61,6 +67,31 @@ class TaskChange(BaseModel):
 class NewNote(BaseModel):
     by: str
     text: str = Field(max_length=2000)
+
+
+class AskExpert(BaseModel):
+    by: str
+    question: str = Field(max_length=2000)
+
+
+class NewExpertReport(BaseModel):
+    by: str
+    expert: str = Field(max_length=200)
+    finding: str = Field(max_length=2000)
+    amount: float | None = Field(default=None, ge=0, le=10_000_000)
+
+
+class NewRecovery(BaseModel):
+    by: str
+    party: str = Field(max_length=200)
+    reason: str = Field(max_length=2000)
+
+
+class RecoveryResult(BaseModel):
+    by: str
+    result: str
+    amount: float | None = Field(default=None, ge=0, le=10_000_000)
+    reason: str = Field(default="", max_length=2000)
 
 
 class NewDecision(BaseModel):
@@ -218,6 +249,57 @@ def create_app() -> FastAPI:
                 raise HTTPException(404, "unknown task") from None
             except NotAllowed as e:
                 raise HTTPException(409, str(e)) from None
+            except ValueError as e:
+                raise HTTPException(422, str(e)) from None
+
+    @app.post("/claims/{claim_id}/experts")
+    def post_expert(claim_id: str, body: AskExpert, request: Request) -> Claim:
+        s = store(request)
+        return investigate(
+            request,
+            claim_id,
+            body.by,
+            lambda: ask_expert(s, claim_id, body.by, body.question),
+        )
+
+    @app.post("/claims/{claim_id}/experts/{request_id}/report")
+    def post_expert_report(
+        claim_id: str, request_id: str, body: NewExpertReport, request: Request
+    ) -> Claim:
+        """The report of an expert. A mock: in the demo a handler types it."""
+        s = store(request)
+        return investigate(
+            request,
+            claim_id,
+            body.by,
+            lambda: expert_report(
+                s, claim_id, request_id, body.by, body.expert, body.finding, body.amount
+            ),
+        )
+
+    @app.post("/claims/{claim_id}/recovery")
+    def post_recovery(claim_id: str, body: NewRecovery, request: Request) -> Claim:
+        s = store(request)
+        return investigate(
+            request,
+            claim_id,
+            body.by,
+            lambda: open_recovery(s, claim_id, body.by, body.party, body.reason),
+        )
+
+    @app.post("/claims/{claim_id}/recovery/result")
+    def post_recovery_result(
+        claim_id: str, body: RecoveryResult, request: Request
+    ) -> Claim:
+        s = store(request)
+        return investigate(
+            request,
+            claim_id,
+            body.by,
+            lambda: close_recovery(
+                s, claim_id, body.by, body.result, body.amount, body.reason
+            ),
+        )
 
     @app.post("/claims/{claim_id}/investigation/tasks/{task_id}")
     def post_task(

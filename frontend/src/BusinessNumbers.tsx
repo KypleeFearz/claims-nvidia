@@ -19,6 +19,8 @@ type Live = {
   open_reserve: number
   investigations: { open: number; confirmed: number; not_confirmed: number; not_confirmed_share: number | null }
   decisions: Record<string, number>
+  experts_open?: number
+  recoveries?: { open: number; open_amount: number; recovered: number; recovered_amount: number }
 }
 type KitRow = {
   story: string
@@ -121,6 +123,13 @@ export default function BusinessNumbers() {
                   />
                   <Tile label="Paid" value={chf(live.paid)} note={`claimed ${chf(live.claimed)} · proposed ${chf(live.proposed)}`} />
                   <Tile label="Open reserve" value={chf(live.open_reserve)} />
+                  {live.recoveries && (
+                    <Tile
+                      label="Recovered from third parties"
+                      value={chf(live.recoveries.recovered_amount)}
+                      note={`${live.recoveries.open} open for ${chf(live.recoveries.open_amount)} · ${live.experts_open ?? 0} expert requests open`}
+                    />
+                  )}
                   <Tile
                     label="Alerts not confirmed"
                     value={percent(live.investigations.not_confirmed_share)}

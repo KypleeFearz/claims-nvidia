@@ -23,6 +23,7 @@ from app.checks.history import history, links
 from app.lifecycle import PAYABLE
 from app.models import Claim, ClaimStatus, Payment
 from app.store import Store
+from app.third_parties import activate_recovery
 
 
 def exports_dir() -> Path:
@@ -80,6 +81,7 @@ def settle(store: Store, claim_id: str) -> Claim | None:
         {"payment": payment.model_dump(mode="json")},
     )  # fmt: skip
     set_reserve(store, claim_id, 0.0, "paid")
+    activate_recovery(store, claim_id)  # a planned recovery is open now (issue #102)
     paid = store.get_claim(claim_id)
     assert paid is not None
     if store.export_files:

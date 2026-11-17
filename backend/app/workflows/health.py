@@ -28,6 +28,7 @@ WORKFLOW = Workflow(
     claim_type="health",
     required_documents=required_documents,
     straight_through_limit=1000,
+    expert_above=3000,
     causes=(
         (
             "accident",

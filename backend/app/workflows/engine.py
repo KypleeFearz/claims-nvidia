@@ -30,6 +30,7 @@ class Workflow:
     claim_type: str
     required_documents: Callable[[str | None], list[RequiredDocument]]  # by cause
     straight_through_limit: float
+    expert_above: float | None = None  # a claimed loss above it needs an expert (#102)
     rules: list[Rule] = field(default_factory=list)  # its own rules, after the shared
     # (cause, regex) in order: the first regex found in the story gives the cause
     causes: tuple[tuple[str, str], ...] = ()
