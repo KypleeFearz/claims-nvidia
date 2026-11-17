@@ -87,7 +87,7 @@ Slice 1 is done: issue #86 (D66). Rules: `docs/WORKFLOWS.md`, "Settlement". Left
 
 ### B3. Handler workbench (L)
 
-Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (approve, refuse, ask the customer, investigate, clear). The settlement proposal is on the page since #86. Left: authority levels and the second approval, the field correction (#28, the intern).
+Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (approve, refuse, ask the customer, investigate, clear). The settlement proposal is on the page since #86. Slice 2 is done: issue #105 (D74): authority levels and the second approval. Left: a second approval for a refusal, the field correction (#28, the intern).
 
 **Practice.** The handler works from a queue. He opens a case, reads a summary, checks, decides.
 

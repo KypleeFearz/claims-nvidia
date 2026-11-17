@@ -20,8 +20,16 @@ PAYABLE = (S.validated, S.approved)  # what the mock payment pays
 MOVES: dict[ClaimStatus, set[ClaimStatus]] = {
     S.open: {S.waiting_customer, S.validated, S.in_review, S.in_investigation},
     # a claim that waits opens again with a document; a handler can also stop the wait
-    S.waiting_customer: {S.open, S.in_review, S.in_investigation, *DECIDED},
-    S.in_review: {S.waiting_customer, S.in_investigation, *DECIDED},
+    S.waiting_customer: {
+        S.open,
+        S.in_review,
+        S.in_investigation,
+        S.waiting_approval,
+        *DECIDED,
+    },
+    S.in_review: {S.waiting_customer, S.in_investigation, S.waiting_approval, *DECIDED},
+    # four eyes (issue #105): the second handler approves, or returns it to review
+    S.waiting_approval: {S.approved, S.in_review},
     # the investigator reports first: no decision while a claim is in investigation
     S.in_investigation: {S.waiting_customer, S.in_review},
     S.validated: {S.paid},  # the mock payment (app/payment.py)

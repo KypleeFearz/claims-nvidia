@@ -106,9 +106,10 @@ function HistorySection({ history }: { history: History }) {
 }
 
 // most urgent first; a status that is not here does not wait for a handler
-const TO_DO = ['in_investigation', 'in_review', 'waiting_customer']
+const TO_DO = ['waiting_approval', 'in_investigation', 'in_review', 'waiting_customer']
 const STATUS_PILL: Record<string, string> = {
   in_investigation: 'pill-bad',
+  waiting_approval: 'pill-attention',
   in_review: 'pill-warn',
   waiting_customer: 'pill-attention',
   approved: 'pill-ok',
@@ -129,13 +130,15 @@ function age(opened: string | null) {
 }
 
 const ACTIONS: { action: string; text: string; className?: string; when: (status: string) => boolean }[] = [
-  // the investigator reports first: no approval and no refusal while a claim is in investigation (issue #92)
+  // the investigator reports first: no approval and no refusal while a claim is in investigation (issue #92).
+  // A claim that waits for a second approval (issue #105) has two actions: approve the proposed amount, or return it.
   { action: 'approve', text: 'Approve', className: 'btn-primary', when: (s) => s !== 'in_investigation' },
-  { action: 'request', text: 'Ask the customer', when: (s) => s !== 'waiting_customer' },
-  { action: 'investigate', text: 'Send to investigation', when: (s) => s !== 'in_investigation' },
+  { action: 'return', text: 'Return to review', when: (s) => s === 'waiting_approval' },
+  { action: 'request', text: 'Ask the customer', when: (s) => !['waiting_customer', 'waiting_approval'].includes(s) },
+  { action: 'investigate', text: 'Send to investigation', when: (s) => !['in_investigation', 'waiting_approval'].includes(s) },
   { action: 'clear', text: 'Conclude: not confirmed', className: 'btn-primary', when: (s) => s === 'in_investigation' },
   { action: 'confirm', text: 'Conclude: fraud confirmed', className: 'btn-danger', when: (s) => s === 'in_investigation' },
-  { action: 'refuse', text: 'Refuse', className: 'btn-danger', when: (s) => s !== 'in_investigation' },
+  { action: 'refuse', text: 'Refuse', className: 'btn-danger', when: (s) => !['in_investigation', 'waiting_approval'].includes(s) },
 ]
 
 // The case of an investigator (issue #92): the plan, the evidence log and the conclusion. `change` posts
@@ -393,6 +396,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
   const [claim, setClaim] = useState<Case | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [handlers, setHandlers] = useState<string[]>([])
+  const [authority, setAuthority] = useState<Record<string, number>>({}) // what each handler approves alone, CHF
   const [history, setHistory] = useState<History | null>(null)
   const [by, setBy] = useState('')
   const [reason, setReason] = useState('')
@@ -409,6 +413,9 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
       })
       .catch(fail)
     send<Message[]>(`/claims/${claimId}/messages`).then(setMessages).catch(fail)
+    send<Record<string, number>>('/handlers/authority')
+      .then((a) => setAuthority(a && typeof a === 'object' && !Array.isArray(a) ? a : {}))
+      .catch(() => setAuthority({}))
     send<History>(`/claims/${claimId}/history`)
       .then(setHistory)
       .catch(() => setHistory(null)) // the case page works without it
@@ -495,7 +502,9 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
               <span>Handler</span>
               <select aria-label="Handler" value={by} disabled={busy} onChange={(e) => setBy(e.target.value)}>
                 {handlers.map((h) => (
-                  <option key={h}>{h}</option>
+                  <option key={h} value={h}>
+                    {authority[h] ? `${h} (approves alone up to ${chf(authority[h])})` : h}
+                  </option>
                 ))}
               </select>
             </label>
@@ -507,6 +516,11 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
               <span>Reason, or text for the customer</span>
               <textarea aria-label="Reason, or text for the customer" rows={2} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} />
             </label>
+            {claim.status === 'waiting_approval' && (
+              <p className="pill pill-attention">
+                {`A second handler must approve ${chf(claim.decisions.filter((d) => d.action === 'propose').at(-1)?.amount ?? null)}: it is above the limit of the first one.`}
+              </p>
+            )}
             <p className="muted">
               A reason is required to refuse, to send to investigation and to clear. The customer never reads it. “Ask the customer” sends this text to the customer: write it in neutral
               words.

@@ -353,3 +353,30 @@ test('a recovery is opened with the liable party, then closed as recovered', asy
   expect(JSON.parse(calls.find(([u]) => u === '/claims/CL-review/recovery/result')![1]!.body as string)).toEqual({ by: 'Sofia Brunner', result: 'recovered', amount: 2500 })
   expect(within(section).queryByRole('button', { name: 'Recovered' })).toBeNull()
 })
+
+test('a claim that waits for a second approval says so, shows the limits and has two actions', async () => {
+  const waits = { ...full('waiting_approval', [{ action: 'propose', by: 'David Frei', reason: 'above the limit', amount: 3000, time: '2026-11-16T09:00:00Z' }]) }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      if (url === '/claims') return Promise.resolve(Response.json([row('CL-review', 'waiting_approval'), row('CL-siu', 'in_investigation')]))
+      if (url === '/handlers') return Promise.resolve(Response.json(['Sofia Brunner', 'David Frei']))
+      if (url === '/handlers/authority') return Promise.resolve(Response.json({ 'Sofia Brunner': 20000, 'David Frei': 2500 }))
+      if (url === '/claims/CL-review') return Promise.resolve(Response.json(waits))
+      if (url.endsWith('/history')) return Promise.resolve(new Response('', { status: 404 }))
+      return Promise.resolve(Response.json([]))
+    }),
+  )
+  render(<HandlerDesk />)
+  // a second approval comes first in the queue
+  const queue = screen.getByRole('region', { name: 'Queue' })
+  await within(queue).findByRole('button', { name: /CL-review/ })
+  expect(within(queue).getAllByRole('button', { name: /^CL-/ }).map((b) => b.querySelector('.mono')?.textContent)).toEqual(['CL-review', 'CL-siu'])
+  const page = await open()
+  expect(await within(page).findByText('A second handler must approve CHF 3,000.00: it is above the limit of the first one.')).toBeInTheDocument()
+  expect(await within(page).findByRole('option', { name: 'David Frei (approves alone up to CHF 2,500.00)' })).toBeInTheDocument()
+  expect(within(page).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+  expect(within(page).getByRole('button', { name: 'Return to review' })).toBeInTheDocument()
+  expect(within(page).queryByRole('button', { name: 'Refuse' })).toBeNull()
+  expect(within(page).queryByRole('button', { name: 'Ask the customer' })).toBeNull()
+})

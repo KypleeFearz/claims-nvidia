@@ -99,7 +99,7 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 
 - `Customer`, `Policy` (number, line of business, start, end, coverage limit).
 - `Claim`: id, customer, policy, type, description, incident date, claimed amount, documents, signals, score, outcome, fraud report, status.
-- `ClaimStatus` (issues #72 and #84): `open`, `waiting_customer`, `validated`, `in_review`, `in_investigation`, `approved`, `refused`, `paid`. See "Claim lifecycle" below.
+- `ClaimStatus` (issues #72 and #84): `open`, `waiting_customer`, `validated`, `in_review`, `in_investigation`, `approved`, `refused`, `waiting_approval`, `paid`. See "Claim lifecycle" below.
 - `Decision`: action, handler, reason, amount (for an approval), time. A claim keeps the list of its decisions.
 - `Payment` (issue #94): amount, account, reference, time. A claim also has a `reserve`: the expected cost.
 - `ExpertRequest` and `Recovery` (issue #102): see "Experts and third parties" below.
@@ -137,6 +137,10 @@ a handler, on a claim that is in_review or waiting_customer (issue #84):
   request (text for the customer) ──► waiting_customer
   investigate (reason) ──► in_investigation
 
+four eyes (issue #105): an approval above the limit of the handler
+  approve ──► waiting_approval (a proposal: nothing is paid)
+  a second handler: approve ──► approved ──► paid     return (reason) ──► in_review
+
 an investigator, on a claim that is in_investigation (issue #92):
   clear (not confirmed, text) ──► in_review     confirm (fraud confirmed, text) ──► in_review
   request (text for the customer) ──► waiting_customer
@@ -148,6 +152,7 @@ an investigator, on a claim that is in_investigation (issue #92):
 - **The decisions of a handler (issue #84).** `backend/app/handler.py` is the only way to `approved` and `refused`: a known handler (two mock names, no login), and a written reason to refuse, to investigate and to clear. `POST /claims/{id}/decisions` `{action, by, reason}`; `GET /handlers`. The decision goes on the claim (`decisions`) and is one event with the actor `handler`. The outcome of the routing does not change: it stays what the system said. A test checks that no other module writes these two statuses.
 - **What the customer reads after a decision.** Approve and refuse: a fixed text in the chat and in the customer view (`approved`, `decided`); never the reason of the handler. A request: the text of the handler, which must pass the word filter of the agent (a text with "fraud", "score" or "investigation" is a 422). Investigate and clear: nothing changes for the customer. An upload after a request opens the claim again, as for a missing document.
 - **The page.** "Handler desk" (`frontend/src/HandlerDesk.tsx`): the queue (investigations first, then reviews, then the claims that wait; it asks again every 5 seconds) and the case page (facts, decision form, decisions, fraud report, outcome, signals, fields with their source, conversation). A closed chat of the customer asks again for its messages every 5 seconds, so the customer sees a decision.
+- **Authority and the second approval (issue #105).** `AUTHORITY` in `backend/app/handler.py`: Sofia Brunner approves alone up to CHF 20,000, David Frei up to CHF 2,500 (`GET /handlers/authority`). An approval above the limit of the handler is saved as the decision `propose` and the claim goes to `waiting_approval`: nothing is paid, and the customer still reads a review. A second handler, who is another person and whose limit covers the amount, approves the amount of the proposal as it is, or returns the claim to review with a reason (`return`). No other action on a claim that waits for an approval.
 - **The investigation case (issue #92).** `backend/app/investigation.py`. A claim that goes to `in_investigation` (by the routing or by a handler) gets a plan: one task per kind of signal (`TASKS`), strongest first; a claim with no signal gets one task with the reason of the handler. `POST /claims/{id}/investigation/tasks/{task}` `{by, done, note}` ticks a task; `POST /claims/{id}/investigation/notes` `{by, text}` adds a note to the evidence log. Each change is one event with the actor `handler` and the stage `investigation`. The conclusion is a decision: `clear` (not confirmed) or `confirm` (fraud confirmed), with a text, refused while a task is open. Both send the claim back to `in_review`: the investigator reports, the handler decides. A claim in investigation cannot be approved or refused. The conclusion is saved on the case in the same write as the status. Nothing of the case reaches the customer.
 - **Reserve, payment and export (issue #94).** `backend/app/payment.py`.
   - *Reserve*: the claimed amount when the customer gives it (`update_claim`), the proposal at the routing, the approved amount at the approval, zero after a refusal or a payment. Each change is one event (`system`, `reserve`).

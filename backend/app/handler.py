@@ -25,6 +25,9 @@ from app.views import after_decision
 # Two mock handlers. ponytail: a name in the request, no login (D33); a real desk
 # needs accounts, and then the authority level of each handler.
 HANDLERS = ["Sofia Brunner", "David Frei"]
+# What each handler approves alone, in CHF (issue #105). Above it, his approval is a
+# proposal and a second handler, with a limit that covers the amount, approves it.
+AUTHORITY = {"Sofia Brunner": 20_000, "David Frei": 2_500}
 TARGET: dict[str, ClaimStatus] = {
     "approve": ClaimStatus.approved,
     "refuse": ClaimStatus.refused,
@@ -34,9 +37,13 @@ TARGET: dict[str, ClaimStatus] = {
     # handler, who decides. `confirm` is not a refusal.
     "clear": ClaimStatus.in_review,
     "confirm": ClaimStatus.in_review,
+    # four eyes (issue #105): `propose` is what an approval above the limit of the
+    # handler becomes; `return` sends a proposal back to review
+    "propose": ClaimStatus.waiting_approval,
+    "return": ClaimStatus.in_review,
 }
 CONCLUSION = {"clear": "not_confirmed", "confirm": "confirmed"}
-NEEDS_REASON = {"refuse", "request", "investigate", "clear", "confirm"}
+NEEDS_REASON = {"refuse", "request", "investigate", "clear", "confirm", "return"}
 
 
 class BadDecision(ValueError):
@@ -54,7 +61,7 @@ def decide(
     """One decision of one handler. `KeyError`: unknown claim. `BadDecision`: the
     request is wrong. `IllegalMove`: the status of the claim does not allow it."""
     reason = reason.strip()
-    if action not in TARGET:
+    if action not in TARGET or action == "propose":  # `propose` is never asked for
         raise BadDecision(f"unknown action (known: {', '.join(TARGET)})")
     if by not in HANDLERS:
         raise BadDecision("unknown handler")
@@ -74,8 +81,18 @@ def decide(
     if action in ("approve", "refuse") and (waits := open_requests(claim)):
         # the expert reports first (issue #102)
         raise IllegalMove(f"an expert request is open: {', '.join(waits)}")
-    if action == "approve":
+    waiting = claim.status == ClaimStatus.waiting_approval
+    if action == "return" and not waiting:
+        raise IllegalMove("only a claim that waits for an approval can be returned")
+    if action == "approve" and waiting:
+        amount = _second_approval(claim, by)  # the amount of the proposal, as it is
+    elif action == "approve":
         amount = _approved_amount(claim, amount, reason)
+        if amount > AUTHORITY[by]:
+            action = "propose"
+            reason = (
+                f"{reason} " if reason else ""
+            ) + f"CHF {amount:,.2f} is above the limit of {by} (CHF {AUTHORITY[by]:,})."
     else:
         amount = None  # an amount belongs to an approval only
     decision = Decision.model_validate(
@@ -96,6 +113,9 @@ def decide(
     assert saved is not None
     if action == "investigate":
         open_case(store, claim_id, reason)  # the plan of the investigator
+    if action == "propose":
+        set_reserve(store, claim_id, amount or 0.0, "proposed")
+        saved = store.get_claim(claim_id) or saved
     if action == "approve":  # issue #94: the reserve, then the mock payment
         set_reserve(store, claim_id, amount or 0.0, "approved")
         saved = settle(store, claim_id) or saved
@@ -121,3 +141,17 @@ def _approved_amount(claim: Claim, amount: float | None, reason: str) -> float:
     if (proposed is None or abs(amount - proposed) >= 0.005) and not reason:
         raise BadDecision("another amount than the proposal needs a written reason")
     return round(amount, 2)
+
+
+def _second_approval(claim: Claim, by: str) -> float:
+    """The amount that a second handler approves: the one of the proposal. He must
+    be another person, with a limit that covers it."""
+    proposal = next(d for d in reversed(claim.decisions) if d.action == "propose")
+    amount = proposal.amount or 0.0
+    if by == proposal.by:
+        raise BadDecision("a second handler must approve this amount")
+    if amount > AUTHORITY[by]:
+        raise BadDecision(
+            f"CHF {amount:,.2f} is above your limit (CHF {AUTHORITY[by]:,})"
+        )
+    return amount

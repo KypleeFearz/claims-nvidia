@@ -22,7 +22,7 @@ from app.bench import router as bench_router
 from app.checks.history import profile
 from app.demo import router as demo_router
 from app.docintel.reader import get_reader
-from app.handler import HANDLERS, BadDecision, decide
+from app.handler import AUTHORITY, HANDLERS, BadDecision, decide
 from app.investigation import NotAllowed, add_note, set_task
 from app.lifecycle import IllegalMove
 from app.models import Claim, ClaimStatus, Customer, Document, Message, Policy
@@ -208,6 +208,11 @@ def create_app() -> FastAPI:
     @app.get("/handlers")
     def handlers() -> list[str]:
         return HANDLERS
+
+    @app.get("/handlers/authority")
+    def handlers_authority() -> dict[str, int]:
+        """What each handler approves alone, in CHF (issue #105)."""
+        return AUTHORITY
 
     @app.post("/claims/{claim_id}/decisions")
     def post_decision(claim_id: str, body: NewDecision, request: Request) -> Claim:

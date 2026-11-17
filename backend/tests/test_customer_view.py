@@ -197,7 +197,9 @@ def test_the_status_line_is_in_customer_words_and_the_same_for_review_and_siu() 
     assert lines["in_review"] == lines["in_investigation"]
     assert lines["in_review"] == "A claims specialist reviews your case."
     assert lines["waiting_customer"] == "We wait for you: see what we still need."
-    assert len(set(lines.values())) == len(ClaimStatus) - 1  # each other one differs
+    # issue #105: a claim that waits for a second approval is a review too
+    assert lines["waiting_approval"] == lines["in_review"]
+    assert len(set(lines.values())) == len(ClaimStatus) - 2  # each other one differs
     for line in lines.values():
         assert not re.search(r"fraud|score|signal|investigat|_", line, re.I), line
 

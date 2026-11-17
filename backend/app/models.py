@@ -28,6 +28,7 @@ class ClaimStatus(StrEnum):
     in_investigation = "in_investigation"
     approved = "approved"  # a handler decided (app/handler.py), never the system
     refused = "refused"  # a handler decided, with a written reason
+    waiting_approval = "waiting_approval"  # a second handler must approve (#105)
     paid = "paid"  # the mock payment is made and the claim is exported (issue #94)
 
 
@@ -182,7 +183,16 @@ class Proposal(BaseModel):
 class Decision(BaseModel):
     """What a handler did on a claim, and why (issue #84)."""
 
-    action: Literal["approve", "refuse", "request", "investigate", "clear", "confirm"]
+    action: Literal[
+        "approve",
+        "refuse",
+        "request",
+        "investigate",
+        "clear",
+        "confirm",
+        "propose",  # an approval above the limit of the handler (issue #105)
+        "return",  # a proposal sent back to review
+    ]
     by: str
     reason: str = ""
     amount: float | None = None  # CHF approved, for `approve`
