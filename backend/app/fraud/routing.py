@@ -41,6 +41,15 @@ def route(
             f"Claimed amount CHF {claim.claimed_amount:,.2f} is above the "
             f"straight-through limit of CHF {workflow.straight_through_limit:,.0f}."
         )
+    if (
+        workflow is not None
+        and workflow.expert_above is not None
+        and claim.claimed_amount is not None
+        and claim.claimed_amount > workflow.expert_above
+    ):
+        reasons.append(
+            f"A loss above CHF {workflow.expert_above:,.0f} needs an expert."
+        )
     low = [
         f"{f.name} ({f.confidence:.2f})"
         for d in claim.documents

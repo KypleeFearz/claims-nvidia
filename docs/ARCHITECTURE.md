@@ -102,6 +102,7 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 - `ClaimStatus` (issues #72 and #84): `open`, `waiting_customer`, `validated`, `in_review`, `in_investigation`, `approved`, `refused`, `paid`. See "Claim lifecycle" below.
 - `Decision`: action, handler, reason, amount (for an approval), time. A claim keeps the list of its decisions.
 - `Payment` (issue #94): amount, account, reference, time. A claim also has a `reserve`: the expected cost.
+- `ExpertRequest` and `Recovery` (issue #102): see "Experts and third parties" below.
 - `Investigation` (issue #92): tasks (text, the signal codes it answers, done, by, note), notes of the evidence log, and the conclusion (confirmed or not confirmed, by, text).
 - `Policy` terms (issue #86): deductible, coinsurance (the share the customer pays), covered causes. The mock policies are read from `data/mock/policies.json` at every start of the backend.
 - `Proposal`: the name of the general conditions, the lines (label, amount, reason, article, sources), the amount to pay, and why a person must decide. Computed by `backend/app/settlement.py` (pure code) inside `assess_and_route`, saved with the outcome, shown in the pipeline panel and on the case page. A handler approves the proposed amount, or another amount with a written reason; the customer reads the approved amount.
@@ -155,6 +156,14 @@ an investigator, on a claim that is in_investigation (issue #92):
   - *Export*: one JSON file per paid claim in `CLAIMS_EXPORTS` (default `.dev-data/exports`), built from the model `ExportRecord`, which is its schema: the claim, the amounts, who decided, the lines of the proposal and every field with its document and page. `GET /claims/{id}/export` gives the same record. The demo reset deletes the files.
   - A paid claim cannot be routed or decided again.
 - **Later.** Authority levels and a second approval, the status `closed`, a payment to a repair company, the conclusions as input to tune the points.
+
+### 5e. Experts and third parties (issue #102)
+
+`backend/app/third_parties.py`. Two objects on a claim, next to its status: they do not change it.
+
+- **Expert request** (`experts`): a handler asks one question to a loss adjuster (property), a medical adviser (health) or an expert (other). `POST /claims/{id}/experts` `{by, question}`. While a request has no report, the claim cannot be approved or refused. The report: `POST /claims/{id}/experts/{request}/report` `{by, expert, finding, amount}`; in the demo a handler types it (a mock). The handler then decides; the page puts the assessed amount in the decision form. The routing sends a claimed loss above `expert_above` of the workflow (property 5,000, health 3,000) to a handler with the reason "needs an expert".
+- **Recovery** (`recovery`): another person is liable. `POST /claims/{id}/recovery` `{by, party, reason}`: `planned` until the claim is paid, then `open` for the paid amount (the payment activates it). `POST /claims/{id}/recovery/result` `{by, result, amount, reason}`: `recovered` with an amount, or `abandoned` with a reason. One recovery per claim; none on a refused claim.
+- Each change is one event (`expert` or `recovery`). Neither decides anything, and the customer reads nothing of either. The business numbers count the open expert requests and the recoveries.
 
 ### 5d. First notice of loss (issue #98)
 

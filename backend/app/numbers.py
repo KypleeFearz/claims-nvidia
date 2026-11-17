@@ -58,6 +58,18 @@ def _minutes(claim: Claim) -> float | None:
     return round((end - claim.opened_at).total_seconds() / 60, 1)
 
 
+def _recoveries(claims: list[Claim]) -> dict[str, Any]:
+    found = [c.recovery for c in claims if c.recovery is not None]
+    is_open = [r for r in found if r.status == "open"]
+    back = [r for r in found if r.status == "recovered"]
+    return {
+        "open": len(is_open),
+        "open_amount": round(sum(r.amount or 0 for r in is_open), 2),
+        "recovered": len(back),
+        "recovered_amount": round(sum(r.recovered or 0 for r in back), 2),
+    }
+
+
 def live(claims: list[Claim]) -> dict[str, Any]:
     routed = [c for c in claims if c.outcome is not None]
     alone = [c for c in routed if c.outcome == Outcome.straight_through]
@@ -97,6 +109,8 @@ def live(claims: list[Claim]) -> dict[str, Any]:
             ),
         },
         "decisions": actions,
+        "experts_open": sum(1 for c in claims for e in c.experts if e.report is None),
+        "recoveries": _recoveries(claims),
     }
 
 

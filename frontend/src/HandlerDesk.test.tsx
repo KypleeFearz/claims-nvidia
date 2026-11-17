@@ -279,3 +279,77 @@ test('a paid claim shows the reserve, the payment and the link to the exported r
   expect(within(page).getByRole('heading', { level: 2 })).toHaveTextContent('paid')
   expect(within(page).queryByRole('button', { name: 'Approve' })).toBeNull() // paid is the end
 })
+
+test('the handler asks an expert, the report comes back, and its amount goes into the decision form', async () => {
+  const request = (report: object | null) => ({ id: 'E1', kind: 'loss adjuster', question: 'Is the cost right?', asked_by: 'Sofia Brunner', report })
+  const withReport = { ...full('in_review'), experts: [request({ expert: 'Atelier Expertise', finding: 'Fair cost: CHF 2,700.', amount: 2700 })] }
+  const calls: Call[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init])
+      if (url === '/claims') return Promise.resolve(Response.json(rows))
+      if (url === '/handlers') return Promise.resolve(Response.json(['Sofia Brunner']))
+      if (url === '/claims/CL-review/experts') return Promise.resolve(Response.json({ ...full('in_review'), experts: [request(null)] }))
+      if (url === '/claims/CL-review/experts/E1/report') return Promise.resolve(Response.json(withReport))
+      if (url === '/claims/CL-review') return Promise.resolve(Response.json(full('in_review')))
+      if (url.endsWith('/history')) return Promise.resolve(new Response('', { status: 404 }))
+      return Promise.resolve(Response.json([]))
+    }),
+  )
+  render(<HandlerDesk />)
+  const page = await open()
+  const section = await within(page).findByLabelText('Expert')
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Question for the expert' }), { target: { value: 'Is the cost right?' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'Ask an expert' }))
+  const card = await within(section).findByLabelText('Request E1')
+  expect(card).toHaveTextContent('waits for the report')
+  expect(card).toHaveTextContent('loss adjuster · Sofia Brunner asked: Is the cost right?')
+  expect(JSON.parse(calls.find(([u]) => u === '/claims/CL-review/experts')![1]!.body as string)).toEqual({ by: 'Sofia Brunner', question: 'Is the cost right?' })
+
+  fireEvent.change(within(card).getByRole('textbox', { name: 'Name of the expert' }), { target: { value: 'Atelier Expertise' } })
+  fireEvent.change(within(card).getByRole('textbox', { name: 'Finding of the expert' }), { target: { value: 'Fair cost: CHF 2,700.' } })
+  fireEvent.change(within(card).getByRole('spinbutton', { name: 'Amount assessed' }), { target: { value: '2700' } })
+  fireEvent.click(within(card).getByRole('button', { name: 'Save the report' }))
+  await waitFor(() => expect(within(section).getByLabelText('Request E1')).toHaveTextContent('report received'))
+  expect(JSON.parse(calls.find(([u]) => u === '/claims/CL-review/experts/E1/report')![1]!.body as string)).toEqual({
+    by: 'Sofia Brunner',
+    expert: 'Atelier Expertise',
+    finding: 'Fair cost: CHF 2,700.',
+    amount: 2700,
+  })
+  fireEvent.click(within(section).getByRole('button', { name: 'Use CHF 2,700.00 in the decision' }))
+  expect(within(page).getByRole('spinbutton', { name: 'Amount to approve' })).toHaveValue(2700)
+})
+
+test('a recovery is opened with the liable party, then closed as recovered', async () => {
+  const recovery = (status: string, more: object = {}) => ({ party: 'Neighbour, flat 3B', reason: 'His pipe.', opened_by: 'Sofia Brunner', status, amount: null, recovered: null, closed_by: null, close_reason: '', ...more })
+  const paid = { ...full('paid'), payment: { amount: 3000, account: 'MOCK-ACCT-1002', reference: 'PAY-CL-review', time: '2026-11-16T09:00:00Z' } }
+  const calls: Call[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init])
+      if (url === '/claims') return Promise.resolve(Response.json(rows))
+      if (url === '/handlers') return Promise.resolve(Response.json(['Sofia Brunner']))
+      if (url === '/claims/CL-review/recovery') return Promise.resolve(Response.json({ ...paid, recovery: recovery('open', { amount: 3000 }) }))
+      if (url === '/claims/CL-review/recovery/result') return Promise.resolve(Response.json({ ...paid, recovery: recovery('recovered', { amount: 3000, recovered: 2500, closed_by: 'Sofia Brunner' }) }))
+      if (url === '/claims/CL-review') return Promise.resolve(Response.json(paid))
+      if (url.endsWith('/history')) return Promise.resolve(new Response('', { status: 404 }))
+      return Promise.resolve(Response.json([]))
+    }),
+  )
+  render(<HandlerDesk />)
+  const page = await open()
+  const section = await within(page).findByLabelText('Recovery')
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Liable party' }), { target: { value: 'Neighbour, flat 3B' } })
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Why this party is liable' }), { target: { value: 'His pipe.' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'Open a recovery' }))
+  await waitFor(() => expect(section).toHaveTextContent('To ask back: CHF 3,000.00'))
+  expect(JSON.parse(calls.find(([u]) => u === '/claims/CL-review/recovery')![1]!.body as string)).toEqual({ by: 'Sofia Brunner', party: 'Neighbour, flat 3B', reason: 'His pipe.' })
+  fireEvent.change(within(section).getByRole('spinbutton', { name: 'Amount recovered' }), { target: { value: '2500' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'Recovered' }))
+  await waitFor(() => expect(section).toHaveTextContent('recovered: CHF 2,500.00'))
+  expect(JSON.parse(calls.find(([u]) => u === '/claims/CL-review/recovery/result')![1]!.body as string)).toEqual({ by: 'Sofia Brunner', result: 'recovered', amount: 2500 })
+  expect(within(section).queryByRole('button', { name: 'Recovered' })).toBeNull()
+})

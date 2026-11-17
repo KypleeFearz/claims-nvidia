@@ -189,6 +189,40 @@ class Decision(BaseModel):
     time: datetime
 
 
+class ExpertReport(BaseModel):
+    expert: str
+    finding: str
+    amount: float | None = None  # what the expert assesses, in CHF
+    time: datetime
+
+
+class ExpertRequest(BaseModel):
+    """A question of a handler to an expert (issue #102): a loss adjuster, a
+    medical adviser. The claim cannot be decided while a request has no report."""
+
+    id: str
+    kind: str
+    question: str
+    asked_by: str
+    time: datetime
+    report: ExpertReport | None = None
+
+
+class Recovery(BaseModel):
+    """Another person is liable: the insurer asks this person to pay back what it
+    paid (issue #102). `planned` until the claim is paid, then `open`."""
+
+    party: str
+    reason: str
+    opened_by: str
+    time: datetime
+    status: Literal["planned", "open", "recovered", "abandoned"]
+    amount: float | None = None  # what the insurer paid and asks back
+    recovered: float | None = None
+    closed_by: str | None = None
+    close_reason: str = ""
+
+
 class NoticeItem(BaseModel):
     """One question of the first notice (issue #98), with its answer when given."""
 
@@ -260,6 +294,8 @@ class Claim(BaseModel):
     notice: list[NoticeItem] = []  # the questions for the cause, and the answers
     decisions: list[Decision] = []
     investigation: Investigation | None = None
+    experts: list[ExpertRequest] = []
+    recovery: Recovery | None = None
     reserve: float | None = (
         None  # the expected cost; for the insurer, never the customer
     )
