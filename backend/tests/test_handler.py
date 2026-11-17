@@ -213,9 +213,9 @@ def test_a_request_with_a_word_the_customer_must_not_read_is_refused(
 def test_a_handler_can_decide_on_a_claim_that_waits(client: TestClient) -> None:
     cid = review_claim(client)
     decide(client, cid, "request", reason="Please send the original invoice.")
-    assert decide(client, cid, "approve", by=DAVID).status_code == 200
+    assert decide(client, cid, "approve", by=SOFIA).status_code == 200
     c = claim(client, cid)
-    assert c["status"] == "paid" and c["decisions"][-1]["by"] == DAVID
+    assert c["status"] == "paid" and c["decisions"][-1]["by"] == SOFIA
     # decided: the claim does not open again
     assert upload(client, cid, MOCK / "claim-2-property" / "repair-invoice.pdf") == 409
 
@@ -256,7 +256,7 @@ def test_the_proposed_amount_given_again_needs_no_reason_and_a_refusal_has_no_am
     client: TestClient,
 ) -> None:
     cid = review_claim(client)
-    body = {"action": "approve", "by": DAVID, "amount": 3000.0}
+    body = {"action": "approve", "by": SOFIA, "amount": 3000.0}
     assert client.post(f"/claims/{cid}/decisions", json=body).status_code == 200
     other = review_claim(client)
     body = {"action": "refuse", "by": DAVID, "amount": 99, "reason": "Exclusion 4.2."}

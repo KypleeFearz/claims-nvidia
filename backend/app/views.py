@@ -42,6 +42,7 @@ STATUS = {
     ClaimStatus.validated: "validated",
     ClaimStatus.in_review: "in_review",
     ClaimStatus.in_investigation: "in_review",
+    ClaimStatus.waiting_approval: "in_review",  # an internal step: still a review
     ClaimStatus.approved: "approved",
     ClaimStatus.refused: "decided",
     ClaimStatus.paid: "paid",
