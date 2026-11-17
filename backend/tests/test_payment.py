@@ -16,7 +16,7 @@ from app.payment import ExportRecord, payee_problem
 from app.workflows import WORKFLOWS
 from tests.builders import travel_claim
 from tests.reader_contract import MOCK
-from tests.test_handler import review_claim
+from tests.test_handler import refuse_claim, review_claim
 
 SOFIA = HANDLERS[0]
 TRIP = (
@@ -113,10 +113,7 @@ def test_a_refusal_frees_the_reserve_and_pays_and_exports_nothing(
     client: TestClient, tmp_path: Path
 ) -> None:
     cid = review_claim(client)
-    body = {"action": "refuse", "by": SOFIA, "reason": "Exclusion 4.2."}
-    assert (
-        client.post(f"/claims/{cid}/decisions", json=body).json()["status"] == "refused"
-    )
+    assert refuse_claim(client, cid).json()["status"] == "refused"
     c = claim(client, cid)
     assert c["reserve"] == 0.0 and c["payment"] is None
     assert not (tmp_path / "exports" / f"{cid}.json").exists()

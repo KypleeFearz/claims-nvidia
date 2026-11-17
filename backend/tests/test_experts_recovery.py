@@ -14,7 +14,7 @@ from app.main import create_app
 from app.models import Outcome
 from app.workflows import WORKFLOWS
 from tests.builders import document, travel_claim
-from tests.test_handler import review_claim
+from tests.test_handler import refuse_claim, review_claim
 from tests.test_payment import claim_file_1
 
 SOFIA, DAVID = HANDLERS
@@ -208,7 +208,7 @@ def test_a_recovery_can_be_abandoned_with_a_reason_and_not_before_the_payment(
 
 def test_a_refused_claim_has_no_recovery(client: TestClient) -> None:
     cid = review_claim(client)
-    post(client, cid, "decisions", action="refuse", reason="Exclusion 4.2.")
+    assert refuse_claim(client, cid).json()["status"] == "refused"
     res = post(client, cid, "recovery", party="Neighbour", reason="His pipe.")
     assert res.status_code == 409
 

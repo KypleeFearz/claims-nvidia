@@ -29,7 +29,7 @@ MOVES: dict[ClaimStatus, set[ClaimStatus]] = {
     },
     S.in_review: {S.waiting_customer, S.in_investigation, S.waiting_approval, *DECIDED},
     # four eyes (issue #105): the second handler approves, or returns it to review
-    S.waiting_approval: {S.approved, S.in_review},
+    S.waiting_approval: {S.approved, S.refused, S.in_review},
     # the investigator reports first: no decision while a claim is in investigation
     S.in_investigation: {S.waiting_customer, S.in_review},
     S.validated: {S.paid},  # the mock payment (app/payment.py)

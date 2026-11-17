@@ -99,6 +99,7 @@ class NewDecision(BaseModel):
     by: str
     reason: str = Field(default="", max_length=2000)
     amount: float | None = Field(default=None, ge=0, le=10_000_000)
+    customer_reason: str = Field(default="", max_length=1000)
 
 
 async def mcp_endpoint(scope: Scope, receive: Receive, send: Send) -> None:
@@ -240,6 +241,7 @@ def create_app() -> FastAPI:
                     body.by,
                     body.reason,
                     body.amount,
+                    body.customer_reason,
                 )
             except KeyError:
                 raise HTTPException(404, "unknown claim") from None

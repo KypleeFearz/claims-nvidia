@@ -380,3 +380,39 @@ test('a claim that waits for a second approval says so, shows the limits and has
   expect(within(page).queryByRole('button', { name: 'Refuse' })).toBeNull()
   expect(within(page).queryByRole('button', { name: 'Ask the customer' })).toBeNull()
 })
+
+test('a refusal is sent with the reason for the customer, then a second handler confirms it', async () => {
+  const proposed = full('waiting_approval', [
+    { action: 'propose_refusal', by: 'David Frei', reason: 'Exclusion 4.2.', customer_reason: 'The policy does not cover this cause.', amount: null, time: '2026-11-17T09:00:00Z' },
+  ])
+  let state: object = full('in_review')
+  const calls: Call[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init])
+      if (url === '/claims') return Promise.resolve(Response.json(rows))
+      if (url === '/handlers') return Promise.resolve(Response.json(['Sofia Brunner', 'David Frei']))
+      if (url === '/claims/CL-review/decisions') {
+        state = proposed
+        return Promise.resolve(Response.json(proposed))
+      }
+      if (url === '/claims/CL-review') return Promise.resolve(Response.json(state))
+      if (url.endsWith('/history')) return Promise.resolve(new Response('', { status: 404 }))
+      return Promise.resolve(Response.json([]))
+    }),
+  )
+  render(<HandlerDesk />)
+  const page = await open()
+  fireEvent.change(within(page).getByRole('textbox', { name: 'Reason, or text for the customer' }), { target: { value: 'Exclusion 4.2.' } })
+  fireEvent.change(within(page).getByRole('textbox', { name: 'Reason for the customer' }), { target: { value: 'The policy does not cover this cause.' } })
+  fireEvent.click(within(page).getByRole('button', { name: 'Refuse' }))
+  expect(await within(page).findByText(/A second handler must confirm the refusal\. David Frei wrote: Exclusion 4\.2\./)).toBeInTheDocument()
+  const sent = calls.find(([u]) => u === '/claims/CL-review/decisions')![1]!
+  expect(JSON.parse(sent.body as string)).toEqual({ action: 'refuse', by: 'Sofia Brunner', reason: 'Exclusion 4.2.', customer_reason: 'The policy does not cover this cause.' })
+  // the claim waits: the second handler confirms the refusal or returns it; he does not approve an amount
+  expect(within(page).getByRole('button', { name: 'Confirm the refusal' })).toBeInTheDocument()
+  expect(within(page).getByRole('button', { name: 'Return to review' })).toBeInTheDocument()
+  expect(within(page).queryByRole('button', { name: 'Approve' })).toBeNull()
+  expect(within(page).queryByRole('textbox', { name: 'Reason for the customer' })).toBeNull()
+})

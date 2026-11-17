@@ -12,7 +12,7 @@ from app.docintel.fixture import FixtureReader
 from app.handler import HANDLERS
 from app.main import create_app
 from app.models import Document, Extraction
-from tests.test_handler import review_claim
+from tests.test_handler import refuse_claim, review_claim
 from tests.test_history import elena
 from tests.test_payment import claim_file_1
 
@@ -41,8 +41,7 @@ def test_the_numbers_of_four_claims(client: TestClient) -> None:
         f"/claims/{approved}/decisions", json={"action": "approve", "by": SOFIA}
     )
     refused = review_claim(client)
-    body = {"action": "refuse", "by": SOFIA, "reason": "Exclusion 4.2."}
-    client.post(f"/claims/{refused}/decisions", json=body)
+    refuse_claim(client, refused)
     siu = elena(client)  # investigation: 1,750 claimed and proposed
     for task in ("T1", "T2"):
         change = {"by": DAVID, "done": True, "note": "ok"}
@@ -67,7 +66,12 @@ def test_the_numbers_of_four_claims(client: TestClient) -> None:
         "not_confirmed": 1,
         "not_confirmed_share": 1.0,
     }
-    assert out["decisions"] == {"approve": 1, "refuse": 1, "clear": 1}
+    assert out["decisions"] == {
+        "approve": 1,
+        "propose_refusal": 1,
+        "refuse": 1,
+        "clear": 1,
+    }
 
 
 def test_the_kit_is_right_with_the_fixture_reader_and_leaves_no_trace(
