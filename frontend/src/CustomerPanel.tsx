@@ -7,7 +7,7 @@ type Customer = { id: string; name: string }
 type Policy = { number: string; line_of_business: string }
 // the customer endpoint: claim id, policy, status and the result text, nothing else
 type LetterLine = { label: string; amount: number; reason: string; article: string }
-type Letter = { amount: number; lines: LetterLine[]; note: string }
+type Letter = { kind?: string; amount: number; lines: LetterLine[]; note: string }
 type View = {
   claim_id: string
   policy_number: string | null
@@ -20,6 +20,8 @@ type View = {
 
 const money = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const STATUS_PILL: Record<string, string> = { waiting_customer: 'pill-attention', validated: 'pill-ok', approved: 'pill-ok', paid: 'pill-ok' }
+// the refusal letter starts with the same words as its heading: say them once
+const noteOf = (l: Letter) => (l.kind === 'refusal' ? l.note.replace(/^We cannot pay this claim\.\s*/, '') : l.note)
 
 // What the customer follows after the chat (issue #88): where the claim is, what is asked, and the
 // settlement. The same for a review and for an investigation: the server sends the same view.
@@ -37,8 +39,8 @@ function FollowUp({ view }: { view: View }) {
       )}
       {view.letter && (
         <div className="card letter" aria-label="Settlement">
-          <h3>{`We pay CHF ${money(view.letter.amount)}`}</h3>
-          {view.letter.note && <p>{view.letter.note}</p>}
+          <h3>{view.letter.kind === 'refusal' ? 'We cannot pay this claim' : `We pay CHF ${money(view.letter.amount)}`}</h3>
+          {view.letter.note && <p>{noteOf(view.letter)}</p>}
           {view.letter.lines.length > 0 && (
             <table>
               <tbody>

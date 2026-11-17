@@ -12,7 +12,7 @@ from app.handler import HANDLERS
 from app.main import create_app
 from app.views import APPROVED
 from tests.reader_contract import MOCK
-from tests.test_handler import review_claim
+from tests.test_handler import refuse_claim, review_claim
 from tests.test_history import elena
 
 SOFIA, DAVID = HANDLERS
@@ -184,11 +184,7 @@ def test_a_confirmed_fraud_goes_back_to_the_handler_who_decides(
     # after the conclusion the tasks and the log are closed
     assert tick(client, cid, "T1").status_code == 409
     assert post(client, cid, "investigation/notes", text="late").status_code == 409
-    reason = "Fraud confirmed by the investigation."
-    res = client.post(
-        f"/claims/{cid}/decisions",
-        json={"action": "refuse", "by": SOFIA, "reason": reason},
-    )
+    res = refuse_claim(client, cid, "Fraud confirmed by the investigation.")
     assert res.status_code == 200 and claim(client, cid)["status"] == "refused"
 
 

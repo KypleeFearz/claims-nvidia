@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 from app.agent.phrases import check_message
 from app.investigation import conclusion, open_case
-from app.lifecycle import IllegalMove
+from app.lifecycle import IllegalMove, check_move
 from app.models import Claim, ClaimStatus, Decision
 from app.payment import set_reserve, settle
 from app.store import Store
@@ -41,7 +41,10 @@ TARGET: dict[str, ClaimStatus] = {
     # handler becomes; `return` sends a proposal back to review
     "propose": ClaimStatus.waiting_approval,
     "return": ClaimStatus.in_review,
+    # a refusal always needs two persons (issue #111): the first one proposes it
+    "propose_refusal": ClaimStatus.waiting_approval,
 }
+PROPOSALS = ("propose", "propose_refusal")  # never asked for: what a decision becomes
 CONCLUSION = {"clear": "not_confirmed", "confirm": "confirmed"}
 NEEDS_REASON = {"refuse", "request", "investigate", "clear", "confirm", "return"}
 
@@ -57,15 +60,27 @@ def decide(
     by: str,
     reason: str,
     amount: float | None = None,
+    customer_reason: str = "",
 ) -> Claim:
     """One decision of one handler. `KeyError`: unknown claim. `BadDecision`: the
     request is wrong. `IllegalMove`: the status of the claim does not allow it."""
-    reason = reason.strip()
-    if action not in TARGET or action == "propose":  # `propose` is never asked for
-        raise BadDecision(f"unknown action (known: {', '.join(TARGET)})")
+    reason, customer_reason = reason.strip(), " ".join(customer_reason.split())
+    if action not in TARGET or action in PROPOSALS:
+        known = ", ".join(a for a in TARGET if a not in PROPOSALS)
+        raise BadDecision(f"unknown action (known: {known})")
     if by not in HANDLERS:
         raise BadDecision("unknown handler")
-    if action in NEEDS_REASON and not reason:
+    claim = store.get_claim(claim_id)
+    if claim is None:
+        raise KeyError(claim_id)
+    waiting = claim.status == ClaimStatus.waiting_approval
+    pending = (
+        next((d for d in reversed(claim.decisions) if d.action in PROPOSALS), None)
+        if waiting
+        else None
+    )
+    confirms = action == "refuse" and pending is not None
+    if action in NEEDS_REASON and not reason and not confirms:
         raise BadDecision(
             "write the text for the customer"
             if action == "request"
@@ -73,17 +88,32 @@ def decide(
         )
     if action == "request" and (why := check_message(reason, "no-model")):
         raise BadDecision(f"the customer must not read this text ({why})")
-    claim = store.get_claim(claim_id)
-    if claim is None:
-        raise KeyError(claim_id)
     if claim.status == ClaimStatus.open:
         raise IllegalMove("the claim is still in the chat with the customer")
     if action in ("approve", "refuse") and (waits := open_requests(claim)):
         # the expert reports first (issue #102)
         raise IllegalMove(f"an expert request is open: {', '.join(waits)}")
-    waiting = claim.status == ClaimStatus.waiting_approval
     if action == "return" and not waiting:
         raise IllegalMove("only a claim that waits for an approval can be returned")
+    if pending is not None and action in ("approve", "refuse"):
+        wanted = "refuse" if pending.action == "propose_refusal" else "approve"
+        if action != wanted:
+            raise IllegalMove(
+                f"the claim waits for a second handler to {wanted} it: "
+                "do that, or return it to review"
+            )
+    if action == "refuse" and pending is not None:
+        # the second pair of eyes (issue #111): the reasons are the ones of the proposal
+        if by == pending.by:
+            raise BadDecision("a second handler must confirm the refusal")
+        reason, customer_reason = reason or pending.reason, pending.customer_reason
+    elif action == "refuse":
+        check_move(claim.status, TARGET["propose_refusal"])  # 409 before 422
+        if not customer_reason:
+            raise BadDecision("write the reason that the customer will read")
+        if why := check_message(customer_reason, "no-model"):
+            raise BadDecision(f"the customer must not read this text ({why})")
+        action = "propose_refusal"
     if action == "approve" and waiting:
         amount = _second_approval(claim, by)  # the amount of the proposal, as it is
     elif action == "approve":
@@ -101,6 +131,7 @@ def decide(
             "by": by,
             "reason": reason,
             "amount": amount,
+            "customer_reason": customer_reason if "refus" in action else "",
             "time": datetime.now(UTC),
         }
     )

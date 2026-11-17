@@ -339,3 +339,25 @@ test('a claim that does not exist any more is forgotten', async () => {
   render(<CustomerPanel claimId="CL-gone" onClaim={(id) => picked.push(id)} />)
   await waitFor(() => expect(picked).toEqual([null]))
 })
+
+test('after a refusal the panel says that the claim cannot be paid, with the reason written for the customer', async () => {
+  stubChat((url) =>
+    url === '/claims/CL-1/customer'
+      ? Response.json({
+          ...view('HH-2024-0933'),
+          status: 'decided',
+          step: 'closed',
+          status_line: 'A claims specialist has decided. A letter is on its way.',
+          requests: [],
+          letter: { kind: 'refusal', amount: 0, lines: [], note: 'We cannot pay this claim. Reason: The policy does not cover this cause. If you do not agree, answer to the letter that you will receive: another claims specialist will look at your case.' },
+        })
+      : undefined,
+  )
+  render(<CustomerPanel claimId="CL-1" onClaim={() => {}} />)
+  const letter = await screen.findByLabelText('Settlement')
+  expect(within(letter).getByRole('heading', { level: 3 })).toHaveTextContent('We cannot pay this claim')
+  expect(letter).toHaveTextContent('Reason: The policy does not cover this cause.')
+  expect(letter).toHaveTextContent('another claims specialist will look at your case')
+  expect(letter).not.toHaveTextContent('CHF 0.00')
+  expect(letter.textContent?.match(/We cannot pay this claim/g)).toHaveLength(1) // said once
+})

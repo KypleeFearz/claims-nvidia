@@ -8,6 +8,7 @@ fraudster that the system flagged the claim.
 
 from collections.abc import Iterable
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -73,9 +74,17 @@ class LetterLine(BaseModel):
     article: str
 
 
-class Letter(BaseModel):
-    """The settlement for the customer: the amount, and how it was calculated."""
+REFUSED = (
+    "We cannot pay this claim. Reason: {reason} If you do not agree, answer to the "
+    "letter that you will receive: another claims specialist will look at your case."
+)
 
+
+class Letter(BaseModel):
+    """The settlement for the customer: the amount, and how it was calculated. Or,
+    for a refusal (issue #111), the reason written for the customer."""
+
+    kind: Literal["payment", "refusal"] = "payment"
     amount: float
     lines: list[LetterLine] = []
     note: str = ""
@@ -130,6 +139,11 @@ def _letter(claim: Claim) -> Letter | None:
     lines are the lines of the proposal (code wrote them, from fixed sentences). When
     a handler set another amount, the lines do not explain it and the reason of the
     handler is not for the customer: the letter then gives the amount alone."""
+    if claim.status == ClaimStatus.refused:
+        said = claim.decisions[-1].customer_reason if claim.decisions else ""
+        if not said:
+            return None
+        return Letter(kind="refusal", amount=0, note=REFUSED.format(reason=said))
     proposed = claim.proposal.payable if claim.proposal else None
     amount: float | None
     if claim.status == ClaimStatus.paid and claim.payment:

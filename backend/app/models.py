@@ -192,10 +192,12 @@ class Decision(BaseModel):
         "confirm",
         "propose",  # an approval above the limit of the handler (issue #105)
         "return",  # a proposal sent back to review
+        "propose_refusal",  # a refusal that waits for a second handler (issue #111)
     ]
     by: str
     reason: str = ""
     amount: float | None = None  # CHF approved, for `approve`
+    customer_reason: str = ""  # for a refusal: what the customer reads (issue #111)
     time: datetime
 
 

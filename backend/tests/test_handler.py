@@ -56,6 +56,26 @@ def decide(client: TestClient, cid: str, action: str, **more: str) -> Any:
     return client.post(f"/claims/{cid}/decisions", json=body)
 
 
+NOT_COVERED = "The policy does not cover this cause."
+
+
+def refuse_claim(
+    client: TestClient,
+    cid: str,
+    reason: str = "Exclusion 4.2.",
+    said: str = NOT_COVERED,
+) -> Any:
+    """A refusal is two steps (issue #111): David proposes it with both reasons,
+    Sofia confirms. Returns the answer of the confirmation."""
+    body = {"action": "refuse", "by": DAVID, "reason": reason, "customer_reason": said}
+    first = client.post(f"/claims/{cid}/decisions", json=body)
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "waiting_approval"
+    return client.post(
+        f"/claims/{cid}/decisions", json={"action": "refuse", "by": SOFIA}
+    )
+
+
 def last_message(client: TestClient, cid: str) -> str:
     return str(client.get(f"/claims/{cid}/messages").json()[-1]["text"])
 
@@ -104,21 +124,29 @@ def test_approve_is_a_decision_with_a_name_one_event_and_a_text_for_the_customer
     ]
 
 
-def test_refuse_needs_a_reason_and_the_customer_never_reads_it(
+def test_refuse_needs_two_reasons_two_handlers_and_the_customer_reads_only_his(
     client: TestClient,
 ) -> None:
     cid = review_claim(client)
     assert decide(client, cid, "refuse").status_code == 422
     assert decide(client, cid, "refuse", reason="   ").status_code == 422
+    internal = "Exclusion 4.2: slow leak, not a sudden event. Looks like fraud."
+    res = decide(client, cid, "refuse", reason=internal)  # no reason for the customer
+    assert res.status_code == 422 and "customer will read" in res.json()["detail"]
     assert claim(client, cid)["status"] == "in_review"
-    reason = "Exclusion 4.2: slow leak, not a sudden event. Looks like fraud."
-    assert decide(client, cid, "refuse", reason=reason).status_code == 200
+    assert refuse_claim(client, cid, internal).status_code == 200
     c = claim(client, cid)
-    assert c["status"] == "refused" and c["decisions"][0]["reason"] == reason
-    # the customer: a fixed text, and nothing of the reason
+    assert c["status"] == "refused"
+    assert [(d["action"], d["by"]) for d in c["decisions"]] == [
+        ("propose_refusal", DAVID),
+        ("refuse", SOFIA),
+    ]
+    assert c["decisions"][1]["reason"] == internal
+    # the customer: the fixed text, his own reason, and nothing of the internal one
     v = view(client, cid)
     assert v["status"] == "decided" and v["message"] == DECIDED
     assert last_message(client, cid) == DECIDED
+    assert v["letter"]["kind"] == "refusal" and NOT_COVERED in v["letter"]["note"]
     seen = str(v) + str(client.get(f"/claims/{cid}/messages").json())
     assert "Exclusion" not in seen and "fraud" not in seen.lower()
 
@@ -132,7 +160,8 @@ def test_a_decision_is_final_and_an_unknown_handler_or_action_is_refused(
     assert decide(client, cid, "pay").status_code == 422
     assert decide(client, cid, "clear", reason="x").status_code == 409  # not in SIU
     assert decide(client, cid, "approve").status_code == 200
-    assert decide(client, cid, "refuse", reason="changed my mind").status_code == 409
+    late = decide(client, cid, "refuse", reason="x", customer_reason=NOT_COVERED)
+    assert late.status_code == 409
     assert claim(client, cid)["status"] == "paid"
     known = {"action": "approve", "by": SOFIA}
     assert client.post("/claims/CL-none/decisions", json=known).status_code == 404
@@ -259,7 +288,13 @@ def test_the_proposed_amount_given_again_needs_no_reason_and_a_refusal_has_no_am
     body = {"action": "approve", "by": SOFIA, "amount": 3000.0}
     assert client.post(f"/claims/{cid}/decisions", json=body).status_code == 200
     other = review_claim(client)
-    body = {"action": "refuse", "by": DAVID, "amount": 99, "reason": "Exclusion 4.2."}
+    body = {
+        "action": "refuse",
+        "by": DAVID,
+        "amount": 99,
+        "reason": "Exclusion 4.2.",
+        "customer_reason": NOT_COVERED,
+    }
     assert client.post(f"/claims/{other}/decisions", json=body).status_code == 200
     assert claim(client, other)["decisions"][-1]["amount"] is None
 

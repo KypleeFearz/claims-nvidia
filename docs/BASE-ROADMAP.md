@@ -87,7 +87,7 @@ Slice 1 is done: issue #86 (D66). Rules: `docs/WORKFLOWS.md`, "Settlement". Left
 
 ### B3. Handler workbench (L)
 
-Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (approve, refuse, ask the customer, investigate, clear). The settlement proposal is on the page since #86. Slice 2 is done: issue #105 (D74): authority levels and the second approval. Left: a second approval for a refusal, the field correction (#28, the intern).
+Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (approve, refuse, ask the customer, investigate, clear). The settlement proposal is on the page since #86. Slice 2 is done: issue #105 (D74): authority levels and the second approval. A refusal also needs a second handler (issue #111, D76). Left: the field correction (#28, the intern).
 
 **Practice.** The handler works from a queue. He opens a case, reads a summary, checks, decides.
 
@@ -138,7 +138,7 @@ Done: issue #98 (D72): the questions per cause, why each document, a way to a pe
 
 ### B6. Customer follow-up (S)
 
-Done: issue #88. Left: the letter after a refusal (it needs a reason written for the customer, not the internal reason of the handler), and a reminder when the customer does not answer. Slice 2 is done: issue #107: a customer finds his claims again (a list after the choice of the account, and the current claim kept in the browser).
+Done: issue #88. The letter after a refusal came with issue #111 (a reason written for the customer). Left: a reminder when the customer does not answer. Slice 2 is done: issue #107: a customer finds his claims again (a list after the choice of the account, and the current claim kept in the browser).
 
 **Build.** A status line in the customer panel in customer words ("We wait for your photo", "A specialist reviews your case", "Paid on …"). The list of open requests. The final letter: the amount, and the reason of each deduction in plain words. Non-negotiable 2 stays: the same words for `handler_review` and `investigation`.
 

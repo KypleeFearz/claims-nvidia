@@ -17,7 +17,7 @@ type Row = {
   reasons: string[]
   opened_at: string | null
 }
-type Decision = { action: string; by: string; reason: string; amount: number | null; time: string }
+type Decision = { action: string; by: string; reason: string; amount: number | null; time: string; customer_reason?: string }
 type Case = PipelineClaim & {
   id: string
   customer: { name: string }
@@ -129,10 +129,12 @@ function age(opened: string | null) {
   return minutes < 2880 ? `${Math.round(minutes / 60)} h` : `${Math.round(minutes / 1440)} d`
 }
 
-const ACTIONS: { action: string; text: string; className?: string; when: (status: string) => boolean }[] = [
+// `pending`: what a claim in waiting_approval waits for: 'amount' (issue #105) or 'refusal' (issue #111)
+const ACTIONS: { action: string; text: string; className?: string; when: (status: string, pending: string | null) => boolean }[] = [
   // the investigator reports first: no approval and no refusal while a claim is in investigation (issue #92).
   // A claim that waits for a second approval (issue #105) has two actions: approve the proposed amount, or return it.
-  { action: 'approve', text: 'Approve', className: 'btn-primary', when: (s) => s !== 'in_investigation' },
+  { action: 'approve', text: 'Approve', className: 'btn-primary', when: (s, p) => s !== 'in_investigation' && p !== 'refusal' },
+  { action: 'refuse', text: 'Confirm the refusal', className: 'btn-danger', when: (_s, p) => p === 'refusal' },
   { action: 'return', text: 'Return to review', when: (s) => s === 'waiting_approval' },
   { action: 'request', text: 'Ask the customer', when: (s) => !['waiting_customer', 'waiting_approval'].includes(s) },
   { action: 'investigate', text: 'Send to investigation', when: (s) => !['in_investigation', 'waiting_approval'].includes(s) },
@@ -400,6 +402,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
   const [history, setHistory] = useState<History | null>(null)
   const [by, setBy] = useState('')
   const [reason, setReason] = useState('')
+  const [said, setSaid] = useState('') // for a refusal: the reason that the customer reads
   const [amount, setAmount] = useState('') // CHF to approve: the proposal, until the handler types another amount
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -434,7 +437,13 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
       const res = await fetch(`/claims/${claimId}/decisions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, by, reason, ...(action === 'approve' && amount.trim() !== '' ? { amount: Number(amount) } : {}) }),
+        body: JSON.stringify({
+          action,
+          by,
+          reason,
+          ...(action === 'approve' && amount.trim() !== '' ? { amount: Number(amount) } : {}),
+          ...(action === 'refuse' && said.trim() !== '' ? { customer_reason: said } : {}),
+        }),
       })
       const body = (await res.json()) as Case & { detail?: string }
       if (!res.ok) {
@@ -443,6 +452,7 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
       }
       setClaim(body)
       setReason('')
+      setSaid('')
       setMessages(await send<Message[]>(`/claims/${claimId}/messages`))
       onDecided()
     } catch {
@@ -472,6 +482,8 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
 
   if (!claim) return <div className="panel-body">{error ? <p className="pill pill-bad">{error}</p> : <p className="muted">Loading…</p>}</div>
   const canDecide = TO_DO.includes(claim.status)
+  const proposal = claim.status === 'waiting_approval' ? claim.decisions.filter((d) => d.action.startsWith('propose')).at(-1) : undefined
+  const pending = proposal ? (proposal.action === 'propose_refusal' ? 'refusal' : 'amount') : null
   return (
     <>
       <header className="panel-head">
@@ -516,17 +528,24 @@ function CasePage({ claimId, onDecided }: { claimId: string; onDecided: () => un
               <span>Reason, or text for the customer</span>
               <textarea aria-label="Reason, or text for the customer" rows={2} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} />
             </label>
-            {claim.status === 'waiting_approval' && (
-              <p className="pill pill-attention">
-                {`A second handler must approve ${chf(claim.decisions.filter((d) => d.action === 'propose').at(-1)?.amount ?? null)}: it is above the limit of the first one.`}
-              </p>
+            {pending === 'amount' && (
+              <p className="pill pill-attention">{`A second handler must approve ${chf(proposal?.amount ?? null)}: it is above the limit of the first one.`}</p>
+            )}
+            {pending === 'refusal' && (
+              <p className="pill pill-attention">{`A second handler must confirm the refusal. ${proposal?.by} wrote: ${proposal?.reason} For the customer: ${proposal?.customer_reason}`}</p>
+            )}
+            {!pending && claim.status !== 'in_investigation' && (
+              <label className="desk-field">
+                <span>For a refusal: the reason that the customer will read</span>
+                <textarea aria-label="Reason for the customer" rows={2} value={said} disabled={busy} onChange={(e) => setSaid(e.target.value)} />
+              </label>
             )}
             <p className="muted">
-              A reason is required to refuse, to send to investigation and to clear. The customer never reads it. “Ask the customer” sends this text to the customer: write it in neutral
+              A reason is required to refuse, to send to investigation and to clear. The customer never reads it. A refusal needs a second handler. “Ask the customer” sends this text to the customer: write it in neutral
               words.
             </p>
             <div className="desk-actions">
-              {ACTIONS.filter((a) => a.when(claim.status)).map((a) => (
+              {ACTIONS.filter((a) => a.when(claim.status, pending)).map((a) => (
                 <button key={a.action} type="button" className={a.className} disabled={busy} onClick={() => void decide(a.action)}>
                   {a.text}
                 </button>
