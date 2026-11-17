@@ -68,7 +68,7 @@ Done: issue #72 (D63). How it works: `docs/ARCHITECTURE.md`, section 5b. Not don
 
 ### B2. Policy terms and settlement proposal (L)
 
-Slice 1 is done: issue #86 (D66). Rules: `docs/WORKFLOWS.md`, "Settlement". Left: depreciation by age, sub-limits per category, line items left out one by one, the yearly limit less earlier payments (needs B4), the policy wording as a PDF with pages. The rules wait for the answer of Paul to O12.
+Slice 1 is done: issue #86 (D66). Rules: `docs/WORKFLOWS.md`, "Settlement". Left: depreciation by age, sub-limits per category, line items left out one by one, the yearly limit less earlier payments (needs B4), the policy wording as a PDF with pages. Paul confirmed the rules on 2026-11-16 (D67).
 
 **Practice.** The handler does not pay the claimed amount. He pays the covered loss.
 
@@ -87,7 +87,7 @@ Slice 1 is done: issue #86 (D66). Rules: `docs/WORKFLOWS.md`, "Settlement". Left
 
 ### B3. Handler workbench (L)
 
-Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (approve, refuse, ask the customer, investigate, clear). Left: the settlement proposal on the page (needs B2), authority levels and the second approval, the field correction (#28, the intern).
+Slice 1 is done: issue #84 (D65): the queue, the case page and the decisions (approve, refuse, ask the customer, investigate, clear). The settlement proposal is on the page since #86. Left: authority levels and the second approval, the field correction (#28, the intern).
 
 **Practice.** The handler works from a queue. He opens a case, reads a summary, checks, decides.
 
@@ -168,7 +168,7 @@ Done: issue #96 (D71), before #19: the page does not need the harness of the int
 
 - Dry run on the demo instance (#35). Needs the date of the event (O14).
 - Several visitors at once: sandboxes in parallel and the rate limit of the key (O15, measured by #18). Not tested.
-- Stop and start of the VM. The first one (2026-11-16) left the backend down: corrected and tested with a reboot (issue #75). Left: a stop and a start from the Brev console.
+- Stop and start of the VM. The first one (2026-11-16) left the backend down: corrected and tested with a reboot (issue #75). A stop and a start from outside the VM (2026-11-16 at 22:49 UTC to 2026-11-17 at 07:38 UTC) brought every service back with no ordering cycle.
 - Confirm `docs/WORKFLOWS.md` (O12). B2 and B4 depend on it.
 - Delete or keep `docs/FIRST-PROMPT.md`.
 
