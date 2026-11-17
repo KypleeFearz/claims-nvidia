@@ -244,7 +244,7 @@ This is the confined agent. It is the most complex part. Read `docs/ARCHITECTURE
 
 - What: Nemotron 3.5 Lightning on the hosted NVIDIA endpoint. It drives the `intake` and `documents` nodes.
 - Files: `backend/app/agent/model.py` (`ChatOpenAI` settings), `infra/sandbox/profile-nim.yaml`, `.env.example`.
-- Settings: `AGENT_BASE_URL`, `AGENT_MODEL`, `AGENT_THINKING`. Timeout 60 s, 2000 completion tokens, 2 retries (D37).
+- Settings: `AGENT_BASE_URL`, `AGENT_MODEL`, `AGENT_THINKING`. Timeout 60 s, 2000 completion tokens, 2 retries (D37). After a 429 the graph also waits 5, 10 and 20 seconds and calls again (D78).
 - In the sandbox, the model key is a placeholder. OpenShell swaps it on the way out (section 3.1).
 - Why this model: D17 and section 3.3.
 

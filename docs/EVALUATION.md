@@ -138,4 +138,21 @@ What the numbers say:
 - Same result in both modes: 6/6 right outcomes, right date and amount, and 0 fallback messages. The three customer texts were word for word (checked by the test, and by the player).
 - The worst turn (26.5 s) is a turn with a slow model call, as in `nim` mode (23.2 s).
 - The MCP calls cost milliseconds: the backend and the sandbox are on the same machine.
-- Not measured: many sandboxes at the same time, the 429 limit with two visitors, a first creation on a host where the image is not yet there (pulling `python:3.12-slim` took 4.4 minutes on the slow wifi, spike notes).
+- Not measured here: a first creation on a host where the image is not yet there (pulling `python:3.12-slim` took 4.4 minutes on the slow wifi, spike notes). Many sandboxes at the same time: see the last section.
+
+## Several visitors at the same time (issues #115 and #117)
+
+Date: 2026-11-17. The Brev VM, `sandbox` mode, `nvidia/nemotron-3.5-lightning-30b-a3b`, the free key. N threads each play one claim file (travel, property, health, then travel again) with the first wording of `backend/tests/live_claims.py`, against the running backend. One run for each line: read the numbers as a size.
+
+| At the same time | Code | Total seconds | Right outcome | Answers 429 | Fallback messages | Worst turn (s) |
+|---|---|---|---|---|---|---|
+| 1 | before | 60 | 1/1 | 0 | 0 | - |
+| 3 | before #115 | - | 2/3 | 0 | 0 | - |
+| 3 | after #115 | 40 | 3/3 | 1 | 1 | 12.4 |
+| 5 | after #115 | 80 | 3/5 | 21 | 21 | 27.8 |
+| 5 | after #117 | 166 | 5/5 | 25 | 0 | 68.7 |
+
+- Before #115, the third claim failed at once with a 500: a read of the store with no lock. It is not a limit of the sandboxes.
+- The sandboxes are not the limit: five at the same time started and worked. The limit is the key, about 40 model calls per minute (O15). A claim file makes 13 to 25 model calls.
+- After #117 the agent waits 5, 10 and then 20 seconds after a 429 and calls again. No visitor reads the fallback message, but a turn can take one minute, and five claim files take near three minutes.
+- For more than three visitors at the same time, the key needs a larger limit (a decision of Paul: a paid endpoint, a NIM on a GPU of the VM, or one visitor at a time at the stand).
