@@ -231,7 +231,7 @@ function ExpertSection({ claim, canAsk, post, onAmount }: { claim: Case; canAsk:
           {e.report ? (
             <p>
               {`${e.report.expert}: ${e.report.finding}`}{' '}
-              {e.report.amount !== null && (
+              {canAsk && e.report.amount !== null && (
                 <button type="button" onClick={() => onAmount(e.report!.amount!)}>
                   {`Use ${chf(e.report.amount)} in the decision`}
                 </button>
