@@ -87,14 +87,19 @@ class Store:
                 )
 
     def get_customers(self) -> list[Customer]:
-        rows = self.db.execute("SELECT data FROM customers ORDER BY id")
+        # every read takes the lock and fetches all its rows inside it: the store
+        # has one connection, and a cursor read by two threads mixes their rows
+        # (issue #115: a 500 when two visitors open a claim at the same time)
+        with self.lock:
+            rows = self.db.execute("SELECT data FROM customers ORDER BY id").fetchall()
         return [Customer.model_validate_json(r[0]) for r in rows]
 
     def get_customer_policies(self, customer_id: str) -> list[Policy]:
-        rows = self.db.execute(
-            "SELECT data FROM policies WHERE customer_id = ? ORDER BY number",
-            (customer_id,),
-        )
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT data FROM policies WHERE customer_id = ? ORDER BY number",
+                (customer_id,),
+            ).fetchall()
         return [Policy.model_validate_json(r[0]) for r in rows]
 
     def create_claim(self, customer_id: str) -> Claim | None:

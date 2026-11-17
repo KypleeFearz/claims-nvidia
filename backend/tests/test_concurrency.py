@@ -62,3 +62,28 @@ def test_store_read_modify_write_is_atomic(tmp_path: Path) -> None:
     saved = store.get_claim(claim.id)
     assert saved is not None
     assert sorted(d.id for d in saved.documents) == sorted(f"D-{i}" for i in range(60))
+
+
+def test_many_visitors_open_a_claim_and_pick_a_policy_at_the_same_time(
+    client: TestClient,
+) -> None:
+    """Issue #115: the reads of the customers and of the policies share one SQLite
+    connection. Without the lock, two requests at once read each other's rows and
+    one of them is a 500."""
+
+    def visitor(i: int) -> tuple[int, int, int]:
+        customer = ("C-1001", "C-1002", "C-1003", "C-1004")[i % 4]
+        made = client.post("/claims", json={"customer_id": customer})
+        if made.status_code != 201:
+            return made.status_code, 0, 0
+        cid = made.json()["claim_id"]
+        return (
+            made.status_code,
+            client.get(f"/claims/{cid}/policies").status_code,
+            client.get("/customers").status_code,
+        )
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        results = list(pool.map(visitor, range(64)))
+    assert set(results) == {(201, 200, 200)}
+    assert len(client.get("/claims").json()) == 64

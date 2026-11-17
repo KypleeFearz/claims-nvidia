@@ -95,3 +95,9 @@
 - Put a new instruction in the prompt of the one node that needs it, not in the shared part.
 - A rule added to repair the failure ("a date in the story is the date of the incident") did not help: 9 of 10. Find the line that causes the failure before you add a line.
 - Keep the code before the change to measure it: a `git worktree` of the old commit gives the baseline with the same script.
+
+## Several visitors at once (issue #115, 2026-11-17)
+
+- The first test with three claims at the same time found a 500 in one minute. Every test before it played one claim at a time. Test with several users before a demo with several users.
+- A store with one SQLite connection needs the lock on every read, and `fetchall()` inside the lock. A read that returns the cursor and walks it later, outside the lock, mixes the rows of two requests. Two reads had no lock: the two oldest ones.
+- Without the lock the fault is not always an error: under load the requests can also block. A test for a race needs a time limit around it.
