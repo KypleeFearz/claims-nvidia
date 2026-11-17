@@ -155,4 +155,4 @@ Date: 2026-11-17. The Brev VM, `sandbox` mode, `nvidia/nemotron-3.5-lightning-30
 - Before #115, the third claim failed at once with a 500: a read of the store with no lock. It is not a limit of the sandboxes.
 - The sandboxes are not the limit: five at the same time started and worked. The limit is the key, about 40 model calls per minute (O15). A claim file makes 13 to 25 model calls.
 - After #117 the agent waits 5, 10 and then 20 seconds after a 429 and calls again. No visitor reads the fallback message, but a turn can take one minute, and five claim files take near three minutes.
-- For more than three visitors at the same time, the key needs a larger limit (a decision of Paul: a paid endpoint, a NIM on a GPU of the VM, or one visitor at a time at the stand).
+- For more than three visitors at the same time, the key needs a larger limit. Paul decided for the event: one visitor at a time at the stand (D79).
