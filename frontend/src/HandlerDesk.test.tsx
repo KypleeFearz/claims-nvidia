@@ -416,3 +416,22 @@ test('a refusal is sent with the reason for the customer, then a second handler 
   expect(within(page).queryByRole('button', { name: 'Approve' })).toBeNull()
   expect(within(page).queryByRole('textbox', { name: 'Reason for the customer' })).toBeNull()
 })
+
+test('a decided claim still shows the report of the expert, with no button for a decision', async () => {
+  const paid = {
+    ...full('paid'),
+    experts: [{ id: 'E1', kind: 'loss adjuster', question: 'Is the cost right?', asked_by: 'Sofia Brunner', report: { expert: 'Atelier Expertise', finding: 'Fair cost: CHF 2,700.', amount: 2700 } }],
+  }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) =>
+      Promise.resolve(url.endsWith('/history') ? new Response('', { status: 404 }) : Response.json(url === '/claims' ? rows : url === '/handlers' ? ['Sofia Brunner'] : url === '/claims/CL-review' ? paid : [])),
+    ),
+  )
+  render(<HandlerDesk />)
+  const page = await open()
+  const card = await within(page).findByLabelText('Request E1')
+  expect(card).toHaveTextContent('Atelier Expertise: Fair cost: CHF 2,700.')
+  expect(within(page).queryByRole('button', { name: /Use CHF/ })).toBeNull()
+  expect(within(page).queryByRole('button', { name: 'Ask an expert' })).toBeNull()
+})
