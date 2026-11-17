@@ -163,7 +163,7 @@ an investigator, on a claim that is in_investigation (issue #92):
 - **They do not block.** "done" closes the claim with open questions; the handler sees "not answered" on the case page, section "First notice".
 - **Why each document.** A required document has a `why`; `required_documents` returns it and the agent says it.
 - **A way to a person.** A message of a customer that asks for a person (`wants_person` in `agent/phrases.py`, a narrow pattern) is answered by the backend, before any agent: the claim goes to `in_review` with no outcome, a fixed text, and in `sandbox` mode the sandbox is deleted. Only while the claim is `open`.
-- **Tone.** Two lines of the shared prompt: one kind sentence first for a customer who is hurt or shocked, and how to ask for a person.
+- **Tone.** Step 9 of the prompt of the documents node: one kind sentence first for a customer who is hurt or shocked, and how to ask for a person. Not in the shared prompt: there it made the intake node fail (issue #100, `docs/LESSONS.md`).
 
 ### 5c. Business numbers (issue #96)
 

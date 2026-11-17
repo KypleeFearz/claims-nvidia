@@ -87,3 +87,11 @@
 
 - When the model must compare two lists (the required documents and the uploaded documents), it can get it wrong, and it uses many reasoning tokens. Do the comparison in the tool and give the result (`missing`). A model finds facts, code computes: this holds for small things too.
 - A fault of this kind hides while the conversation is in memory: the model repeats what it said before. It shows when the agent starts with no conversation (a new sandbox). Test a turn with an empty memory.
+
+## A prompt change is a change of behaviour: measure it (issue #98 and its fix, 2026-11-17)
+
+- Two lines about tone in the prompt that both model nodes share made the intake node fail 3 times in 19: the model wrote to the customer before it saved the facts. Before the change: 20 of 20. The three live tests passed, and so did every test with the fake model: they do not see a failure that comes 1 time in 6.
+- After a change of a prompt, play the same input 10 to 15 times with the real model, before and after, and compare the counts. One good run proves nothing.
+- Put a new instruction in the prompt of the one node that needs it, not in the shared part.
+- A rule added to repair the failure ("a date in the story is the date of the incident") did not help: 9 of 10. Find the line that causes the failure before you add a line.
+- Keep the code before the change to measure it: a `git worktree` of the old commit gives the baseline with the same script.
