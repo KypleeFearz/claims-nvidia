@@ -6,6 +6,8 @@ on or after the incident date" is C002 (the consistency module gives both). Medi
 text must never reach the application logs: this package logs nothing.
 """
 
+from app.checks.by_line import r012
+from app.checks.rules import Rule
 from app.workflows.engine import Question, RequiredDocument, Workflow
 
 
@@ -29,6 +31,7 @@ WORKFLOW = Workflow(
     required_documents=required_documents,
     straight_through_limit=1000,
     expert_above=3000,
+    rules=[Rule("R012", r012)],  # issue #109
     causes=(
         (
             "accident",

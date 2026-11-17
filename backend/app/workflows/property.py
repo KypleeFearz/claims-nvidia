@@ -5,6 +5,8 @@ covers it. The rule "photo shows the declared damage" (C004) needs a vision mode
 it is out of scope.
 """
 
+from app.checks.by_line import r011, r013
+from app.checks.rules import Rule
 from app.workflows.engine import Question, RequiredDocument, Workflow
 
 
@@ -37,6 +39,7 @@ WORKFLOW = Workflow(
     required_documents=required_documents,
     straight_through_limit=2000,
     expert_above=5000,
+    rules=[Rule("R011", r011), Rule("R013", r013)],  # issue #109
     causes=(
         ("water", r"\b(water|leak\w*|flood\w*)\b"),
         ("fire", r"\b(fire|smoke)\b"),

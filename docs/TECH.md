@@ -216,7 +216,7 @@ This is the confined agent. It is the most complex part. Read `docs/ARCHITECTURE
 
 ### 2.9 Checks (zone 03)
 
-- What: 17 signals in one table (R006 to R010, added on 2026-11-16, read the history of the customer and the links between persons: `backend/app/checks/history.py`) (`SIGNALS` in `backend/app/checks/rules.py`). Each signal has a code, a category, a severity, points, a title and an "expected" text.
+- What: 20 signals in one table (R011 to R013, added on 2026-11-17, belong to one line of business: `backend/app/checks/by_line.py`; R006 to R010, added on 2026-11-16, read the history of the customer and the links between persons: `backend/app/checks/history.py`) (`SIGNALS` in `backend/app/checks/rules.py`). Each signal has a code, a category, a severity, points, a title and an "expected" text.
 - Three tools run them: `run_checks` (rules R001 to R005 and the rules of the workflow), `check_tampering` (T001 to T003), `check_consistency` (C001 to C003).
 - Tampering reads the real bytes of the stored PDF with pypdf: the producer, the creator, the creation and modification dates. T003 compares the line items with the total.
 - Every signal carries evidence: the document and page it comes from.
@@ -589,7 +589,7 @@ You are expected to question these choices. For each one: what we chose, why it 
 
 ### 5.2 Fixed points and thresholds
 
-- **Chosen:** 17 signals with fixed points, `investigation` at 60, `handler_review` at 20 (D34). `docs/FRAUD.md` says "a first guess".
+- **Chosen:** 20 signals with fixed points, `investigation` at 60, `handler_review` at 20 (D34). `docs/FRAUD.md` says "a first guess".
 - **May be wrong:** the weights have no data behind them. Two medium signals (40) do not reach 60. A signal of 10 points (R004, T002) alone does not even send a claim to review.
 - **Test:** change `SIGNALS` in `backend/app/checks/rules.py`. Re-run `test_document_kit.py`: it names the story that moves. Measure on more seeded cases. A model score would be less explainable. Keep the reasons.
 
