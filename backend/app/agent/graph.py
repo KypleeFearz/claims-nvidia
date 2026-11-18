@@ -233,6 +233,13 @@ def _tool_calls(ai: AIMessage) -> list[dict[str, Any]]:
     return out
 
 
+# After a 429 the agent waits and calls again (issue #117): the limit of the key is
+# per minute and the client retries for about 1.5 s only. 35 s at most for one call.
+# ponytail: each turn waits alone; one shared limiter in the backend if the event
+# has more visitors than the quota can serve.
+WAITS_429: tuple[float, ...] = (5.0, 10.0, 20.0)
+
+
 def _reason(e: Exception) -> str:
     """Why a model call failed, with no text of the answer or of the prompt."""
     code = getattr(e, "status_code", None)
@@ -269,17 +276,25 @@ def build_graph(
     # ---- the model ------------------------------------------------------------
 
     def ask(bound: Any, messages: list[BaseMessage]) -> AIMessage | None:
-        start = time.perf_counter()
         inputs = {"messages": len(messages)}
-        try:
-            ai: AIMessage = bound.invoke(messages)
-        except Exception as e:  # the text is not kept: it can echo the prompt
-            emit(
-                "agent", "llm", "Model call failed", inputs,
-                {"error": _reason(e), "rate_limited": int(_reason(e) == "HTTP 429")},
-                model_name, time.perf_counter() - start,
-            )  # fmt: skip
-            return None
+        for wait in (*WAITS_429, None):
+            start = time.perf_counter()
+            try:
+                ai: AIMessage = bound.invoke(messages)
+                break
+            except Exception as e:  # the text is not kept: it can echo the prompt
+                limited = _reason(e) == "HTTP 429"
+                again = limited and wait is not None
+                emit(
+                    "agent", "llm",
+                    f"Model busy, next try in {wait:.0f} s" if again
+                    else "Model call failed",
+                    inputs, {"error": _reason(e), "rate_limited": int(limited)},
+                    model_name, time.perf_counter() - start,
+                )  # fmt: skip
+                if not again:
+                    return None
+                time.sleep(wait or 0)
         use: Any = ai.usage_metadata or {}
         out: dict[str, Any] = {
             "finish_reason": ai.response_metadata.get("finish_reason"),

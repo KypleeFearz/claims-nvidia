@@ -12,8 +12,12 @@ const box = (title: string) => screen.getByRole('button', { name: new RegExp(`^$
 
 test('every zone and every box of the model renders', () => {
   render(<ClaimMap />)
-  for (const z of ZONES) expect(screen.getByRole('heading', { name: `${z.num} · ${z.name}` })).toBeInTheDocument()
-  for (const b of BOXES) expect(box(b.title)).toBeInTheDocument()
+  // one query for the headings and one for the buttons: a query by role for each of the 20 boxes reads the
+  // whole page each time, and the test went over its 5 seconds on a busy machine
+  const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+  for (const z of ZONES) expect(headings).toContain(`${z.num} · ${z.name}`)
+  const buttons = screen.getAllByRole('button').map((b) => b.textContent ?? '')
+  for (const b of BOXES) expect(buttons.some((text) => text.startsWith(b.title))).toBe(true)
 })
 
 test('the boxes of the intern carry the tag YOURS, the planned one LATER', () => {
