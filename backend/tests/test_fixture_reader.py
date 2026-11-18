@@ -53,8 +53,8 @@ def test_unknown_bytes_give_unknown_and_no_field() -> None:
 def test_get_reader_default_and_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CLAIMS_READER", raising=False)
     assert get_reader().name == "fixture"
-    monkeypatch.setenv("CLAIMS_READER", "omni")
-    with pytest.raises(ValueError, match="unknown CLAIMS_READER 'omni'"):
+    monkeypatch.setenv("CLAIMS_READER", "nope")
+    with pytest.raises(ValueError, match="unknown CLAIMS_READER 'nope'"):
         get_reader()
 
 

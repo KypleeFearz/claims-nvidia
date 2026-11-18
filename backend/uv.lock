@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -359,7 +359,9 @@ dependencies = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "mcp" },
+    { name = "pillow" },
     { name = "pypdf" },
+    { name = "pypdfium2" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -367,8 +369,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
-    { name = "pillow" },
-    { name = "pypdfium2" },
     { name = "pytest" },
     { name = "reportlab" },
     { name = "ruff" },
@@ -383,7 +383,9 @@ requires-dist = [
     { name = "langgraph", specifier = "==1.2.21" },
     { name = "langgraph-checkpoint-sqlite", specifier = "==3.1.3" },
     { name = "mcp", specifier = "==1.30.0" },
+    { name = "pillow", specifier = ">=13.0.0" },
     { name = "pypdf", specifier = ">=7.0.1" },
+    { name = "pypdfium2", specifier = ">=5.15.2" },
     { name = "python-multipart", specifier = ">=0.0.33" },
     { name = "uvicorn", extras = ["standard"] },
 ]
@@ -391,8 +393,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy" },
-    { name = "pillow", specifier = ">=13.0.0" },
-    { name = "pypdfium2", specifier = ">=5.15.2" },
     { name = "pytest" },
     { name = "reportlab", specifier = ">=5.1.0" },
     { name = "ruff" },
