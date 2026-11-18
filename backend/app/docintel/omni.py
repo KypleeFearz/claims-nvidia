@@ -30,7 +30,7 @@ from app.models import Document, DocumentType, ExtractedField, Extraction, Sourc
 log = logging.getLogger(__name__)  # status codes only: never a value or a snippet
 
 DPI = 150
-# Bounds (D78): a document may be long or a page huge, the work stays bounded. A
+# Bounds (D80): a document may be long or a page huge, the work stays bounded. A
 # document with more pages is read in part, and a person checks it.
 MAX_PAGES = 10  # pages rendered and sent per document: at most 1 + 10 model calls
 MAX_PIXELS = 16_000_000  # per image sent; A4 at 150 DPI is 2.2 MP
@@ -42,7 +42,7 @@ MAX_WAIT = 30.0
 MAGIC = {b"%PDF-": "application/pdf", b"\x89PNG\r\n\x1a\n": "image/png"}
 MAGIC[b"\xff\xd8\xff"] = "image/jpeg"
 KNOWN = {t.value for t in DocumentType}
-# Provisional, not calibrated (D78): they say on which side of the routing threshold
+# Provisional, not calibrated (D80): they say on which side of the routing threshold
 # (0.8) a field falls. Checked evidence passes; the model alone needs a person.
 VERIFIED = 0.9  # the snippet is on the text layer of the page and holds the value
 UNVERIFIED = 0.5  # no text layer: only the model says where the value is
@@ -338,7 +338,7 @@ class OmniReader:
 
     def _post(self, prompt: str, page: Page, schema: dict[str, Any]) -> str | None:
         """The content of the answer, or None. The answer must follow `schema`
-        (`response_format`, D78). Retries a timeout, a 429 and a 5xx a few times
+        (`response_format`, D80). Retries a timeout, a 429 and a 5xx a few times
         with a bounded wait; any other error is final."""
         url = f"data:{page.mime};base64,{base64.b64encode(page.image).decode()}"
         form = {"name": "answer", "schema": schema, "strict": True}
@@ -434,7 +434,7 @@ class OmniReader:
                 if lines_refused or not all(_on_page(i, page.text) for i in read):
                     lines_complete = False
                 lines += read
-        # Not final, so a person checks it (D78): every field when a page was not
+        # Not final, so a person checks it (D80): every field when a page was not
         # read (it may hold a value that changes the claim); a field that two pages
         # give differently; the total when the list of lines is not complete.
         doubt = set(fields) if not all_read else disagree

@@ -167,7 +167,7 @@ Done: issue #96 (D71), before #19: the page does not need the harness of the int
 ### B10. Demo and operations (S each)
 
 - Dry run on the demo instance (#35). Needs the date of the event (O14).
-- Several visitors at once: sandboxes in parallel and the rate limit of the key (O15, measured by #18). Not tested.
+- Several visitors at once. Done (2026-11-17, issues #115 and #117): the measure with 3 and 5 claim files at the same time (`docs/EVALUATION.md`, last section), a read of the store with no lock corrected, and the agent waits after a 429. Decided: one visitor at a time at the event (D79), so the key keeps its limit.
 - Stop and start of the VM. The first one (2026-11-16) left the backend down: corrected and tested with a reboot (issue #75). A stop and a start from outside the VM (2026-11-16 at 22:49 UTC to 2026-11-17 at 07:38 UTC) brought every service back with no ordering cycle.
 - Confirm `docs/WORKFLOWS.md` (O12). B2 and B4 depend on it.
 - Delete or keep `docs/FIRST-PROMPT.md`.

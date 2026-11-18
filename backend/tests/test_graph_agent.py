@@ -525,10 +525,30 @@ def test_a_429_is_counted_in_the_llm_event(rig: Rig) -> None:
         status_code = 429
 
     rig.start()
-    rig.fake.replies += [Limited("HTTP 429 body with the prompt")]
-    assert rig.say("hi") == FALLBACK
-    [failed] = [e for e in rig.events() if e.stage == "llm" and "error" in e.outputs]
-    assert failed.outputs == {"error": "HTTP 429", "rate_limited": 1}
+    rig.fake.replies += [Limited("HTTP 429 body with the prompt")] * 4
+    assert rig.say("hi") == FALLBACK  # three more tries, then the fallback
+    failed = [e for e in rig.events() if e.stage == "llm" and "error" in e.outputs]
+    assert [e.outputs for e in failed] == [{"error": "HTTP 429", "rate_limited": 1}] * 4
+    assert [e.title for e in failed][2:] == [
+        "Model busy, next try in 0 s",
+        "Model call failed",
+    ]
+
+
+def test_after_a_429_the_agent_waits_and_the_customer_gets_the_answer(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Limited(Exception):
+        status_code = 429
+
+    waited: list[float] = []
+    monkeypatch.setattr("app.agent.graph.WAITS_429", (5.0, 10.0, 20.0))
+    monkeypatch.setattr("app.agent.graph.time.sleep", waited.append)
+    rig.start()
+    rig.fake.replies += [Limited(), Limited(), text(GOOD)]
+    assert rig.say("hi") == GOOD
+    assert waited == [5.0, 10.0]
+    assert fallback_reasons(rig) == []
 
 
 def test_every_model_call_is_one_llm_event_with_model_duration_and_tokens(

@@ -302,7 +302,7 @@ def test_a_whole_page_as_snippet_proves_nothing() -> None:
 def test_a_mixed_up_field_with_a_true_snippet_is_stored_known_limit() -> None:
     """840.00 is on the page (a line item), so this wrong trip price passes the
     checks. The snippet proves that the text is there, not that it is the right
-    field (D78): the evaluation measures it."""
+    field (D80): the evaluation measures it."""
     answer = answer_from(BOOKING, trip_price=840.0)
     answer["snippets"]["trip_price"] = "840.00"
     out, _ = read(BOOKING, "booking_confirmation", answer)
@@ -488,7 +488,7 @@ def test_one_unconfirmed_line_empties_the_list_and_marks_the_total(
     change: dict[str, Any],
 ) -> None:
     """An incomplete list would look complete to T003 and the settlement: the
-    reader stores none and puts the total below the routing threshold (D78)."""
+    reader stores none and puts the total below the routing threshold (D80)."""
     lines = expected_lines()
     lines[1] = {**lines[1], **change}
     out = invoice(lines)
@@ -515,14 +515,14 @@ def test_a_line_with_only_nulls_is_dropped() -> None:
 
 def test_no_line_read_is_an_empty_list_with_no_mark() -> None:
     """[] says "no line read" (D77). A line that the model skips is not seen: the
-    reader cannot know it (D78, known limit)."""
+    reader cannot know it (D80, known limit)."""
     out = invoice([])
     assert out.line_items == [] and confidence(out, "total") == VERIFIED
 
 
 def test_with_no_total_an_incomplete_list_leaves_no_mark_known_limit() -> None:
     """Nothing in the Extraction can say "lines incomplete" when there is no
-    total to mark (D78): the list is empty and the fields keep their confidence."""
+    total to mark (D80): the list is empty and the fields keep their confidence."""
     lines = expected_lines()
     lines[1] = {**lines[1], "amount": 400.0}
     answer = answer_from(INVOICE, total=None)
@@ -619,7 +619,7 @@ def test_the_same_value_on_two_pages_is_no_conflict() -> None:
 
 def test_a_document_with_no_page_read_gives_no_field_known_limit() -> None:
     """Every page failed: no field is stored, so no field can carry the mark. The
-    Reader contract cannot say "not read" (D78): the base sees a document with
+    Reader contract cannot say "not read" (D80): the base sees a document with
     no fields, and a check that needs one of them skips."""
     stub = Stub(ANSWER, 500, 500, 500)
     out = stub.reader().extract(doc(), BOOKING.read_bytes(), "travel")
@@ -778,7 +778,7 @@ def refs(node: Any) -> Iterator[str]:
 
 
 def test_each_request_asks_for_json_that_follows_a_schema() -> None:
-    """The hosted endpoint accepts response_format json_schema (spike, D78): the
+    """The hosted endpoint accepts response_format json_schema (spike, D80): the
     form of the answer is forced, not only asked."""
     _, stub = read(INVOICE, "repair_invoice", answer_from(INVOICE))
     classify, page = (r["response_format"] for r in stub.requests)
