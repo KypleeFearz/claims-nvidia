@@ -99,6 +99,68 @@ What the numbers say:
 
 The only 429 answers came from Lightning: 2 of them in one run, after 34 model calls in the 60 seconds before. The client retried after 1 s and the second try worked. About 40 requests per minute looks like the limit of the key, but the limit is not documented: measure again before the event. A claim file makes 17 to 23 model calls, so two visitors at the same time can reach it.
 
+## Omni reader on claim file 1 (issue #18)
+
+Date: 2026-11-17. Decision D80. `OmniReader` (`backend/app/docintel/omni.py`), model `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` at `https://integrate.api.nvidia.com/v1` (`VLM_MODEL`, `VLM_BASE_URL`), free developer key. One call to classify (page 1), then one call per page. Each page is the full page as a PNG at 150 DPI (1241 x 1754 px for A4). `response_format` `json_schema` (strict), the schema also in the prompt. Thinking off (`chat_template_kwargs.enable_thinking: false`), temperature 0.2, `max_tokens` 2048. Mock data only.
+
+Commands (need `NVIDIA_KEY` in `.env` at the repository root):
+
+- Request formats (spike): `cd backend && uv run python ../scripts/probe_omni.py format`
+- Fields of claim file 1, and the claim through the API (local mode, `CLAIMS_READER=omni`): `cd backend && uv run pytest -m live tests/test_omni_live.py -k claim_file_1 -s`
+- The reader contract on every mock file: `cd backend && uv run pytest -m live tests/test_omni_live.py -k contract`
+
+### Request formats (spike, one call each, page 1 of the booking of claim file 1)
+
+| Variant | HTTP | Seconds | Answer |
+|---|---|---|---|
+| Schema in the prompt only | 200 | 6.5 | valid JSON, valid values |
+| `response_format` `json_schema` | 200 | 4.9 | valid JSON, valid values |
+| `response_format` `json_object` | 200 | 5.1 | valid JSON, valid values |
+| `nvext.guided_json` | 400 | | field not supported |
+| Thinking on (schema in the prompt) | 200 | 41.8 | cut before the JSON: no valid answer |
+| A JPEG phone photo (receipt) | 200 | 3.5 | valid JSON |
+
+One call per variant: the seconds show no real difference between the first three. `json_schema` is chosen because the endpoint forces the form of the answer. The snippet that the model gives for `line_items` (the whole table) is not on the page; the reader does not use it (it confirms each line on the page text).
+
+### Claim file 1: 3 runs, measured
+
+| Document | Field | Result (same in the 3 runs) | Source stored |
+|---|---|---|---|
+| Booking | `booking_reference` | **missing** | none (refused, see below) |
+| | `departure_date` | right | page 1, snippet checked on the text layer |
+| | `trip_price` | right | page 1, snippet checked |
+| | `traveller_name` | right | page 1, snippet checked |
+| Cancellation | `booking_reference` | right | page 1, snippet checked |
+| | `cancellation_date` | right | page 1, snippet checked |
+| | `refund_received` | right | page 1, snippet checked |
+| Medical certificate | `patient_name` | right | page 1, snippet checked |
+| | `cause` | **wrong** | page 1, snippet checked |
+| | `unfit_from` | right | page 1, snippet checked |
+
+- **Fields: 8 right, 1 wrong, 1 missing, out of 10**, in each of the 3 runs.
+- **Line items: 6 of 6 right** (3 of the booking, 3 of the cancellation; 0 expected and 0 read on the certificate). Seen in run 1 and in a fourth run of the field test; runs 2 and 3 did not print them.
+- **Sources:** every stored field has page 1 (right) and a snippet that the reader found on the text layer of the page, holding the value: confidence 0.9 for all 9. No stored source was invented. The three PDFs have a text layer, so no field has a whole-page box.
+- **Why `booking_reference` is missing on the booking:** the model read the right value (`WPR-482913`) but gave the title of the page (`Booking confirmation`) as its snippet, in every run. The snippet does not hold the value, so the reader refuses the field (D80 (3)). The reader does not search the page for the value itself: that would replace the evidence of the model with a guess of the reader.
+- **Why `cause` is wrong:** the expected value is a category (`illness`, from "acute illness"). The model gave the diagnosis printed on the page (`gastroenteritis with fever`), with a true snippet. The schema has no field descriptions yet (D77 (5)). The snippet check cannot catch it: the text is on the page (the limit "true text, wrong meaning" of D80 (3)).
+- **Seconds per page** (one-page documents, classify and read together, 12 samples: 3 documents x 4 runs): median **5.5 s**, range 2.3 to 12.9 s. Booking about 6 s, cancellation about 5.6 s, certificate about 2.6 s. The live contract run: 210 s for the 35 mock files and the junk bytes (about 6 s per file).
+- **Outcome through the API** (local mode, scripted agent, `CLAIMS_READER=omni`): **`straight_through`, score 0, no signal, no routing reason, in the 3 runs.** The fixture reader gives the same. It is right for the right reasons: every field that the routing reads was right and checked (`departure_date` and `cancellation_date` for C002; `trip_price` and `refund_received` for C003 and the settlement; the names for the consistency check; `unfit_from` for the incident date). The two errors are in fields that no check reads (the cause of the claim comes from the words of the customer, not from the certificate).
+- **Contract:** `check_reader_contract(OmniReader())` passed (35 mock files, about 70 model calls, no refused request).
+- **Running backend, through the endpoints of the UI** (uvicorn with `CLAIMS_MODE=local`, `CLAIMS_READER=omni`, one more run): the 3 uploads were read; `GET /claims/{id}` (the pipeline panel) holds the same 9 fields, each with its document id, page 1 and its snippet; the outcome is `straight_through`, status `paid`; the customer reads "Your claim is validated." The Reader bench (`POST /bench/read`) shows `booking_reference` of the booking as "missing" and `cause` as "wrong", and 3 of 3 line items twice. The page in a browser was not looked at in this check.
+- **In the browser** (Nikola, by hand, `scripts/dev.sh` with `CLAIMS_READER=omni`): Anna Keller, policy TRV-2026-0417, the 3 PDFs uploaded. The 3 documents were classified right; the claim was validated with CHF 1,840.00 less the refund of CHF 340.00 = CHF 1,500.00; the customer read "Your claim is validated."
+
+### Rate limit of the free key with Omni (O15, second measure)
+
+`cd backend && uv run python ../scripts/probe_omni.py rate --per-minute 60 --max 80`: tiny text requests (4 tokens, thinking off), one at a time at a fixed pace, no retry, stop at the first error. 2026-11-17, 16:38:08 to 16:39:29 UTC: **80 answers 200 in 80.5 s, no 429** (about 60 in each 60 s window). So the limit for this model and key is above 60 requests per minute over 80 s; this run gives no upper bound. Not measured: requests with images (a limit on tokens would not show), a longer window, two visitors at the same time. The first measure (about 40 per minute) came from Lightning: the limit can differ per model.
+
+### Limits of this measure
+
+- One claim file, three clean PDFs with a text layer. Scans, photos, other types and the full kit are not measured here (issue #19).
+- A right outcome does not prove the reading right: a missing field makes some checks skip in silence (for example, no `refund_received` skips C003).
+- The confidences 0.9 and 0.5 are labels, not measured probabilities (D80 (4)).
+- The model can give a wrong field with a true snippet (for example a line amount as the trip price); here it did not, on these three files.
+- The results of the model can change from run to run; here the fields were the same in the 3 runs.
+- The 3 runs above came before the review fixes of 2026-11-17 (D80 (3), (8), (11), (12)). One more live run after the fixes (claim file 1 through the API, 6 model calls): the same result, 8 of 10 fields right (the same missing and wrong field), 6 of 6 line items, every source checked at 0.9, `straight_through`, status `paid`; classify 1.0 to 1.2 s and read 2.4 to 4.8 s per call, 14.9 s for the whole claim. The page and pixel limits do not touch claim file 1 (three one-page A4 PDFs). The whole-number rule for snippets is stricter (it refuses a snippet that cuts a number, for example `CHF 1,840` taken from `CHF 1,840.00`), but it refused no snippet of this run: the old rule and the new rule gave the same answer for each of the 10 snippets that the model gave. Offline, the 90 snippets of the answer keys of the mock PDFs with a text layer all pass too. One run only: the change from run to run is not measured.
+
 ## Other things seen
 
 - One run of the first measure ended with 11 model calls failing at once (about 0 s each) after a 74 s call. Its cause is not known: the error text was not kept. The later runs kept the reason of every failure (`fallback` events); the only failure in 36 claims was one 60 s timeout. Not reproduced.

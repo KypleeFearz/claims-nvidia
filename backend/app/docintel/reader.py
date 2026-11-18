@@ -30,5 +30,8 @@ def get_reader() -> Reader:
         from app.docintel.fixture import FixtureReader
 
         return FixtureReader()
-    # the intern adds his reader here, e.g. "omni"
-    raise ValueError(f"unknown CLAIMS_READER {name!r} (known: fixture)")
+    if name == "omni":
+        from app.docintel.omni import OmniReader
+
+        return OmniReader()
+    raise ValueError(f"unknown CLAIMS_READER {name!r} (known: fixture, omni)")
