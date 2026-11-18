@@ -132,7 +132,7 @@ def test_a_json_int_is_an_amount_and_a_date_string_is_a_date() -> None:
         {"trip_price": True},
         {"departure_date": "10.08.2026"},
         {"departure_date": 20260810},
-        {"iban": "CH93 0076 2011 6238 5295 7"},
+        {"iban": "MOCK-ACCT-0001"},
     ],
     ids=["string-amount", "bool-amount", "swiss-date", "int-date", "unknown-key"],
 )
@@ -308,7 +308,7 @@ def test_a_fixture_without_a_field_means_null() -> None:
 
 def test_a_fixture_with_an_unknown_name_is_still_refused() -> None:
     expected = _booking_fixture()
-    extra = {"name": "iban", "value": "CH93 0076 2011 6238 5295 7"}
+    extra = {"name": "iban", "value": "MOCK-ACCT-0001"}
     expected["fields"] = [*expected["fields"], extra]
 
     with pytest.raises(ValidationError) as caught:
