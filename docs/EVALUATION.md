@@ -299,6 +299,96 @@ A missing value is a field that is absent, `null` or blank text, or a field of a
 
 The 3 runs gave the same numbers: accuracy, verified accuracy and pass rate 100% in each. Each of the 11 document types is at 100%. Seconds per document: below 0.001 s (the fixture reader reads a hash); one run of the 35 documents took 0.02 to 0.03 s. This result tests the harness, not a model: the fixture reader returns the answer keys. `backend/tests/test_evaluate.py` checks the 100% in CI, and gives the harness readers that are wrong on purpose (a wrong amount, a missing field, a null, a wrong page, a source of another document, a field given twice, a reader that raises, a broken answer key): each one is counted as wrong or missing, never as right.
 
-### Result: Omni reader
+### Result: Omni reader, 3 runs
 
-Not measured yet. The live run calls the NVIDIA endpoint and needs the approval of Nikola.
+Date: 2026-11-18. Three runs on the 35 documents of the kit, one call at a time, with the free developer key, from a Windows laptop on a home network. Mock data only.
+
+Commands (in `backend/`, with `NVIDIA_KEY`, `VLM_BASE_URL` and `VLM_MODEL` in `.env` at the root):
+
+1. Run 1, 15:44 to 15:47 UTC: `uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 1 --output .dev-data/evaluation/omni-run-1.json`
+2. Runs 2 and 3, 16:12 to 16:18 UTC: `uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 2 --output .dev-data/evaluation/omni-runs-2-3.json`
+3. The three runs in one report, with no model call: `uv run python -m app.docintel.evaluate --combine .dev-data/evaluation/omni-run-1.json .dev-data/evaluation/omni-runs-2-3.json --output .dev-data/evaluation/omni-3-runs.json`
+
+Settings kept fixed. They are the settings of `OmniReader` of #18, unchanged, and the report records them:
+
+- model `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`, at `https://integrate.api.nvidia.com/v1`
+- `response_format` `json_schema` (strict), thinking off, temperature 0.2, `max_tokens` 2048
+- 150 DPI, one call to classify (page 1), then one call per page
+- at most 10 pages and 16 MP per image, timeout 90 s, 2 retries
+- prompt version 1 (`EXTRACT` and `CLASSIFY` in `omni.py`)
+
+The request bodies of all 198 calls held the same model, temperature, `max_tokens`, thinking and response format (`settings.sent`). `omni.py` did not change between the runs: git shows no change since #121, and runs 2 and 3 record its fingerprint `d84bcd22…bef4`. Run 1 was written before the harness recorded a fingerprint; `--combine` notes it in `combine_notes`.
+
+**The four measures** (each run gives one value; the counts are added over the 3 runs):
+
+| Measure | Mean | Lowest | Highest | Counts over the 3 runs |
+|---|---|---|---|---|
+| Field accuracy (right values / expected fields) | 84.9% | 84.9% | 84.9% | 336 right, **24 wrong**, **36 missing** of 396 |
+| Strict document pass rate (every field right and on its page) | 48.6% | 48.6% | 48.6% | 51 of 105 |
+| Classification (type right) | 88.6% | 88.6% | 88.6% | 93 of 105 |
+| Line items (lines right / lines expected) | 72.6% | 72.6% | 72.6% | 159 of 219 |
+| Source page right (of the values read) | 100% | 100% | 100% | 360 of 360 |
+| Seconds per document | 5.45 | 5.35 | 5.50 | median 5.09, lowest 0.87, highest 12.05 |
+
+Per run: 112 right, 8 wrong, 12 missing of 132 fields; 17 of 35 documents all right; 31 of 35 types right; 53 of 73 lines right. One run took 187 to 193 s.
+
+**By document kind** (counts over the 3 runs; each kind gave the same accuracy in each run):
+
+| Kind | Documents per run | Right | Wrong | Missing | Accuracy | All right | Lines right | Seconds per document |
+|---|---|---|---|---|---|---|---|---|
+| Clean | 26 | 231 | 18 | 33 | 81.9% | 33 of 78 | 159 of 159 | 4.99 |
+| Scan | 6 | 69 | 6 | 0 | 92.0% | 12 of 18 | 0 of 42 | 7.82 |
+| Phone photo | 3 | 36 | 0 | 3 | 92.3% | 6 of 9 | 0 of 18 | 4.69 |
+
+**By document type** (counts over the 3 runs; the lowest and the highest run when they differ):
+
+| Type | Documents per run | Accuracy | Right | Wrong | Missing | All right | Lines right | Seconds per document |
+|---|---|---|---|---|---|---|---|---|
+| cancellation_confirmation | 3 | 100% | 27 | 0 | 0 | 9 of 9 | 27 of 27 | 6.24 |
+| repair_invoice | 4 | 100% | 60 | 0 | 0 | 12 of 12 | 24 of 48 | 7.24 |
+| repair_quote | 2 | 96.7% (90% to 100%) | 29 | 0 | 1 | 5 of 6 | 24 of 24 | 7.01 |
+| medical_invoice | 3 | 93.3% | 42 | 0 | 3 | 6 of 9 | 30 of 45 | 8.44 |
+| receipt | 6 | 93.1% (91.7% to 95.8%) | 67 | 0 | 5 | 13 of 18 | 18 of 30 | 4.74 |
+| luggage_report | 2 | 87.5% | 21 | 0 | 3 | 3 of 6 | | 3.48 |
+| booking_confirmation | 5 | 80.0% | 48 | 0 | 12 | 3 of 15 | 36 of 45 | 7.74 |
+| police_report | 2 | 75.0% | 18 | 6 | 0 | 0 of 6 | | 4.36 |
+| medical_certificate | 2 | 66.7% | 12 | 6 | 0 | 0 of 6 | | 4.42 |
+| medical_report | 2 | 50.0% | 12 | 12 | 0 | 0 of 6 | | 3.82 |
+| damage_photo | 4 | 0% | 0 | 0 | 12 | 0 of 12 | | 1.10 |
+
+**The weakest fields** (over the 3 runs):
+
+| Field | Right | Wrong | Missing | What the report shows |
+|---|---|---|---|---|
+| `damage_photo.damage_description` | 0 of 12 | 0 | 12 | The reader does not read a damage photo (issue #25). `classify` also gives `unknown` for all 4 photos: these are the 12 type errors. |
+| `medical_certificate.cause` | 0 of 6 | 6 | 0 | The diagnosis ("gastroenteritis with fever"), not the category `illness`. |
+| `medical_report.diagnosis` | 0 of 6 | 6 | 0 | The right diagnosis with one more sentence ("… No fracture on the X-ray."). The text rule has no fuzzy match. |
+| `medical_report.provider` | 0 of 6 | 6 | 0 | The name of the doctor, not the clinic. |
+| `police_report.offence` | 0 of 6 | 6 | 0 | "Burglary (forced entry)", not `burglary`. |
+| `booking_confirmation.booking_reference` | 3 of 15 | 0 | 12 | Refused on the 4 clean PDFs: the model gives the page title as its snippet (as in #18). Right on the scan, where no text layer can refuse it. |
+| `receipt.amount_paid` | 13 of 18 | 0 | 5 | Missing on the trolley receipt in the 3 runs, and on the lock-set receipt in runs 2 and 3. |
+| `medical_invoice.invoice_number` | 6 of 9 | 0 | 3 | Missing on the clean medical invoice of Lukas in each run. |
+| `luggage_report.airline` | 3 of 6 | 0 | 3 | Missing on the phone photo in each run. |
+| `repair_quote.total` | 5 of 6 | 0 | 1 | Missing on the quote of Anna in run 1 only. |
+
+**Line items**: every line of the clean PDFs is right (159 of 159). No line is read on a scan or a photo (0 of 60): the reader keeps the lines only when it can confirm each one on the text layer of the page (D80 (6)), and a scan or a photo has none.
+
+**HTTP**: 198 requests (66 per run: 35 to classify, 31 to read a page; a damage photo is not read), every answer 200. No 429, no other error status, no transport error, no reader error. One call at a time is about 20 requests per minute.
+
+**Variation between runs**: the totals are the same in the 3 runs, but 2 of the 132 field results changed: `amount_paid` of the lock-set receipt (right in run 1, missing in runs 2 and 3) and `total` of the quote of Anna (missing in run 1, right in runs 2 and 3). The two changes cancel out in the totals. So the run-to-run variation is at least 2 fields of 132, and a change of #20 that moves the accuracy by one or two fields is not a gain.
+
+**What the numbers say**:
+
+- The 24 wrong values are all text fields where the answer key holds a short category or the clinic, and the model gives what the page prints. No amount, no date and no identifier was wrong. A wrong amount is the costly error, and there is none.
+- Most of the 36 missing values are refused snippets (`booking_reference`) and documents that the reader does not read (damage photos). A missing value goes to a person.
+- The strict pass rate (48.6%) is much lower than the field accuracy (84.9%): one weak field fails the whole document.
+- Scans and photos have a better field accuracy than the clean PDFs (92% against 81.9%). With no text layer, the reader cannot refuse a snippet, and the source is a box of the whole page (D80 (3)). Their values are stored at confidence 0.5, so a person checks them.
+
+**Limits of this measure**:
+
+- Every document of the kit has one page, so "source page right" is 100% by construction here. The wrong page and an invalid source are tested only offline (`backend/tests/test_evaluate.py`).
+- 35 mock documents, generated by our own script, with one layout per type: a real document is harder.
+- Three runs in one afternoon, on one network; the endpoint load changes with the hour.
+- Four of the ten weakest fields (`cause`, `offence`, `diagnosis`, `provider`) raise one question: which value is right, the text that the page prints or the value of the answer key (a category such as `illness` or `burglary`, a short diagnosis, the clinic and not the doctor). That is a question for #20 (field descriptions) and for Paul, not for the harness.
+- Business numbers ("Play the kit") with the Omni reader is not run yet.
+- The reports are in `backend/.dev-data/evaluation/` on the laptop, not in git. SHA-256: `omni-run-1.json` `4d1535ff…7227`, `omni-runs-2-3.json` `0e01a924…0a45`.
