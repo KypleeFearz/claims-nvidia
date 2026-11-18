@@ -25,6 +25,7 @@ from app.docintel.reader import get_reader
 from app.handler import AUTHORITY, HANDLERS, BadDecision, decide
 from app.investigation import NotAllowed, add_note, set_task
 from app.lifecycle import IllegalMove
+from app.metrics import router as metrics_router
 from app.models import Claim, ClaimStatus, Customer, Document, Message, Policy
 from app.numbers import router as numbers_router
 from app.payment import ExportRecord, export_record
@@ -532,6 +533,7 @@ def create_app() -> FastAPI:
     app.include_router(demo_router)
     app.include_router(bench_router)
     app.include_router(numbers_router)
+    app.include_router(metrics_router)
     app.mount("/mcp", mcp_endpoint)
     return app
 

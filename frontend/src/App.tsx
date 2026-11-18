@@ -7,6 +7,7 @@ import Demo from './Demo'
 import HandlerDesk from './HandlerDesk'
 import { HealthRows, useHealth } from './Health'
 import { Icon, type IconName } from './Icon'
+import Metrics from './Metrics'
 import ReaderBench from './ReaderBench'
 
 // What every page can read: the claim of the demo, the reset round and the backend mode.
@@ -20,6 +21,7 @@ const PAGES: Page[] = [
   { id: 'numbers', label: 'Business numbers', icon: 'trend-up', render: () => <BusinessNumbers /> },
   { id: 'map', label: 'Map', icon: 'grid', render: () => <ClaimMap /> },
   { id: 'bench', label: 'Reader bench', icon: 'list', render: () => <ReaderBench /> },
+  { id: 'metrics', label: 'Metrics', icon: 'layers', render: () => <Metrics /> },
 ]
 
 function useTheme() {
