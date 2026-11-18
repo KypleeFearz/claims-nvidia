@@ -16,6 +16,8 @@ What counts as right, the pass rate and the line items: `docs/EVALUATION.md`.
 """
 
 import argparse
+import hashlib
+import inspect
 import json
 import logging
 import os
@@ -24,6 +26,7 @@ import statistics
 import sys
 import tempfile
 import time
+import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -287,7 +290,6 @@ def _with_shares(c: dict[str, Any]) -> dict[str, Any]:
 
 
 COUNTS: tuple[str, ...] = ("expected", "right", "wrong", "missing", "extra", "read")
-COUNTS = ("expected", "right", "wrong", "missing", "extra", "read")
 COUNTS += ("page_right", "verified")
 
 
@@ -397,21 +399,27 @@ def _aggregate(docs: list[dict[str, Any]]) -> dict[str, Any]:
         if d["line_items"]["expected"] or d["line_items"]["read"]
     ]
     passed = sum(d["passed"] for d in docs)
+    classified = sum(d["classified_right"] for d in docs)
+    lines_expected = sum(li["expected"] for li in with_lines)
+    lines_right = sum(li["right"] for li in with_lines)
     return {
         "documents": {
             "count": len(docs),
             "passed": passed,
             "pass_rate": _share(passed, len(docs)),
             "errors": sum(d["error"] is not None for d in docs),
-            "classified_right": sum(d["classified_right"] for d in docs),
+            "classified_right": classified,
+            # the type that `classify` gives: apart from the fields and the pass rate
+            "classification_accuracy": _share(classified, len(docs)),
         },
         "fields": _sum_counts(d["counts"] for d in docs),
-        "line_items": {
+        "line_items": {  # apart from the fields and the pass rate
             "documents": len(with_lines),
             "documents_right": sum(li["all_right"] for li in with_lines),
-            "expected": sum(li["expected"] for li in with_lines),
+            "expected": lines_expected,
             "read": sum(li["read"] for li in with_lines),
-            "right": sum(li["right"] for li in with_lines),
+            "right": lines_right,
+            "accuracy": _share(lines_right, lines_expected),
         },
         "seconds": _timing([d["seconds"]["total"] for d in docs]),
     }
@@ -476,6 +484,8 @@ def _summary(overalls: list[dict[str, Any]]) -> dict[str, Any]:
         "verified_accuracy": lambda o: o["fields"]["verified_accuracy"],
         "page_accuracy": lambda o: o["fields"]["page_accuracy"],
         "pass_rate": lambda o: o["documents"]["pass_rate"],
+        "classification_accuracy": lambda o: o["documents"]["classification_accuracy"],
+        "line_item_accuracy": lambda o: o["line_items"]["accuracy"],
         "seconds_per_document": lambda o: o["seconds"]["mean"],
         "wrong": lambda o: o["fields"]["wrong"],
         "missing": lambda o: o["fields"]["missing"],
@@ -646,7 +656,7 @@ def evaluate(
     documents = kit()
     scored = [d for d in documents if d.key is not None]
     details: list[dict[str, Any]] = []
-    name = ""
+    name, code = "", None
     try:
         for run in range(1, runs + 1):
             if meter is not None:
@@ -655,15 +665,15 @@ def evaluate(
                 reader = make_reader()
             except Exception as e:  # no reader, no measure: no report at all
                 raise ReaderNotStarted(f"{type(e).__name__}: {e}"[:TEXT_CHARS]) from e
-            name = reader.name
+            name, code = reader.name, _code_fingerprint(reader)
             started, start = _now(), clock()
             results = [_score(reader, d, i, clock) for i, d in enumerate(scored, 1)]
             details.append(
                 {
                     "run": run,
+                    "run_id": uuid.uuid4().hex,  # one run is never counted twice
                     "started_at": started,
                     "seconds": round(clock() - start, 3),
-                    "overall": _aggregate(results),
                     "http": meter.snapshot() if meter is not None else None,
                     "documents": results,
                 }
@@ -671,27 +681,17 @@ def evaluate(
     finally:
         if meter is not None:
             meter.close()
-    every = [d for r in details for d in r["documents"]]
-    by_type = {
-        t: _aggregate(docs) | {"by_field": _by_field(docs)}
-        for t, docs in _group(every, "document_type").items()
-    }
-    kinds = _group(every, "kind")
-    order = [k for k in KINDS if k in kinds] + [k for k in kinds if k not in KINDS]
     kit_kinds: dict[str, int] = {}
     for d in documents:
         kit_kinds[d.kind] = kit_kinds.get(d.kind, 0) + 1
     # what the configuration says, and apart, what the request bodies really held
     sent = {"sent": meter.settings()} if meter is not None else {}
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "created_at": _now(),
-        "reader": name,
-        "command": command,
-        "settings": (settings or {"reader": name}) | sent,
-        "runs": runs,
-        "complete": len(scored) == len(documents),
-        "kit": {
+    return _report(
+        reader=name,
+        command=command,
+        settings=(settings or {"reader": name}) | sent,
+        code=code,
+        kit_info={
             "documents": len(documents),
             "by_kind": {k: kit_kinds[k] for k in sorted(kit_kinds, key=_kind_order)},
             "expected_fields": sum(len(d.key["fields"]) for d in scored if d.key),
@@ -699,9 +699,72 @@ def evaluate(
                 len(d.key.get("line_items", [])) for d in scored if d.key
             ),
         },
-        "answer_key_errors": [
+        key_errors=[
             {"document": d.id, "error": d.key_error} for d in documents if d.key is None
         ],
+        details=details,
+    )
+
+
+def _code_fingerprint(reader: Reader) -> str | None:
+    """SHA-256 of the source file of the reader class: its prompt, its settings and
+    its code. Line ends do not count (a Windows checkout has CRLF)."""
+    try:
+        source = inspect.getsourcefile(type(reader))
+    except TypeError:  # a class with no Python source
+        return None
+    if not source:
+        return None
+    data = Path(source).read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
+
+
+def _rescored(doc: dict[str, Any]) -> dict[str, Any]:
+    """The counts and the pass of one document, made again from its field rows: a
+    total never comes from a number that a file says."""
+    counts = _field_counts(doc["fields"], len(doc["extra"]))
+    passed = not doc["error"] and counts["verified"] == counts["expected"]
+    return doc | {"counts": counts, "passed": passed}
+
+
+def _report(
+    *,
+    reader: str,
+    command: str,
+    settings: dict[str, Any],
+    code: str | None,
+    kit_info: dict[str, Any],
+    key_errors: list[dict[str, Any]],
+    details: list[dict[str, Any]],
+    more: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The report from the results of each document of each run. Every total is
+    made here, from those results: a new run and a combination of saved runs give
+    the same numbers for the same results. The runs are numbered 1 to N."""
+    details = [
+        {"run": i, **{k: v for k, v in r.items() if k not in ("run", "overall")}}
+        | {"documents": (docs := [_rescored(d) for d in r["documents"]])}
+        | {"overall": _aggregate(docs)}
+        for i, r in enumerate(details, 1)
+    ]
+    every = [d for r in details for d in r["documents"]]
+    by_type = {
+        t: _aggregate(docs) | {"by_field": _by_field(docs)}
+        for t, docs in _group(every, "document_type").items()
+    }
+    kinds = _group(every, "kind")
+    order = [k for k in KINDS if k in kinds] + [k for k in kinds if k not in KINDS]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "created_at": _now(),
+        "reader": reader,
+        "command": command,
+        "settings": settings,
+        "reader_code_sha256": code,
+        "runs": len(details),
+        "complete": not key_errors,
+        "kit": kit_info,
+        "answer_key_errors": key_errors,
         "summary": _summary([r["overall"] for r in details]),
         "pooled": _aggregate(every)
         | {
@@ -712,7 +775,209 @@ def evaluate(
         },
         "http": _add_http([r["http"] for r in details]),
         "run_details": details,
-    }
+    } | (more or {})
+
+
+# ---------------------------------------------------------------- combine saved runs
+
+
+class BadCombine(ValueError):
+    """Saved reports that cannot be combined: the reason names the file."""
+
+
+TOP_KEYS: tuple[str, ...] = (
+    "reader",
+    "settings",
+    "runs",
+    "complete",
+    "kit",
+    "answer_key_errors",
+)
+TOP_KEYS += ("run_details",)
+DOC_KEYS: tuple[str, ...] = (
+    "id",
+    "document_type",
+    "kind",
+    "workflow",
+    "pages",
+    "classified_right",
+)
+DOC_KEYS += ("seconds", "error", "passed", "fields", "counts", "extra", "line_items")
+# the totals of a run that its documents must give again (raw counts, no share)
+TOTALS = {
+    "fields": COUNTS,
+    "documents": ("count", "passed", "errors", "classified_right"),
+    "line_items": ("documents", "documents_right", "expected", "read", "right"),
+}
+
+
+def _load_saved(path: Path) -> tuple[dict[str, Any], str]:
+    """A saved report, checked on its own: its form, and each total made again
+    from its documents. Returns the report and the SHA-256 of the file."""
+    name = path.name
+    try:
+        raw = path.read_bytes()
+    except OSError as e:
+        raise BadCombine(f"{name}: cannot be read ({type(e).__name__})") from None
+    try:
+        report = json.loads(raw.decode("utf-8"))
+    except ValueError as e:
+        raise BadCombine(f"{name}: not JSON ({e})"[:TEXT_CHARS]) from None
+    if not isinstance(report, dict) or report.get("schema_version") != SCHEMA_VERSION:
+        raise BadCombine(f"{name}: not an evaluation report of schema version 1")
+    for key in TOP_KEYS:
+        if key not in report:
+            raise BadCombine(f"{name}: `{key}` is missing")
+    runs = report["run_details"]
+    if not isinstance(runs, list) or not runs:
+        raise BadCombine(f"{name}: it holds no run")
+    if report["runs"] != len(runs):
+        plural = "run" if len(runs) == 1 else "runs"
+        raise BadCombine(
+            f"{name}: `runs` is {report['runs']} but it holds {len(runs)} {plural}"
+        )
+    if [r.get("run") if isinstance(r, dict) else None for r in runs] != list(
+        range(1, len(runs) + 1)
+    ):
+        raise BadCombine(f"{name}: the runs are not numbered 1 to {len(runs)}")
+    for r in runs:
+        where = f"{name}, run {r['run']}"
+        docs = r.get("documents")
+        try:
+            if not isinstance(docs, list) or not docs:
+                raise KeyError("documents")
+            for d in docs:
+                missing = [k for k in DOC_KEYS if k not in d]
+                if missing:
+                    raise KeyError(", ".join(missing))
+                again = _rescored(d)
+                if again["passed"] != d["passed"] or any(
+                    k in d["counts"] and again["counts"][k] != d["counts"][k]
+                    for k in COUNTS
+                ):
+                    raise BadCombine(
+                        f"{where}: {d['id']}: the counts do not match its fields"
+                    )
+            totals = _aggregate([_rescored(d) for d in docs])
+            stored = r.get("overall", {})
+        except (KeyError, TypeError, AttributeError) as e:
+            raise BadCombine(f"{where}: a document is malformed ({e})") from None
+        for part, keys in TOTALS.items():
+            for k in keys:
+                if k in stored.get(part, {}) and stored[part][k] != totals[part][k]:
+                    raise BadCombine(f"{where}: the totals do not match its documents")
+    return report, hashlib.sha256(raw).hexdigest()
+
+
+def _documents_signature(run: dict[str, Any]) -> list[Any]:
+    """What makes two runs comparable: the same documents, kinds, workflows and
+    pages, and the same answer keys (every expected value and page)."""
+    return [
+        (
+            d["id"],
+            d["document_type"],
+            d["kind"],
+            d["workflow"],
+            d["pages"],
+            d["line_items"]["expected"],
+            [
+                (f["name"], f["kind"], json.dumps(f["expected"]), f["expected_page"])
+                for f in d["fields"]
+            ],
+        )
+        for d in run["documents"]
+    ]
+
+
+def _run_identity(run: dict[str, Any]) -> str:
+    """The id of a run; a report written before the id existed: its content."""
+    if isinstance(run.get("run_id"), str):
+        return str(run["run_id"])
+    content = json.dumps([run.get("started_at"), run["documents"]], sort_keys=True)
+    return hashlib.sha256(content.encode()).hexdigest()
+
+
+def combine(paths: list[Path], command: str = "") -> dict[str, Any]:
+    """One report from the runs of saved reports, in the order of the files. No
+    reader runs. Raises BadCombine (and writes nothing) when a file cannot be used,
+    or when the reports were not made in the same conditions: the same reader,
+    settings and reader code, the same kit, documents and answer keys."""
+    if len(paths) < 2:
+        raise BadCombine("give two reports or more to combine")
+    seen_paths: set[Path] = set()
+    for p in paths:
+        if p.resolve() in seen_paths:
+            raise BadCombine(f"{p.name} is given twice")
+        seen_paths.add(p.resolve())
+    loaded = [(p.name, *_load_saved(p)) for p in paths]
+    by_hash: dict[str, str] = {}
+    for name, _, digest in loaded:
+        if digest in by_hash:
+            raise BadCombine(f"{by_hash[digest]} and {name} hold the same report")
+        by_hash[digest] = name
+
+    first_name, first, _ = loaded[0]
+    signature = _documents_signature(first["run_details"][0])
+    codes = [(n, r.get("reader_code_sha256")) for n, r, _ in loaded]
+    known = [(n, c) for n, c in codes if c is not None]
+    runs_seen: dict[str, str] = {}
+    for name, report, _ in loaded:
+        if report["reader"] != first["reader"]:
+            raise BadCombine(
+                f"{name}: the reader is {report['reader']}, not {first['reader']}"
+            )
+        if report["settings"] != first["settings"]:
+            raise BadCombine(f"{name}: the settings differ from {first_name}")
+        code = report.get("reader_code_sha256")
+        if code is not None and code != known[0][1]:
+            raise BadCombine(
+                f"{name}: the code of the reader differs from {known[0][0]}"
+            )
+        if any(report[k] != first[k] for k in ("kit", "complete", "answer_key_errors")):
+            raise BadCombine(f"{name}: the kit differs from {first_name}")
+        for r in report["run_details"]:
+            where = f"run {r['run']} of {name}"
+            if _documents_signature(r) != signature:
+                raise BadCombine(
+                    f"{name}, run {r['run']}: the documents or their answer keys "
+                    f"differ from {first_name}, run 1"
+                )
+            identity = _run_identity(r)
+            if identity in runs_seen:
+                raise BadCombine(f"{runs_seen[identity]} is also {where}")
+            runs_seen[identity] = where
+
+    notes = [
+        f"{name} has no fingerprint of the reader code (it was written before the "
+        "harness recorded it): its prompt and code are checked by its settings only."
+        for name, report, _ in loaded
+        if report.get("reader_code_sha256") is None
+    ]
+    details = [
+        r | {"source": {"report": name, "run": r["run"]}}
+        for name, report, _ in loaded
+        for r in report["run_details"]
+    ]
+    combined_from = [
+        {
+            "file": name,
+            "sha256": digest,
+            "created_at": report.get("created_at"),
+            "runs": report["runs"],
+            "reader_code_sha256": report.get("reader_code_sha256"),
+        }
+        for name, report, digest in loaded
+    ]
+    return _report(
+        reader=first["reader"],
+        command=command,
+        settings=first["settings"],
+        code=known[0][1] if known and not notes else None,
+        kit_info=first["kit"],
+        key_errors=first["answer_key_errors"],
+        details=details,
+        more={"combined_from": combined_from, "combine_notes": notes},
+    )
 
 
 def _kind_order(kind: str) -> tuple[int, str]:
@@ -736,16 +1001,22 @@ def dump(report: dict[str, Any]) -> str:
     return json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
 
 
-def save_report(report: dict[str, Any], folder: Path | None = None) -> Path:
-    """Writes `latest.json` and a copy named with the reader and the time. Returns
-    the path of the copy."""
+def report_paths(report: dict[str, Any], folder: Path | None = None) -> list[Path]:
+    """Where `save_report` writes: a copy named with the reader and the time, then
+    `latest.json`."""
     folder = folder or report_dir()
     stamp = re.sub(r"[^0-9TZ]", "", report["created_at"])
     reader = re.sub(r"[^a-z0-9_-]", "-", str(report["reader"]).lower()) or "reader"
+    return [folder / f"evaluation-{reader}-{stamp}.json", folder / "latest.json"]
+
+
+def save_report(report: dict[str, Any], folder: Path | None = None) -> Path:
+    """Writes `latest.json` and a copy named with the reader and the time. Returns
+    the path of the copy."""
+    copy, latest = report_paths(report, folder)
     text = dump(report)
-    copy = folder / f"evaluation-{reader}-{stamp}.json"
     _write_atomic(copy, text)
-    _write_atomic(folder / "latest.json", text)
+    _write_atomic(latest, text)
     return copy
 
 
@@ -802,12 +1073,26 @@ def summary_text(report: dict[str, Any]) -> str:
     added over the runs."""
     pooled, s = report["pooled"], report["summary"]
     kit_line = ", ".join(f"{k} {n}" for k, n in report["kit"]["by_kind"].items())
+    f, d, li = pooled["fields"], pooled["documents"], pooled["line_items"]
+    sec = s["seconds_per_document"]
     lines = [
         f"Reader {report['reader']}; {report['runs']} run(s); "
         f"{report['kit']['documents']} documents ({kit_line}); "
         f"{report['kit']['expected_fields']} expected fields per run",
-        f"Accuracy {_spread(s['accuracy'])}; pass rate {_spread(s['pass_rate'])}; "
-        f"seconds per document {_seconds(s['seconds_per_document']['mean'])}",
+        "Mean over the runs (lowest to highest); counts added over the runs:",
+        f"- Field accuracy: {_spread(s['accuracy'])}; {f['right']} right, "
+        f"{f['wrong']} wrong, {f['missing']} missing of {f['expected']}",
+        f"- Strict document pass rate (every field right and on its page): "
+        f"{_spread(s['pass_rate'])}; {d['passed']} of {d['count']}",
+        f"- Source page right (of the values read): {_spread(s['page_accuracy'])}; "
+        f"{f['page_right']} of {f['read']}",
+        f"- Classification (type right, apart): "
+        f"{_spread(s['classification_accuracy'])}; "
+        f"{d['classified_right']} of {d['count']}",
+        f"- Line items (by position, apart): {_spread(s['line_item_accuracy'])}; "
+        f"{li['right']} of {li['expected']} lines",
+        f"- Seconds per document: {_seconds(sec['mean'])} "
+        f"(runs {_seconds(sec['min'])} to {_seconds(sec['max'])})",
         "",
         "| " + " | ".join(HEAD) + " |",
         "|" + "---|" * len(HEAD),
@@ -815,10 +1100,11 @@ def summary_text(report: dict[str, Any]) -> str:
         *(_row(f"kind: {k}", a) for k, a in pooled["by_kind"].items()),
         *(_row(t, a) for t, a in pooled["by_type"].items()),
     ]
-    lines.append(
-        f"\nLine items (apart): {pooled['line_items']['right']} of "
-        f"{pooled['line_items']['expected']} lines right."
-    )
+    lines.append("")
+    if report.get("combined_from"):
+        files = ", ".join(x["file"] for x in report["combined_from"])
+        lines.append(f"Combined from {files}.")
+        lines += [f"Note: {n}" for n in report.get("combine_notes", [])]
     if report["http"] is not None:
         h = report["http"]
         lines.append(
@@ -840,12 +1126,19 @@ def _positive(text: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m app.docintel.evaluate",
-        description="Run a reader on every document of the kit and write a report.",
+        description="Run a reader on every document of the kit and write a report, "
+        "or combine the runs of saved reports (no reader runs then).",
     )
-    ap.add_argument("--reader", required=True, choices=sorted(READERS))
-    ap.add_argument("--runs", type=_positive, default=1, help="new reader per run")
+    what = ap.add_mutually_exclusive_group(required=True)
+    what.add_argument("--reader", choices=sorted(READERS))
+    what.add_argument(
+        "--combine", nargs="+", type=Path, metavar="FILE", help="saved reports"
+    )
+    ap.add_argument("--runs", type=_positive, help="new reader per run (default 1)")
     ap.add_argument("--output", type=Path, help="also write the report to this file")
     args = ap.parse_args(argv)
+    if args.combine and args.runs is not None:
+        ap.error("--runs does not go with --combine: the runs are in the files")
     # pypdf only counts the pages here; its warnings on a PDF it repairs (the
     # line ends of a Windows checkout) are not a result of the reader
     logging.getLogger("pypdf").setLevel(logging.ERROR)
@@ -853,15 +1146,25 @@ def main(argv: list[str] | None = None) -> int:
         sys.argv[1:] if argv is None else argv
     )
     try:
-        make, settings, meter = READERS[args.reader]()
-        report = evaluate(
-            make, args.runs, settings=settings, meter=meter, command=command
-        )
-    # RuntimeError: e.g. OmniReader with no NVIDIA_KEY; OSError, ValueError: a kit
-    # folder or an index.json that cannot be read. No report then.
+        if args.combine:
+            report = combine(args.combine, command)
+        else:
+            make, settings, meter = READERS[args.reader]()
+            report = evaluate(
+                make, args.runs or 1, settings=settings, meter=meter, command=command
+            )
+    # BadCombine: saved reports that cannot be combined; RuntimeError: e.g.
+    # OmniReader with no NVIDIA_KEY; OSError, ValueError: a kit folder or an
+    # index.json that cannot be read. No report then.
     except (RuntimeError, OSError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    inputs = {p.resolve() for p in args.combine or []}
+    targets = report_paths(report) + ([args.output] if args.output else [])
+    for target in targets:
+        if target.resolve() in inputs:  # a saved result is never written over
+            print(f"error: {target} is an input: nothing written", file=sys.stderr)
+            return 2
     copy = save_report(report)
     if args.output:
         try:

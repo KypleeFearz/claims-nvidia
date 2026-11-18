@@ -482,7 +482,7 @@ def test_the_same_reading_gives_the_same_report(
     def run() -> Json:
         report = evaluate(lambda: StubReader({}), clock=lambda: 0.0)
         for r in report["run_details"]:
-            r.pop("started_at")
+            r.pop("started_at"), r.pop("run_id")  # new for each run, by design
         return {k: v for k, v in report.items() if k != "created_at"}
 
     first = run()

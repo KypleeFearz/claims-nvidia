@@ -228,6 +228,7 @@ Date: 2026-11-18. Decision D81. The harness is `backend/app/docintel/evaluate.py
 - Fixture reader, no key, no network: `cd backend && uv run python -m app.docintel.evaluate --reader fixture`
 - Omni reader, three runs (needs `NVIDIA_KEY`, `VLM_BASE_URL` and `VLM_MODEL` in `.env` at the root): `cd backend && uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 3`
 - `--runs N` makes N runs, with a new reader for each run. `--output FILE` writes a second copy of the report.
+- Combine saved runs, with no reader and no model call: `cd backend && uv run python -m app.docintel.evaluate --combine FILE FILE ...`. It writes a new `latest.json` and a dated copy, and never writes over an input. See "Combine saved runs" below.
 - The command prints a markdown summary and writes the report to `backend/.dev-data/evaluation/latest.json`, with a copy named `evaluation-<reader>-<UTC time>.json`. `CLAIMS_EVALUATION` changes the folder. The write is atomic: the page never reads half a report.
 - Exit code 0: the report is written. Exit code 1: the report is written, but an answer key could not be read (`complete: false`). Exit code 2: no report, because the reader did not start (for example, Omni with no `NVIDIA_KEY`).
 - The reports are not in git (`.dev-data/` is in `.gitignore`). The numbers that count go into this file and into the pull request, with the command.
@@ -265,6 +266,23 @@ A missing value is a field that is absent, `null` or blank text, or a field of a
 - **Type**: the harness counts how many documents `classify` names right. The confusion table is issue #21.
 - **Failures**: a document whose reader raised stays in every denominator, with every field missing and the error in the report. A document whose `expected.json` is absent or broken cannot be scored: the report lists it in `answer_key_errors` and says `complete: false`.
 - **Runs**: each run has its own numbers (`run_details`). The page and the tables add the counts of all runs (`pooled`). `summary` gives the mean, the lowest and the highest value of each run, and the spread (highest − lowest).
+- **Four measures, kept apart.** Field accuracy (right values / expected fields), the strict document pass rate, classification (the type that `classify` names right / documents) and line items (lines right / lines expected) are four numbers. Only the first two are about the fields. The summary gives each one per run (mean, lowest, highest), and the page "Metrics" shows each in its own tile.
+
+### Combine saved runs
+
+`--combine FILE FILE ...` makes one report from the runs of two or more saved reports, in the order of the files. No reader runs and no model is called. Use it to add runs to a measure without making the first runs again.
+
+- **The numbers are made again from the rows.** For each document of each run, the counts and the pass are made again from its field rows. Then every total (per run, added, by type, by kind, by field) and the mean, lowest and highest are made from them. No percentage of a file is averaged.
+- **A file is checked on its own first.** It must be readable JSON of schema version 1, with `runs` equal to its number of runs, numbered 1 to N. The counts it states for each document and each run must match its rows. A file that fails is refused, with the file and the run in the message.
+- **The files must match each other.**
+  - the same reader and the same `settings` (the configuration, and the model settings that the requests held)
+  - the same fingerprint of the reader code, when the files hold one
+  - the same `kit`, `complete` and `answer_key_errors`
+  - in every run: the same documents, kinds, workflows and pages, and the same answer keys (every expected value and page)
+- **Duplicates are refused.** This covers a file given twice, two files with the same content (for example `latest.json` and its dated copy), and a run that is in two files.
+- **Fingerprint of the reader code.** Each new report holds `reader_code_sha256`: the SHA-256 of the source file of the reader (for Omni, `omni.py`, with its prompt, its settings and its code; line ends do not count). A report written before this existed has none. It is combined, and the combined report says so in `combine_notes`: its prompt and code are then checked by its settings only.
+- **Nothing is half done.** When the files are refused, the command writes nothing: `latest.json` stays as it was. The output must not be one of the input files.
+- The combined report holds `combined_from`: the name, the SHA-256, the date and the number of runs of each file. Each run keeps its own `run_id` and `started_at`, and its `source`: the file and the run number in that file.
 - **Seconds per document** = the time of `classify` plus `extract`, per document; the mean, median, lowest and highest.
 - **HTTP** (Omni only): an event hook of the HTTP client counts every request and every answer by status. A 429 that the reader retried is counted too, so `http_429` is the number of 429 answers. `settings.sent` lists the model settings that the request bodies held (model, temperature, `max_tokens`, thinking, response format). The report keeps no header, no key, no image and no answer of the model.
 

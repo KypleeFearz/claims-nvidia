@@ -199,7 +199,7 @@ an investigator, on a claim that is in_investigation (issue #92):
 
 - **The command** `cd backend && uv run python -m app.docintel.evaluate --reader <name> [--runs N]` runs a new reader in each run on every document of the kit (the list of `/demo/kit`). It calls `classify` and `extract` through the `Reader` contract and times each call. It touches no claim, no store and no gateway.
 - **The comparison** (`backend/app/docintel/compare.py`): the kind of each field comes from its schema of #17: amount, date, identifier or text. Each expected field is right, wrong or missing; the source page is checked apart.
-- **The report** is one JSON file, `backend/.dev-data/evaluation/latest.json` (`CLAIMS_EVALUATION`), with a dated copy. It is not in git. `GET /evaluation/latest` serves it as it is. The page "Metrics" shows it: one table per document kind, one per document type, one line per document.
+- **The report** is one JSON file, `backend/.dev-data/evaluation/latest.json` (`CLAIMS_EVALUATION`), with a dated copy. It is not in git. `--combine FILE ...` makes one report from the runs of saved reports, with no reader: every number is made again from the rows. `GET /evaluation/latest` serves it as it is. The page "Metrics" shows it: one table per document kind, one per document type, one line per document.
 - Not the same as the reader bench (one document, one read, for the eye) and the business numbers (what a reading error costs). The rules and the measured numbers: `docs/EVALUATION.md`.
 
 ## 6. Workflows

@@ -149,6 +149,8 @@ test('the report: the summary pills, the tiles and the range over the runs', asy
   expect(tile('Seconds per document')).toHaveTextContent('median 2.0 · max 5.7')
   expect(tile('Line items right')).toHaveTextContent('5 of 6')
   expect(tile('Line items right')).toHaveTextContent('scored apart: not in the field accuracy')
+  expect(tile('Type right')).toHaveTextContent('6 of 6')
+  expect(tile('Type right')).toHaveTextContent('classification, scored apart')
   expect(container).not.toHaveTextContent(/fraud|rejected/i)
 })
 

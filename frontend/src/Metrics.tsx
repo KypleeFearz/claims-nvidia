@@ -123,6 +123,11 @@ function Tiles({ report }: { report: Report }) {
         note={`median ${secs(pooled.seconds.median, 1)} · max ${secs(pooled.seconds.max, 1)}`}
       />
       <Tile label="Line items right" value={`${pooled.line_items.right} of ${pooled.line_items.expected}`} note="scored apart: not in the field accuracy" />
+      <Tile
+        label="Type right"
+        value={`${docs.classified_right} of ${docs.count}`}
+        note="classification, scored apart: not in the field accuracy or the pass rate"
+      />
     </div>
   )
 }
