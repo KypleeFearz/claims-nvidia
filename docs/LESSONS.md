@@ -102,3 +102,11 @@
 - A store with one SQLite connection needs the lock on every read, and `fetchall()` inside the lock. A read that returns the cursor and walks it later, outside the lock, mixes the rows of two requests. Two reads had no lock: the two oldest ones.
 - Without the lock the fault is not always an error: under load the requests can also block. A test for a race needs a time limit around it.
 - After the store, the next limit was the key of the model (issue #117): at five visitors, 21 answers 429. A retry must be as long as the window of the limit: the limit is per minute and the client retried for 1.5 seconds. Measure before and after: the correction gave 5 of 5 claims in place of 3 of 5, and it made the run two times slower.
+
+## Evaluation harness (issue #19, 2026-11-18)
+
+- Compare a value by the type of its field, not by the form of the value. The first rule (`compare` of the bench) scored `"1,840.00"` against `1840.0` as wrong, and `"001840"` against `"1840"` as right: an identifier read as a number loses its zeros.
+- The same total in three runs does not mean the same reading. The three Omni runs gave 112 of 132 fields each time, but 2 fields changed between the runs and cancelled out. Compare field by field before you say that two runs are equal.
+- Record what makes a run comparable from the first run: the settings that the requests really held, and a fingerprint of the reader code. The first Omni report was written before the fingerprint existed, and nothing in the file can prove its prompt later.
+- `test_no_auto_rejection.py` reads every backend file with the encoding of the platform. A non-ASCII character in a backend file (a typographic dash in a string) fails it on Windows only. Write such characters as `\u` escapes.
+- A reader that never raises hides an outage: with every request refused, its fields are only "missing". Count the HTTP answers next to the fields (`http` in the report), or an outage looks like a weak model.
