@@ -218,3 +218,69 @@ Date: 2026-11-17. The Brev VM, `sandbox` mode, `nvidia/nemotron-3.5-lightning-30
 - The sandboxes are not the limit: five at the same time started and worked. The limit is the key, about 40 model calls per minute (O15). A claim file makes 13 to 25 model calls.
 - After #117 the agent waits 5, 10 and then 20 seconds after a 429 and calls again. No visitor reads the fallback message, but a turn can take one minute, and five claim files take near three minutes.
 - For more than three visitors at the same time, the key needs a larger limit. Paul decided for the event: one visitor at a time at the stand (D79).
+
+## Evaluation harness of the reader (issue #19)
+
+Date: 2026-11-18. Decision D81. The harness is `backend/app/docintel/evaluate.py`. The rule for one value is `backend/app/docintel/compare.py`. The page "Metrics" shows the last report (`GET /evaluation/latest`).
+
+### Commands
+
+- Fixture reader, no key, no network: `cd backend && uv run python -m app.docintel.evaluate --reader fixture`
+- Omni reader, three runs (needs `NVIDIA_KEY`, `VLM_BASE_URL` and `VLM_MODEL` in `.env` at the root): `cd backend && uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 3`
+- `--runs N` makes N runs, with a new reader for each run. `--output FILE` writes a second copy of the report.
+- The command prints a markdown summary and writes the report to `backend/.dev-data/evaluation/latest.json`, with a copy named `evaluation-<reader>-<UTC time>.json`. `CLAIMS_EVALUATION` changes the folder. The write is atomic: the page never reads half a report.
+- Exit code 0: the report is written. Exit code 1: the report is written, but an answer key could not be read (`complete: false`). Exit code 2: no report, because the reader did not start (for example, Omni with no `NVIDIA_KEY`).
+- The reports are not in git (`.dev-data/` is in `.gitignore`). The numbers that count go into this file and into the pull request, with the command.
+
+### What is measured
+
+- **The kit.** Every PDF, JPG and PNG in `data/mock/<folder>/`: the same list as `/demo/kit` and the Reader bench. On 2026-11-18 that is 35 documents: 26 of the scenarios and 9 hard versions (6 scans, 3 phone photos). They hold 132 expected fields and 73 expected line items.
+- **Kind** (clean, scan, photo) comes from the list `hard` of `data/mock/index.json`. **Workflow** comes from the policy of the scenario; a hard version takes the scenario of its source document.
+- **Per document**, the harness calls `classify`, then `extract`, through the `Reader` contract, and times each call with `time.perf_counter`. It touches no claim, no store, no upload and no gateway.
+
+### When a value is right
+
+The kind of a field comes from its schema (#17), not from its value.
+
+| Kind | Fields | Right | Wrong |
+|---|---|---|---|
+| Amount | every `float` field (`trip_price`, `total`, ...) | The same value to the cent (half up). `1840`, `1840.0`, `"1,840.00"`, `"1'840.00"` and `Decimal("1840.00")` are the same. | Another cent value, another sign. A text that is not a plain number: a currency (`"CHF 1,840.00"`), a decimal comma (`"1.840,00"`), bad groups (`"1,84"`). NaN, infinity, a bool. |
+| Date | every `date` field | The same calendar day as `2026-08-10`, `10.08.2026`, `10.8.2026`, `10 August 2026`, `10 Aug 2026`, `10 Sept 2026` or `August 10, 2026`. | A slash date (`08/10/2026` is ambiguous), a two-digit year, `2026-8-10`, `20260810`, a day that does not exist, a date with a time. |
+| Identifier | a text named `*_number` or `*_reference` | The same characters. Case, outer spaces, Unicode forms and dash characters (`WPR‑482913` with U+2011) do not count. | A number in place of a text (`482913` loses a leading zero), an inner space, another character. `001840` is not `1840`. |
+| Text | any other text | The same text. Case, runs of spaces and dash characters do not count. | Another word, an accent (`Sanitär` is not `Sanitaer`), punctuation. There is no fuzzy match. |
+
+A missing value is a field that is absent, `null` or blank text, or a field of a reader that raised. A missing value is never right (except when the answer key itself is `null`: no field of the kit is).
+
+`compare` in `backend/app/bench.py` (D64) is not used here: it scores `"1,840.00"` against `1840.0` as wrong, the example of the issue, and `"001840"` against `"1840"` as right.
+
+### How the numbers are counted
+
+- **Right, wrong, missing** per expected field. These three add up to the expected fields. A wrong value and a missing value are always shown apart: a wrong amount can pay a claim, a missing one goes to a person.
+- **Extra**: a field that the answer key does not expect. It is counted apart and is not in the denominator. A name given twice with the same value is right (the document lists it in `duplicates`); with two values it is wrong.
+- **Accuracy** = right values / expected fields.
+- **Source page right**: of the values read, how many have a valid source on the expected page. A value read is a right or wrong value; a field that the answer key gives as `null` and that the reader does not give is right, but has no source to check. A valid source names this document, a page that exists, and a snippet or a box (non-negotiable 3). An invalid source is never "page right".
+- **Verified** = the value is right and its source is on the expected page. The value and the page are measured apart: a right value on the wrong page counts in the accuracy, but not as verified.
+- **Pass rate** = documents with every expected field verified, and with no error of the reader / documents. Extra fields, the type and the line items do not change it.
+- **Line items** are compared by position (description as text; quantity, unit price and amount to the cent), and reported apart: lines right / lines expected, and documents with every line right. They are not in the field accuracy and not in the pass rate.
+- **Type**: the harness counts how many documents `classify` names right. The confusion table is issue #21.
+- **Failures**: a document whose reader raised stays in every denominator, with every field missing and the error in the report. A document whose `expected.json` is absent or broken cannot be scored: the report lists it in `answer_key_errors` and says `complete: false`.
+- **Runs**: each run has its own numbers (`run_details`). The page and the tables add the counts of all runs (`pooled`). `summary` gives the mean, the lowest and the highest value of each run, and the spread (highest − lowest).
+- **Seconds per document** = the time of `classify` plus `extract`, per document; the mean, median, lowest and highest.
+- **HTTP** (Omni only): an event hook of the HTTP client counts every request and every answer by status. A 429 that the reader retried is counted too, so `http_429` is the number of 429 answers. `settings.sent` lists the model settings that the request bodies held (model, temperature, `max_tokens`, thinking, response format). The report keeps no header, no key, no image and no answer of the model.
+
+### Result: fixture reader
+
+`cd backend && uv run python -m app.docintel.evaluate --reader fixture --runs 3`, 2026-11-18, Windows laptop.
+
+| | Documents | Fields right | Wrong | Missing | Source page right | All right | Line items right |
+|---|---|---|---|---|---|---|---|
+| Clean | 26 | 94 of 94 | 0 | 0 | 94 of 94 | 26 of 26 | |
+| Scan | 6 | 25 of 25 | 0 | 0 | 25 of 25 | 6 of 6 | |
+| Photo | 3 | 13 of 13 | 0 | 0 | 13 of 13 | 3 of 3 | |
+| **All, per run** | **35** | **132 of 132** | **0** | **0** | **132 of 132** | **35 of 35** | **73 of 73** |
+
+The 3 runs gave the same numbers: accuracy, verified accuracy and pass rate 100% in each. Each of the 11 document types is at 100%. Seconds per document: below 0.001 s (the fixture reader reads a hash); one run of the 35 documents took 0.02 to 0.03 s. This result tests the harness, not a model: the fixture reader returns the answer keys. `backend/tests/test_evaluate.py` checks the 100% in CI, and gives the harness readers that are wrong on purpose (a wrong amount, a missing field, a null, a wrong page, a source of another document, a field given twice, a reader that raises, a broken answer key): each one is counted as wrong or missing, never as right.
+
+### Result: Omni reader
+
+Not measured yet. The live run calls the NVIDIA endpoint and needs the approval of Nikola.

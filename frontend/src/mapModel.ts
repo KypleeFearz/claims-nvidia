@@ -286,9 +286,17 @@ export const BOXES: MapBox[] = [
     status: 'yours',
     icon: 'trend-up',
     detail:
-      'Your numbers decide the prompt, the resolution and the model, and they support the request for GPU credits. scripts/measure_agent.py is the model for a measure script.',
-    files: ['data/mock/index.json', 'docs/EVALUATION.md', 'scripts/measure_agent.py'],
+      'Your numbers decide the prompt, the resolution and the model, and they support the request for GPU credits. The command python -m app.docintel.evaluate --reader <name> runs a reader on every document of the kit, several runs, and writes a JSON report: right, wrong and missing per field, the source page, the pass rate and the seconds per document. The page Metrics shows the last report. The comparison rules are in compare.py and docs/EVALUATION.md.',
+    files: [
+      'backend/app/docintel/evaluate.py',
+      'backend/app/docintel/compare.py',
+      'frontend/src/Metrics.tsx',
+      'backend/tests/test_evaluate.py',
+      'data/mock/index.json',
+      'docs/EVALUATION.md',
+    ],
     issues: [{ n: 19 }],
+    check: { cmd: 'cd backend && uv run python -m app.docintel.evaluate --reader fixture' },
   },
   {
     id: 'chain',

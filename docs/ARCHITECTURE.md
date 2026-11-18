@@ -121,7 +121,7 @@ The three modes share the tool gateway, the schemas, the rules and the UI. Only 
 
 ### 5a. Routes
 
-`GET /health`, `GET /customers`, `POST /claims`, `GET /claims` (the list of claims, for a handler: id, customer, policy, type, amount, status, outcome, score, reasons, opening time), `GET /customers/{id}/claims` (the claims of a customer, as customer views), `GET /handlers`, `GET /handlers/authority`, `POST /claims/{id}/decisions` (a decision of a handler), `GET /claims/{id}/export` (the record of a paid claim for the mock claims system), `GET /claims/{id}/history` (for the handler: the contact data of the customer, his earlier claims and the linked persons), `GET /claims/{id}` (the full claim, for the pipeline panel), `GET /claims/{id}/customer` (the customer view), `GET /claims/{id}/policies`, `PUT /claims/{id}/policy`, `GET` and `POST /claims/{id}/messages`, `POST /claims/{id}/documents`, `GET /claims/{id}/documents/{doc}/file`, `GET /claims/{id}/events` (the event stream), `GET /claims/{id}/sandbox`, `POST /claims/{id}/sandbox/probe`, `GET /numbers` and `POST /numbers/kit` (the business numbers, `backend/app/numbers.py`: the claims of the demo, and the kit played through the active reader), `POST /bench/read` (the reader bench: one kit document read by the active reader and compared with its `expected.json`; it calls the `Reader` contract only and stores nothing; `backend/app/bench.py`), and under `/demo`: `GET /kit`, `GET /scenarios`, `GET /kit/{folder}/{file}`, `POST /reset`. The MCP server of the sandbox is mounted at `/mcp/<token>`. The code is `backend/app/main.py` and `backend/app/demo.py`.
+`GET /health`, `GET /customers`, `POST /claims`, `GET /claims` (the list of claims, for a handler: id, customer, policy, type, amount, status, outcome, score, reasons, opening time), `GET /customers/{id}/claims` (the claims of a customer, as customer views), `GET /handlers`, `GET /handlers/authority`, `POST /claims/{id}/decisions` (a decision of a handler), `GET /claims/{id}/export` (the record of a paid claim for the mock claims system), `GET /claims/{id}/history` (for the handler: the contact data of the customer, his earlier claims and the linked persons), `GET /claims/{id}` (the full claim, for the pipeline panel), `GET /claims/{id}/customer` (the customer view), `GET /claims/{id}/policies`, `PUT /claims/{id}/policy`, `GET` and `POST /claims/{id}/messages`, `POST /claims/{id}/documents`, `GET /claims/{id}/documents/{doc}/file`, `GET /claims/{id}/events` (the event stream), `GET /claims/{id}/sandbox`, `POST /claims/{id}/sandbox/probe`, `GET /numbers` and `POST /numbers/kit` (the business numbers, `backend/app/numbers.py`: the claims of the demo, and the kit played through the active reader), `POST /bench/read` (the reader bench: one kit document read by the active reader and compared with its `expected.json`; it calls the `Reader` contract only and stores nothing; `backend/app/bench.py`), `GET /evaluation/latest` (the last report of the evaluation harness, for the page "Metrics": it reads one file and never runs a reader; `backend/app/metrics.py`), and under `/demo`: `GET /kit`, `GET /scenarios`, `GET /kit/{folder}/{file}`, `POST /reset`. The MCP server of the sandbox is mounted at `/mcp/<token>`. The code is `backend/app/main.py` and `backend/app/demo.py`.
 
 ### 5b. Claim lifecycle (issue #72)
 
@@ -193,6 +193,15 @@ an investigator, on a claim that is in_investigation (issue #92):
 - **The kit** (`POST /numbers/kit`): each story of `data/mock/index.json` is played with no agent model: the facts of the story from the index, each document through the active reader (`classify_document`, `extract_document`), then `run_checks`, `check_tampering`, `check_consistency` and `assess_and_route`, through a gateway built by `build_gateway` on a store in memory. The handler queue does not see these claims and no export file is written. Each story is compared with its expected outcome and signals, and with the amount of `data/mock/settlements.json`. One run at a time (a second one is a 409). A reader that raises gives a row with the error.
 - The kit run is right by construction with the fixture reader. With a real reader it shows what a reading error costs the business. The accuracy per field stays the evaluation harness of issue #19.
 
+### 5f. Evaluation of the reader (issue #19)
+
+`backend/app/docintel/evaluate.py`, page "Metrics", decision D81.
+
+- **The command** `cd backend && uv run python -m app.docintel.evaluate --reader <name> [--runs N]` runs a new reader in each run on every document of the kit (the list of `/demo/kit`). It calls `classify` and `extract` through the `Reader` contract and times each call. It touches no claim, no store and no gateway.
+- **The comparison** (`backend/app/docintel/compare.py`): the kind of each field comes from its schema of #17: amount, date, identifier or text. Each expected field is right, wrong or missing; the source page is checked apart.
+- **The report** is one JSON file, `backend/.dev-data/evaluation/latest.json` (`CLAIMS_EVALUATION`), with a dated copy. It is not in git. `GET /evaluation/latest` serves it as it is. The page "Metrics" shows it: one table per document kind, one per document type, one line per document.
+- Not the same as the reader bench (one document, one read, for the eye) and the business numbers (what a reading error costs). The rules and the measured numbers: `docs/EVALUATION.md`.
+
 ## 6. Workflows
 
 A workflow is declarative data plus rules: required documents, the claim schema, the rule set, the straight-through limit. One engine runs the three. First version: plain Python, state in SQLite. No Temporal (decision D20).
@@ -248,7 +257,7 @@ backend/app/
   stream.py     the event stream (server-sent events)
   agent/        graph (LangGraph, no store import), graph_agent (backend runner), scripted agent, handover, phrases (shared words and rules), model, sandbox (runner), sandbox_turn (the turn process in the image), sandbox_image (image build context), sandbox_panel (policy, denials, probe)
   tools/        tool gateway, one module per group of tools, guard (rule 1 of the routing), mcp_server
-  docintel/     reader contract, fixture reader (base); the Omni reader is the work of the intern
+  docintel/     reader contract, fixture reader (base); schemas, the Omni reader, the evaluation harness (evaluate, compare): the work of the intern
   workflows/    engine, property.py, health.py, travel.py
   checks/       rules, tampering, consistency
   fraud/        routing (score and outcome), report (template)
