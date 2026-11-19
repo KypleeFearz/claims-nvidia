@@ -146,3 +146,19 @@ def test_no_policy_no_proposal_and_no_claimed_amount_pays_the_documents() -> Non
     assert propose(travel_claim(policy=None)) is None
     out = propose(claim_with(policy(), claimed_amount=None))
     assert out is not None and out.payable == 1500.0 and out.needs_person == []
+
+
+def test_a_trip_with_no_refund_read_is_not_paid_with_no_person() -> None:
+    # a real reader can miss the field (pull request #122): the refund then counts
+    # as 0, and that is a guess that the system must not pay alone
+    docs = travel_documents()
+    docs[1] = document(
+        "D-cancel", "cancellation_confirmation", {"cancellation_date": "2026-08-04"}
+    )
+    proposal = propose(travel_claim(documents=docs, claimed_amount=1840.0))
+    assert proposal is not None
+    assert proposal.payable == 1840.0 - TRAVEL_POLICY.deductible
+    assert proposal.needs_person == ["No document gives the refund of the trip."]
+    # with the refund read, the same claim needs no person for this reason
+    read = propose(travel_claim(claimed_amount=1500.0))
+    assert read is not None and read.needs_person == []

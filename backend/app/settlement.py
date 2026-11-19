@@ -79,6 +79,8 @@ def _documented(claim: Claim) -> tuple[float | None, str, list[Source], bool]:
             return None, "", [], False
         used = [f.source for f in (price_f, refund_f) if f is not None]
         how = f"Trip price {price:,.2f} less the refund {refund:,.2f}."
+        if as_number(refund_f) is None:
+            how = f"Trip price {price:,.2f}. No document gives the refund."
         return price - refund, how, used, False
     for doc in claim.documents:
         if doc.document_type in INVOICES.get(claim.type or "", ()):
@@ -133,6 +135,12 @@ def propose(claim: Claim) -> Proposal | None:
     )
     if lines_differ:
         why.append("The lines of an invoice do not add up to its total.")
+    if claim.type == "travel" and claim.cause != "luggage":
+        refund = _field(claim, "refund_received", ("cancellation_confirmation",))
+        if as_number(refund) is None:
+            # a real reader can miss the field: a refund of 0 is then a guess, and
+            # the system does not pay a guess alone (found in pull request #122)
+            why.append("No document gives the refund of the trip.")
     amount = documented
 
     claimed = claim.claimed_amount
