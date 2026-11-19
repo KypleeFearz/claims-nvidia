@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
@@ -52,6 +52,9 @@ from app.docintel.compare import (
 from app.docintel.reader import Reader
 from app.models import Document, DocumentType, Extraction
 from app.store import CLAIM_TYPE
+
+if TYPE_CHECKING:  # omni is imported only when its reader runs
+    from app.docintel.omni import OmniSettings
 
 SCHEMA_VERSION = 1
 KINDS = ("clean", "scan", "photo")  # the order of the tables
@@ -503,7 +506,7 @@ class HttpMeter:
     no answer. Status codes are what the server answered: a 429 retried by the
     reader is counted too."""
 
-    BODY_KEYS = ("model", "temperature", "top_p", "max_tokens")
+    BODY_KEYS = ("model", "temperature", "top_p", "max_tokens", "reasoning_budget")
 
     def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
         self._transport = transport
@@ -514,6 +517,14 @@ class HttpMeter:
     def reset(self) -> None:
         self.requests = 0
         self.by_status: dict[str, int] = {}
+        # issue #20: the cost of a setting (tokens) and why the answers ended.
+        # `no_usage`: answers (200) with no prompt and completion counts, which add
+        # nothing; `no_reasoning`: answers with no reasoning count, so `reasoning`
+        # is the sum over the other answers only. A reported 0 is a count.
+        self.tokens = dict.fromkeys(
+            ("prompt", "completion", "reasoning", "no_usage", "no_reasoning"), 0
+        )
+        self.finish_reasons: dict[str, int] = {}
 
     def client(self, timeout: float) -> httpx.Client:
         c = httpx.Client(
@@ -546,6 +557,40 @@ class HttpMeter:
     def _response(self, response: httpx.Response) -> None:
         code = str(response.status_code)
         self.by_status[code] = self.by_status.get(code, 0) + 1
+        if response.status_code == 200:
+            self._answer(response)
+
+    def _answer(self, response: httpx.Response) -> None:
+        """Adds the token counts and the finish reason of a 200 answer. Only these
+        numbers and words are kept: never the content of the answer."""
+        try:
+            response.read()
+            body = response.json()
+        except ValueError:
+            body = None
+        body = body if isinstance(body, dict) else {}
+        usage = body.get("usage")
+        usage = usage if isinstance(usage, dict) else {}
+        details = usage.get("completion_tokens_details")
+        details = details if isinstance(details, dict) else {}
+        prompt = _count(usage.get("prompt_tokens"))
+        completion = _count(usage.get("completion_tokens"))
+        reasoning = _count(details.get("reasoning_tokens"))
+        if prompt is not None and completion is not None:
+            self.tokens["prompt"] += prompt
+            self.tokens["completion"] += completion
+            if reasoning is not None:
+                self.tokens["reasoning"] += reasoning
+            else:  # not reported: never taken as 0
+                self.tokens["no_reasoning"] += 1
+        else:
+            self.tokens["no_usage"] += 1
+            self.tokens["no_reasoning"] += 1
+        choices = body.get("choices")
+        first = choices[0] if isinstance(choices, list) and choices else None
+        reason = first.get("finish_reason") if isinstance(first, dict) else None
+        reason = reason if isinstance(reason, str) and reason else "none"
+        self.finish_reasons[reason] = self.finish_reasons.get(reason, 0) + 1
 
     def snapshot(self) -> dict[str, Any]:
         answered = sum(self.by_status.values())
@@ -554,6 +599,8 @@ class HttpMeter:
             "by_status": dict(sorted(self.by_status.items())),
             "transport_errors": self.requests - answered,  # timeouts, refused, ...
             "http_429": self.by_status.get("429", 0),
+            "tokens": dict(self.tokens),
+            "finish_reasons": dict(sorted(self.finish_reasons.items())),
         }
 
     def settings(self) -> dict[str, list[Any]]:
@@ -564,6 +611,11 @@ class HttpMeter:
             c.close()
 
 
+def _count(n: Any) -> int | None:
+    """A token count of an answer: an int of 0 or more (not a bool), else None."""
+    return n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else None
+
+
 def _add_http(many: list[dict[str, Any] | None]) -> dict[str, Any] | None:
     found = [h for h in many if h is not None]
     if not found:
@@ -572,12 +624,23 @@ def _add_http(many: list[dict[str, Any] | None]) -> dict[str, Any] | None:
     for h in found:
         for code, n in h["by_status"].items():
             by_status[code] = by_status.get(code, 0) + n
-    return {
+    total = {
         "requests": sum(h["requests"] for h in found),
         "by_status": dict(sorted(by_status.items())),
         "transport_errors": sum(h["transport_errors"] for h in found),
         "http_429": sum(h["http_429"] for h in found),
     }
+    # a report of #19 has no tokens: a total is given only when every run has one
+    if all("tokens" in h and "finish_reasons" in h for h in found):
+        total["tokens"] = {
+            k: sum(h["tokens"].get(k, 0) for h in found) for k in found[0]["tokens"]
+        }
+        reasons: dict[str, int] = {}
+        for h in found:
+            for reason, n in h["finish_reasons"].items():
+                reasons[reason] = reasons.get(reason, 0) + n
+        total["finish_reasons"] = dict(sorted(reasons.items()))
+    return total
 
 
 # ---------------------------------------------------------------- the readers
@@ -603,26 +666,81 @@ def _endpoint(url: str | None) -> str | None:
 def _omni(
     transport: httpx.BaseTransport | None = None,
     sleep: Callable[[float], None] = time.sleep,
+    options: "OmniSettings | None" = None,
 ) -> ReaderSetup:
     from app.docintel import omni
 
     meter = HttpMeter(transport)
+    o = options or omni.ISSUE_18
 
     def make() -> Reader:
-        return omni.OmniReader(client=meter.client(omni.TIMEOUT), sleep=sleep)
+        client = meter.client(o.timeout)
+        return omni.OmniReader(client=client, sleep=sleep, settings=o)
 
     settings = {
         "reader": "omni",
         "model": os.environ.get("VLM_MODEL"),
         "endpoint": _endpoint(os.environ.get("VLM_BASE_URL")),
-        "dpi": omni.DPI,
-        "max_tokens": omni.MAX_TOKENS,
+        "dpi": o.dpi,
+        "max_tokens": o.max_tokens,
         "max_pages": omni.MAX_PAGES,
         "max_pixels": omni.MAX_PIXELS,
-        "timeout_seconds": omni.TIMEOUT,
+        "timeout_seconds": o.timeout,
         "retries": omni.RETRIES,
+        # issue #20: the settings that a run can change, and the name of the whole.
+        # `--combine` compares `settings`, so it never mixes two configurations.
+        "temperature": o.temperature,
+        "thinking": o.thinking,
+        "reasoning_budget": o.reasoning_budget,
+        "prompt": o.prompt,
+        "prompt_sha256": omni.prompt_sha256(o.prompt),
+        "config_id": omni.config_id(o),
     }
     return make, settings, meter
+
+
+def _on_off(text: str) -> bool:
+    words = {"on": True, "true": True, "off": False, "false": False}
+    if text.casefold() not in words:
+        raise ValueError(f"{text!r} is not on or off")
+    return words[text.casefold()]
+
+
+def _int_or_none(text: str) -> int | None:
+    return None if text.casefold() == "none" else int(text)
+
+
+# `--omni KEY=VALUE` (issue #20): one entry per field of `OmniSettings`
+OPTIONS: dict[str, Callable[[str], Any]] = {
+    "dpi": int,
+    "temperature": float,
+    "max_tokens": int,
+    "thinking": _on_off,
+    "reasoning_budget": _int_or_none,
+    "timeout": float,
+    "prompt": str,
+}
+
+
+def omni_options(pairs: list[str]) -> "OmniSettings":
+    """The settings of the Omni reader from `KEY=VALUE` texts; the other settings
+    stay those of #18. Raises ValueError on an unknown, repeated or bad value."""
+    from app.docintel.omni import OmniSettings
+
+    values: dict[str, Any] = {}
+    for pair in pairs:
+        key, sep, text = pair.partition("=")
+        if not sep or key not in OPTIONS:
+            raise ValueError(
+                f"--omni {pair}: use KEY=VALUE with KEY in {sorted(OPTIONS)}"
+            )
+        if key in values:
+            raise ValueError(f"--omni {key} is given twice")
+        try:
+            values[key] = OPTIONS[key](text)
+        except ValueError as e:
+            raise ValueError(f"--omni {pair}: {e}") from None
+    return OmniSettings(**values)
 
 
 READERS: dict[str, Callable[[], ReaderSetup]] = {"fixture": _fixture, "omni": _omni}
@@ -1136,9 +1254,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--runs", type=_positive, help="new reader per run (default 1)")
     ap.add_argument("--output", type=Path, help="also write the report to this file")
+    ap.add_argument(
+        "--omni",
+        action="append",
+        metavar="KEY=VALUE",
+        help="a setting of the Omni reader (issue #20), for example dpi=100 or "
+        f"prompt=described; keys: {', '.join(OPTIONS)}. The others stay those of #18",
+    )
     args = ap.parse_args(argv)
     if args.combine and args.runs is not None:
         ap.error("--runs does not go with --combine: the runs are in the files")
+    if args.omni and args.reader != "omni":
+        ap.error("--omni goes with --reader omni only")
     # pypdf only counts the pages here; its warnings on a PDF it repairs (the
     # line ends of a Windows checkout) are not a result of the reader
     logging.getLogger("pypdf").setLevel(logging.ERROR)
@@ -1149,7 +1276,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.combine:
             report = combine(args.combine, command)
         else:
-            make, settings, meter = READERS[args.reader]()
+            if args.omni:
+                make, settings, meter = _omni(options=omni_options(args.omni))
+            else:
+                make, settings, meter = READERS[args.reader]()
             report = evaluate(
                 make, args.runs or 1, settings=settings, meter=meter, command=command
             )

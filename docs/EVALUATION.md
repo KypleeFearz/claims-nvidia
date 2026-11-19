@@ -418,3 +418,114 @@ What it says:
 - The costs come from two errors that the field evaluation also shows: the damage photos (type `unknown`, issue #25 and #21) add R001 to 3 stories, and one missing amount sends a clean luggage claim to a person.
 - One run only: the field evaluation shows 2 fields of 132 that change from run to run. One of them is the `total` of the quote of the story `kit-anna-theft`, which the settlement reads: it was read in this run (CHF 2,440 right), but it was missing in run 1 of the field evaluation. Another run can give other business numbers.
 - The risk of #121 (a document with no field read is paid as complete) did not happen in this run.
+
+## Tuning of the Omni reader (issue #20): the method
+
+Written on 2026-11-19, before the first run of a variant. The rules below do not change after a result is seen. A change of a rule is written here with its date and its reason.
+
+### The control
+
+- The control is the 3 saved runs of #19 above: `omni-run-1.json` (`4d1535ff…7227`) and `omni-runs-2-3.json` (`0e01a924…0a45`), settings of #18 (`ISSUE_18` in `omni.py`). No run of the control is made again at the start.
+- Why the saved runs are still a valid control: `backend/tests/test_omni_settings.py` pins the two request bodies of #18 (SHA-256 of the classify body and of the page body, with no image; the image is compared pixel for pixel with a page rendered at 150 DPI). The hashes were taken from the code of #18 (fingerprint `d84bcd22…bef4`) before any change of #20. With the default settings, the new code sends the same bytes.
+- At the end, the settings of #18 run 3 times again (stage S7). If they give the totals of the saved runs (2 field results that change per run at most), the endpoint did not drift, and the runs of each stage stay comparable. If not, the winner runs 3 times again on the same day as the control.
+
+### Commands
+
+`--omni KEY=VALUE` (one or more) changes one setting of `OmniReader`. Every other setting stays the setting of #18. Example: `cd backend && uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 3 --omni dpi=100 --output .dev-data/evaluation/s3-dpi-100.json`.
+
+| Key | Values | What it changes |
+|---|---|---|
+| `prompt` | `v1` (#18), `schema-only`, `described`, `example` | The text of the page call. The classify call does not change (issue #21). |
+| `dpi` | 50 to 300 (#18: 150) | The render of a PDF page, for both calls. A photo (JPG, PNG) is sent as it is. |
+| `temperature` | 0 to 2 (#18: 0.2) | Both calls. |
+| `thinking` | `on`, `off` (#18: off) | `chat_template_kwargs.enable_thinking`, both calls. |
+| `reasoning_budget` | a number less than `max_tokens`, only with thinking on (#18: none, not sent) | The key `reasoning_budget` of the NIM API. |
+| `max_tokens` | 1 to 65,536 (#18: 2048) | With thinking on, the budget is part of it. |
+| `timeout` | seconds, a finite number more than 0 (#18: 90) | Per call. Thinking takes longer. |
+
+The report records each value in `settings`, with `prompt_sha256` (the texts of the prompt: classify, page template, descriptions, example) and `config_id` (a short name of the whole). `--combine` compares `settings`, so it never mixes two configurations. Each run also records the tokens of the answers (`usage`: prompt, completion, reasoning) and why each answer ended (`finish_reasons`): the cost of a setting and the answers cut by `max_tokens` (`length`).
+
+The endpoint does not always report the reasoning tokens. Two counters show what is not in the sums:
+
+- `no_usage`: the answers with no prompt and completion counts. They add nothing to the sums.
+- `no_reasoning`: the answers with no reasoning count. The sum `reasoning` is for the other answers only.
+
+A reported 0 is a count, not a missing value. Before you compare the reasoning tokens of two variants, make sure that `no_reasoning` is 0 for both.
+
+### The prompts
+
+| Prompt | Text of the page call | It measures |
+|---|---|---|
+| `v1` | The prompt of #18: the rules of the values (null when not on the page, never guess, date and amount forms, every line), the rule of the snippets (the exact text, copied character by character, as short as possible) and the JSON schema. | the control |
+| `schema-only` | Only the form of the answer, the rule of the snippets of `v1` (word for word) and the JSON schema. | what the rules of the values of `v1` bring. The rule of the sources does not change. |
+| `described` | `v1`, and each field of the schema has a description (`DESCRIPTIONS` in `omni.py`). The same described schema goes in the prompt and in `response_format`. | what the descriptions bring |
+| `example` | `described`, and one worked example at the end: the text of a page and its right answer. | what the example brings (against `described`) |
+
+- Every prompt keeps the strict `json_schema` and the snippets. The checks of a source do not change (non-negotiable 3). A test runs the provenance checks for each prompt.
+- The descriptions come from the business: `docs/WORKFLOWS.md`, the causes of the workflows (`WORKFLOWS`, for `cause`), and Paul on pull request #122 (`cause` is a category, `diagnosis` is short, `provider` is the clinic). `offence` has a general description: the kind of offence as a short general legal term. No description holds a value of an answer key, apart from the names of the causes (a test checks it).
+- The example is a medical invoice that is not in the kit. Every name, number and date of it is invented. Tests compare it with every text of the kit: the answer keys and the other JSON files of `data/mock`, the text layer of each mock PDF, `scripts/mockdocs` and `docs/MOCK-DATA.md`. These must not be in a text of the kit:
+  - a name (a word with a capital letter that is not a word of the form, such as `Invoice` or `Total`);
+  - a number of 4 characters or more (a postcode, an identifier, a date, an amount);
+  - a run of 3 words.
+
+  Another test checks that the example passes the checks of the reader: each snippet is on its page and holds its value. The prompt ends with one line that sends the model back to the image of the request. Limit: the example shows `provider` as the clinic, a field that is wrong in the control.
+
+### Three groups of fields
+
+The groups are fixed now, from the control. Every table gives the 132 fields and the three groups apart.
+
+| Group | Fields | Control, per run (the same in the 3 runs) |
+|---|---|---|
+| Reading | every field that is not in the two other groups | 109 of 117 right, 0 wrong, 8 missing |
+| Business category | `medical_certificate.cause`, `police_report.offence`, `medical_report.diagnosis`, `medical_report.provider`, `medical_invoice.provider` | 3 of 11 right, 8 wrong, 0 missing |
+| Not read (issue #25) | `damage_photo.damage_description` | 0 of 4 |
+
+A gain in the business-category group says that the reader follows the meaning of the business. It is not a better reading of the page. It is reported apart and never hides a loss in the reading group.
+
+### The stages
+
+Each variant changes one setting against the control of its stage and runs 3 times on the 35 documents of the kit (66 requests per run, 198 per variant). The control of a stage is the winner of the stage before; its runs are used again, not made again.
+
+| Stage | Variants | Control | New requests |
+|---|---|---|---|
+| S2 prompt | `schema-only`, `described`, `example` | `v1` (the saved runs) | 594 |
+| S3 resolution | 72, 100, 200 DPI | 150 DPI (the S2 winner) | 594 |
+| S4 temperature | 0 | 0.2 (the S3 winner) | 198 |
+| S5 reasoning | thinking on, budget 512 and 2048; `max_tokens` = 2048 + budget + 1024, so the answer keeps 2048 tokens | thinking off (the S4 winner) | 396 |
+| S7 final | the settings of #18, 3 runs | the saved runs | 198 (+198 if drift) |
+
+- Before S2 and before S5, a short check on 1 or 2 documents (4 to 10 requests) shows that the endpoint accepts the new request. It is not a result.
+- S5 runs only if its check shows that thinking with the strict schema gives an answer. The model card says the thinking text can come in `content`, before the JSON: the reader would then lose every page.
+- One call per page or per document: every document of the kit has one page, so the two give the same request. How to report it is open (Nikola and Paul).
+- Choosing stage by stage: the effect of a stage is measured with the winners of the stages before. S5 runs at the temperature of S4; the model card advises 0.6 with thinking. This is a limit, not a second change.
+
+### When a variant wins
+
+These are practical rules for a decision, not tests of significance. With 10 scenarios and about 11 layouts, a p-value would give a false precision.
+
+A variant replaces the control of its stage only when all these are true:
+
+1. It gives at least 3 more right fields per run (the mean of its 3 runs against the mean of the control). The control changes by 2 field results between runs.
+2. Its lowest run is higher than the highest run of the control.
+3. The guardrails hold:
+   - no wrong amount, date or identifier (the control has none);
+   - no more wrong values in total than the control;
+   - the reading group loses 1 right field per run at most;
+   - classification loses 1 document per run at most;
+   - every line item of the clean PDFs stays right (53 of 53 per run);
+   - no reader error, and no 429 that the retries did not solve;
+   - the seconds per document are 1.5 times those of the control at most, or Paul accepts the cost.
+4. The gain stays above 0 when any one scenario is left out.
+
+When no variant wins, the control stays. When two variants win, the one with the larger gain wins; at the same gain, the cheaper one (seconds, tokens). `example` replaces `described` only when it wins against `described` by the same rules.
+
+### What each variant reports
+
+Accuracy per field (right, wrong, missing; the 132 fields and each group), strict pass rate, classification, line items, seconds per document (mean and median), requests, statuses, 429, tokens, finish reasons, the lowest and the highest run, and `config_id`. The paired view is made offline from the saved reports: for each document, the mean of its 3 runs against the control, the scenarios better and worse, and the documents whose type changed (a type changes the schema). Three runs of one document are one document, not three.
+
+### Limits, known before the runs
+
+- The kit is small: 35 documents, 10 scenarios, about 11 layouts (one per type), all made by one generator. The descriptions and the example were written after the errors of the control were seen. A gain on the kit does not prove a gain on other documents. A holdout with new layouts needs Paul's approval (a separate issue).
+- 200 DPI gives more image tokens than the model takes for one image (13,312 patches of 16 px; an A4 page at 200 DPI has about 15,300): the server probably makes it smaller. The 6 scans are images at 150 DPI, so 200 DPI only enlarges them; the 3 phone photos do not change with the DPI.
+- A category value passes the check of its snippet only when the word is on the page (`acute illness` holds `illness`). On a page that does not print it, the field is refused: it goes to a person.
+- The line items of scans and photos stay 0: the reader keeps a line only when the text layer confirms it (D80 (6)). No setting of #20 changes that.
