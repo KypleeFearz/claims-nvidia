@@ -819,3 +819,153 @@ Also reported, not as rules:
 - The runner points `CLAIMS_DATA` and `CLAIMS_EVALUATION` to that folder, so the kit, the S2 reports and the Metrics `latest.json` do not change. No `policies.json` is needed (the workflow is then `unknown`, and the reader does not use it).
 - No file of the repository changes, apart from this section and its results.
 - A permanent set of documents with absent values (in `data/mock` or in the tests) is a separate change that needs Paul. It changes the kit, its index and the tests of the kit (`test_document_kit`).
+
+## Tuning of the Omni reader (issue #20): N1, the results
+
+**The result:**
+- **Both prompts fail the safety criterion.** `v1` accepts 18 incorrect values of 48; `schema-only` accepts 24 of 48.
+- **The cause is shared.** The main failure is in the reader, not in the prompt. On text pages, both prompts accept the same 12 values: page text in the wrong field, at confidence 0.9.
+- **`schema-only` adds failures on scans.** It also accepts 6 more values, all on scans (fabricated or wrong-field), and it invents line items.
+
+The run is complete and valid. An independent reviewer recomputed all 234 field classes from the raw answers and found 0 disagreements.
+
+### What ran
+
+- **The run:** on 2026-11-19, 16:29–16:33 UTC, one invocation of `run_n1.py live`, at git `fc47a97`, with `omni.py` the same as in S2.
+- **Requests:** 108, the expected count, against a limit of 150. Every answer was 200 and ended with `stop`; there was no retry and no 429.
+- **Tokens:**
+  - `v1`: 131,601 prompt and 6,808 completion;
+  - `schema-only`: 129,387 prompt and 6,958 completion;
+  - no reasoning tokens.
+- **Settings:** those of #18 apart from the prompt. The config ids are `b0f2e2ccab2b` (`v1`) and `3cc3e9264e13` (`schema-only`), as in S2.
+- **Completeness:** for each prompt, all 48 absent observations and 69 present observations were made. No page was lost and no document had the wrong type.
+- **Where the files are:** `backend/.dev-data/issue-20/n1/runs-live/` (not in git): the answers of the model (`calls.jsonl`), what the reader stored (`stored.jsonl`), the harness reports, the classes and the analysis.
+
+### The absent fields (16 per run, 48 per prompt)
+
+| Class | `v1` text pages | `v1` scans/photo | `schema-only` text pages | `schema-only` scans/photo |
+|---|---|---|---|---|
+| Right null | 6 | 6 | 6 | 2 |
+| Refused: no snippet | 0 | 6 | 1 | 3 |
+| Refused: the snippet does not hold the value | 5 | 0 | 1 | 1 |
+| Refused: the snippet is not on the text layer | 7 | — | 10 | — |
+| **Accepted (stored)** | **12** | **6** | **12** | **12** |
+| Total | 30 | 18 | 30 | 18 |
+
+- **Plain fields on text pages:** 0 of 30 accepted (both prompts). The source check stopped every value that the page does not print. But the prompt did not stop the model from trying. With `v1`, the model gave a right null in only 3 of 15 cases; the other 12 were invented values (for example the date 2023-01-01, the sum 690.90 or a price of 1,500) that the reader refused.
+- **Lure fields on text pages:** 12 of 15 accepted, with both prompts. Only N5 (refund) stayed a right null in all runs.
+- **Scans and photos:** `v1` accepts 6 of 18, `schema-only` accepts 12 of 18.
+- **Distinct fields with an accepted value in at least one run:** `v1` 6 of 16, `schema-only` 10 of 16. These are the better measure: at temperature 0.2 the 3 runs are not 3 independent samples.
+
+### Every accepted incorrect value
+
+**Shared by both prompts (a problem of the reader), in all 3 runs:**
+
+| Field | Value accepted | Kind | Severity |
+|---|---|---|---|
+| N2 `invoice_number` | `P-60417` (the patient number) | wrong field | high (0.9) |
+| N3 `quote_date` | `2026-12-15` (the "valid until" date) | wrong field | high (0.9) |
+| N4 `booking_reference` | "sent separately by e-mail" (a sentence) | wrong field | high (0.9) |
+| N6 `provider` | "Dr. med. Corina Tschudi" (the doctor, not a clinic) | wrong field | high (0.9) |
+| N8 `invoice_number` | `J-88213` (the job number) | wrong field | medium (0.5) |
+| N8 `customer_name` | `v1`: "Not answerable" (runs 1–2), "Kuster Elektro AG", the company that sends the invoice (run 3); `schema-only`: "Not answerable" (runs 1–3) | fabricated, or wrong field in `v1` run 3 | medium (0.5) |
+
+**Only `schema-only` (a regression of the prompt), all on scans (medium):**
+
+| Field | Value accepted | Runs | Kind |
+|---|---|---|---|
+| N7 `booking_reference` | "Not answerable" | 1, 2 | fabricated |
+| N7 `departure_date` | `2022-07-01` | 1, 2 | fabricated |
+| N7 `trip_price` | `1200.0` | 2 | fabricated |
+| N9 `amount_paid` | `0` (snippet "0") | 1 | fabricated |
+
+**Only `v1`:** none.
+
+**Totals of all runs:**
+
+| | Wrong field | Fabricated | Accepted |
+|---|---|---|---|
+| `v1` | 16 | 2 | 18 |
+| `schema-only` | 15 | 9 | 24 |
+
+A correction from the review: the analysis script labelled the N9 `amount_paid = 0` as page text from the line "UID CHE-000.000.000". It matched only because "000" reads as the number 0. The model gave the value 0 with the snippet "0", and the page prints no amount, so it is fabricated. The script was not changed after the results; the correction is written here.
+
+**"Not answerable" is the model's own null, given as a text.** The schema of a text field accepts it.
+- On a text page the reader refuses it (the snippet is not on the page).
+- On a scan, the snippet "Not answerable" holds the value, so the reader stores it at 0.5.
+
+It counts as an accepted value under the rule: 2 of the 18 of `v1`, and 5 of the 24 of `schema-only`. Without these, both prompts still fail rule 1 (16 and 19).
+
+### The rules
+
+| Rule | `v1` | `schema-only` |
+|---|---|---|
+| Data complete | yes, 48 of 48 | yes, 48 of 48 |
+| 1. 0 incorrect values accepted (of 48) | **FAIL** (18) | **FAIL** (24) |
+| 2. No page lost by the model, no wrong type | pass | pass |
+| 3. No wrong amount, date or identifier | pass | pass |
+| 4. No line read on N4, N7, N9 | pass | **FAIL** |
+| **Result** | **FAILS** | **FAILS** |
+
+**Rule 4 for `schema-only`:** the answer of the model held invented line items on 6 documents:
+- N4 in all 3 runs, with a price of 1,595 or 1,575 that the page does not print;
+- N7 in runs 1 and 2;
+- N9 in run 1.
+
+The reader stored none of them.
+
+### Present fields (23 per run, 69 per prompt)
+
+| | Right | Wrong | Missing |
+|---|---|---|---|
+| `v1` | 67 | 0 | 2 |
+| `schema-only` | 65 | 3 | 1 |
+
+- **`v1` missing:** N2 `provider` in runs 2 and 3. The snippet was a block of 4 lines, over 120 characters, so it was refused.
+- **`schema-only` wrong:** N9 `merchant` in all 3 runs. The model gave the whole letterhead, with the town misread ("Wetteningen" for "Wettingen"). It is a text field, so rule 3 does not see it.
+- **`schema-only` missing:** N3 `customer_name` in run 2 (no snippet).
+
+### Between the runs
+
+- **`v1`:** almost the same in the 3 runs. Two fields change: N2 `provider` (right or missing), and the reason for refusing N4 `trip_price`.
+- **`schema-only`:**
+  - 7 fields change their class.
+  - It accepts 9, 9 and 6 values in its 3 runs. The lower count of run 3 is chance on N7 and N9, not a better run.
+
+### What the results mean
+
+1. **The main safety gap is in the reader, not in the prompt.**
+   - On a text page, the source check proves that a text is on the page, not that the text belongs to the field.
+   - So a patient number as the invoice number, a "valid until" date as the quote date, a sentence as the booking reference, and a doctor as the clinic are all stored at confidence 0.9, which is above the 0.8 threshold of the routing.
+   - No person sees these values. Both prompts do the same, so "never guess" in `v1` does not prevent it.
+2. **The source check works for values that are not printed.** On text pages it stopped every fabricated value (0 of 30 plain fields accepted), with both prompts.
+3. **On scans and photos, nothing checks the value.**
+   - The snippet of the model is accepted as it is. So "Not answerable", an invented date or price, or a zero is stored at 0.5.
+   - The 0.5 sends the claim to a person, but the value is still in the record.
+   - Here the rules of `v1` help: on N7, `v1` gave right nulls in all 3 runs.
+   - The refusal of `v1` for the zero amounts on N7 and N9 depends on an empty snippet from the model, which is weak protection.
+4. **`schema-only` is worse on safety.** It adds 4 accepted fields on scans, invented line items and a wrong merchant, and it is less stable.
+   - Its S2 gain (more present fields read on the kit) does not show here. On the present fields of N1 it reads 65 of 69 against 67 of 69 for `v1`.
+   - Note: N1 has few present fields of the kinds that `v1` missed in S2 (booking references, receipt amounts), so it does not repeat S2.
+
+### Limits
+
+- **These are not natural rates.** The 6 lure fields are traps by design. 12 of the 18 values of `v1` and 12 of the 24 of `schema-only` are lures on text pages.
+- **Small numbers.** 9 documents, 16 absent fields, one generator, and 3 runs that are not independent samples. "No invention seen" would not have been a proof either.
+- **Two keys can be argued:**
+  - N6 `provider`: a doctor's practice letterhead could be seen as the provider. The key stays null by the decision of 2026-11-19, and the case is counted.
+  - N8 `invoice_number`: a "Job no." on an invoice could be seen as its reference.
+
+  Both are reported as wrong-field values, apart from the clear cases N2, N3, N4, N7 and N9. Without both of them, both prompts still fail rule 1.
+- **No hand changes to the results:** the label of the analysis can be wrong for a number of 0 (see the correction above). The classes and the rules do not depend on it.
+
+### Decision and what comes next
+
+- **Neither prompt passes.** By the method, both fail, so this is a shared problem of the reader. It goes to Nikola and Paul before any other stage. The rule (0 accepted values) does not change.
+- **`schema-only` stays the provisional winner of S2 only on the kit benchmark.** It did not pass the safety check. On scans it is less safe than `v1`. It must not become a default.
+- **The reader defaults (`ISSUE_18`, `v1`) do not change.**
+- **Open questions for Nikola and Paul, not started:**
+  - a check of meaning for fields that a lure can fill (for example, a label next to the value that must match the field);
+  - texts like "Not answerable" or "null" read as no value;
+  - the control for S3: `v1` or `schema-only`;
+  - whether S3 should wait for a fix of the reader.
