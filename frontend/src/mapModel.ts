@@ -283,7 +283,7 @@ export const BOXES: MapBox[] = [
     zone: 'observe',
     title: 'Evaluation',
     line: 'Accuracy per field, pass rate, time per claim, against expected.json.',
-    status: 'yours',
+    status: 'built',
     icon: 'trend-up',
     detail:
       'Your numbers decide the prompt, the resolution and the model, and they support the request for GPU credits. The command python -m app.docintel.evaluate --reader <name> runs a reader on every document of the kit, several runs, and writes a JSON report: right, wrong and missing per field, the source page, the pass rate and the seconds per document. The page Metrics shows the last report. The comparison rules are in compare.py and docs/EVALUATION.md.',

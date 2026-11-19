@@ -15,7 +15,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.bench import compare
+from app.bench import status as field_status
+from app.docintel.compare import compare_lines
 from app.docintel.omni import OmniReader
 from app.main import create_app
 from app.models import Document
@@ -55,9 +56,9 @@ def test_claim_file_1_gives_fields_with_sources() -> None:
             status = (
                 "missing"
                 if f is None
-                else "right"
-                if compare(e["value"], f.value)
-                else "wrong"
+                else field_status(
+                    expected["document_type"], e["name"], e["value"], f.value
+                )
             )
             where = (
                 ""
@@ -66,11 +67,7 @@ def test_claim_file_1_gives_fields_with_sources() -> None:
             )
             print(f"  {e['name']}: {status} ({f.value if f else None!r}) {where}")
         want = expected.get("line_items", [])
-        right = len(want) == len(out.line_items) and all(
-            compare(w.get(k), g.get(k))
-            for w, g in zip(want, out.line_items, strict=True)
-            for k in w
-        )
+        right = compare_lines(want, out.line_items).all_right
         got = len(out.line_items)
         print(f"  line items: {got} read, {len(want)} expected, right={right}")
         assert out.document_type == expected["document_type"]

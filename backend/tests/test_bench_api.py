@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.bench import compare
+from app.bench import status
 from app.docintel.fixture import FixtureReader
 from app.main import create_app
 from app.models import Document, Extraction
@@ -139,10 +139,9 @@ def test_an_unknown_document_is_a_404_and_the_path_never_comes_from_the_request(
         assert client.post("/bench/read", json=body).status_code == 404
 
 
-def test_compare_numbers_dates_and_text() -> None:
-    assert compare(1260.0, "1260") and compare(1260, 1260.004)
-    assert not compare(1260.0, 1206.0)
-    assert compare("Lukas Meier", " lukas  meier ")  # case and spaces do not count
-    assert not compare("Lukas Meier", "Jonas Meier")
-    assert compare("2026-09-16", "2026-09-16") and not compare("2026-09-16", None)
-    assert compare(True, True) and not compare(True, 1.0)
+def test_the_bench_compares_by_the_kind_of_the_field() -> None:
+    # the rule of the harness (tests/test_evaluate_compare.py has every case)
+    assert status("repair_invoice", "total", 1840.0, "1,840.00") == "right"
+    assert status("repair_invoice", "total", 1260.0, 1206.0) == "wrong"
+    assert status("repair_invoice", "invoice_number", "001840", "1840") == "wrong"
+    assert status("repair_invoice", "total", 1260.0, None) == "missing"

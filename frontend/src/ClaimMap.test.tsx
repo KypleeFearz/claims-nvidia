@@ -23,7 +23,7 @@ test('every zone and every box of the model renders', () => {
 test('the boxes of the intern carry the tag YOURS, the planned one LATER', () => {
   render(<ClaimMap />)
   const yours = BOXES.filter((b) => b.status === 'yours')
-  expect(yours.map((b) => b.title)).toEqual(['Document reading', 'Rails', 'Vision model', 'Evaluation'])
+  expect(yours.map((b) => b.title)).toEqual(['Document reading', 'Rails', 'Vision model'])
   for (const b of yours) expect(within(box(b.title)).getByText('YOURS')).toBeInTheDocument()
   expect(within(box('Rails')).getByText('NEW')).toBeInTheDocument()
   expect(within(box('Specialised chain')).getByText('LATER')).toBeInTheDocument()
@@ -59,7 +59,7 @@ test('the filter dims the boxes that are not for the intern', () => {
   fireEvent.click(toggle)
   expect(box('Checks')).toHaveAttribute('data-dim', 'true')
   expect(box('Rails')).toHaveAttribute('data-dim', 'false')
-  expect(box('Evaluation')).toHaveAttribute('data-dim', 'false')
+  expect(box('Evaluation')).toHaveAttribute('data-dim', 'true')
   expect(box('Specialised chain')).toHaveAttribute('data-dim', 'true')
 })
 

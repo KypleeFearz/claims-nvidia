@@ -110,3 +110,7 @@
 - Record what makes a run comparable from the first run: the settings that the requests really held, and a fingerprint of the reader code. The first Omni report was written before the fingerprint existed, and nothing in the file can prove its prompt later.
 - `test_no_auto_rejection.py` reads every backend file with the encoding of the platform. A non-ASCII character in a backend file (a typographic dash in a string) fails it on Windows only. Write such characters as `\u` escapes.
 - A reader that never raises hides an outage: with every request refused, its fields are only "missing". Count the HTTP answers next to the fields (`http` in the report), or an outage looks like a weak model.
+
+## A field that is not read (pull request #122, 2026-11-19)
+
+- A default value for a field that was not read is a guess. `refund or 0.0` paid the full trip price when a real reader missed the refund. The fixture reader never misses a field, so no test saw it. When a number feeds a payment, "not read" must go to a person, not to a default.

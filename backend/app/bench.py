@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from pypdf import PdfReader
 
 from app import demo
+from app.docintel.compare import compare_field, compare_lines, field_kind
 from app.docintel.reader import Reader
 from app.models import Document, DocumentType, Extraction
 from app.store import CLAIM_TYPE, Store
@@ -30,20 +31,11 @@ class Pick(BaseModel):
     file: str
 
 
-def compare(expected: Any, read: Any) -> bool:
-    """Is the value read the expected one? Numbers to the cent; text with no
-    difference of case or spaces. The harness of issue #19 can use or replace it."""
-    if isinstance(expected, bool) or isinstance(read, bool):
-        return expected is read
-    try:
-        return abs(float(expected) - float(read)) < 0.005
-    except (TypeError, ValueError):
-        pass
-    if expected is None or read is None:
-        return expected is read
-    return " ".join(str(expected).split()).casefold() == (
-        " ".join(str(read).split()).casefold()
-    )
+def status(document_type: str, name: str, expected: Any, read: Any) -> str:
+    """right, wrong or missing, by the rule of the evaluation harness (issue #19):
+    the kind of the field comes from its schema. A field with no schema is text."""
+    kind = field_kind(document_type, name) or "text"
+    return compare_field(kind, expected, read).status
 
 
 def _timed(call: Callable[[], Any]) -> tuple[Any, float, str | None]:
@@ -65,7 +57,9 @@ def _workflow(store: Store, row: dict[str, Any]) -> str:
     return "unknown"
 
 
-def _fields(expected: list[dict[str, Any]], out: Extraction | None) -> list[Any]:
+def _fields(
+    document_type: str, expected: list[dict[str, Any]], out: Extraction | None
+) -> list[Any]:
     read = {f.name: f for f in (out.fields if out else [])}
     rows = []
     for e in expected:
@@ -75,9 +69,7 @@ def _fields(expected: list[dict[str, Any]], out: Extraction | None) -> list[Any]
                 "name": e["name"],
                 "status": "missing"
                 if f is None
-                else "right"
-                if compare(e["value"], f.value)
-                else "wrong",
+                else status(document_type, e["name"], e["value"], f.value),
                 "expected": e["value"],
                 "read": f.value if f else None,
                 "expected_page": e["page"],
@@ -126,7 +118,7 @@ def read_document(pick: Pick, request: Request) -> dict[str, Any]:
     out, t_extract, extract_error = _timed(
         lambda: reader.extract(document, data, workflow)
     )
-    fields = _fields(expected["fields"], out)
+    fields = _fields(expected["document_type"], expected["fields"], out)
     want_items = expected.get("line_items", [])
     got_items = out.line_items if out else []
     return {
@@ -149,11 +141,6 @@ def read_document(pick: Pick, request: Request) -> dict[str, Any]:
         "line_items": {
             "expected": len(want_items),
             "read": len(got_items),
-            "right": len(want_items) == len(got_items)
-            and all(
-                compare(w.get(k), g.get(k))
-                for w, g in zip(want_items, got_items, strict=True)
-                for k in w
-            ),
+            "right": compare_lines(want_items, got_items).all_right,
         },
     }

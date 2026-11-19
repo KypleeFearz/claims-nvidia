@@ -66,7 +66,7 @@ Confirmed by Paul on 2026-11-16 (D67). The code is `backend/app/settlement.py`; 
 
 | Step | Rule | Article key |
 |---|---|---|
-| 1. Documented loss | Travel: trip price − refund received. Travel, cause `luggage`: the sum of the receipts. Property: the total of the repair invoice or quote. Health: the total of the medical invoice. When the lines of an invoice do not add up to its total, the lines count. | `loss`, `lines` |
+| 1. Documented loss | Travel: trip price − refund received. When no document gives the refund, it counts as 0 and a person decides (D82). Travel, cause `luggage`: the sum of the receipts. Property: the total of the repair invoice or quote. Health: the total of the medical invoice. When the lines of an invoice do not add up to its total, the lines count. | `loss`, `lines` |
 | 2. Claimed amount | Not more than the customer claims. When the customer claims more than the documents prove, the documents count. | `claimed`, `documented` |
 | 3. Covered cause | A cause that the policy does not name gives CHF 0. | `cause` |
 | 4. Share of the customer | A percentage of the cost (the accident policy: 10%). | `coinsurance` |
