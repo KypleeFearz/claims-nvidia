@@ -218,3 +218,203 @@ Date: 2026-11-17. The Brev VM, `sandbox` mode, `nvidia/nemotron-3.5-lightning-30
 - The sandboxes are not the limit: five at the same time started and worked. The limit is the key, about 40 model calls per minute (O15). A claim file makes 13 to 25 model calls.
 - After #117 the agent waits 5, 10 and then 20 seconds after a 429 and calls again. No visitor reads the fallback message, but a turn can take one minute, and five claim files take near three minutes.
 - For more than three visitors at the same time, the key needs a larger limit. Paul decided for the event: one visitor at a time at the stand (D79).
+
+## Evaluation harness of the reader (issue #19)
+
+Date: 2026-11-18. Decision D81. The harness is `backend/app/docintel/evaluate.py`. The rule for one value is `backend/app/docintel/compare.py`. The page "Metrics" shows the last report (`GET /evaluation/latest`).
+
+### Commands
+
+- Fixture reader, no key, no network: `cd backend && uv run python -m app.docintel.evaluate --reader fixture`
+- Omni reader, three runs (needs `NVIDIA_KEY`, `VLM_BASE_URL` and `VLM_MODEL` in `.env` at the root): `cd backend && uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 3`
+- `--runs N` makes N runs, with a new reader for each run. `--output FILE` writes a second copy of the report.
+- Combine saved runs, with no reader and no model call: `cd backend && uv run python -m app.docintel.evaluate --combine FILE FILE ...`. It writes a new `latest.json` and a dated copy, and never writes over an input. See "Combine saved runs" below.
+- The command prints a markdown summary and writes the report to `backend/.dev-data/evaluation/latest.json`, with a copy named `evaluation-<reader>-<UTC time>.json`. `CLAIMS_EVALUATION` changes the folder. The write is atomic: the page never reads half a report.
+- Exit code 0: the report is written. Exit code 1: the report is written, but an answer key could not be read (`complete: false`). Exit code 2: no report, because the reader did not start (for example, Omni with no `NVIDIA_KEY`).
+- The reports are not in git (`.dev-data/` is in `.gitignore`). The numbers that count go into this file and into the pull request, with the command.
+
+### What is measured
+
+- **The kit.** Every PDF, JPG and PNG in `data/mock/<folder>/`: the same list as `/demo/kit` and the Reader bench. On 2026-11-18 that is 35 documents: 26 of the scenarios and 9 hard versions (6 scans, 3 phone photos). They hold 132 expected fields and 73 expected line items.
+- **Kind** (clean, scan, photo) comes from the list `hard` of `data/mock/index.json`. **Workflow** comes from the policy of the scenario; a hard version takes the scenario of its source document.
+- **Per document**, the harness calls `classify`, then `extract`, through the `Reader` contract, and times each call with `time.perf_counter`. It touches no claim, no store, no upload and no gateway.
+
+### When a value is right
+
+The kind of a field comes from its schema (#17), not from its value.
+
+| Kind | Fields | Right | Wrong |
+|---|---|---|---|
+| Amount | every `float` field (`trip_price`, `total`, ...) | The same value to the cent (half up). `1840`, `1840.0`, `"1,840.00"`, `"1'840.00"` and `Decimal("1840.00")` are the same. | Another cent value, another sign. A text that is not a plain number: a currency (`"CHF 1,840.00"`), a decimal comma (`"1.840,00"`), bad groups (`"1,84"`). NaN, infinity, a bool. |
+| Date | every `date` field | The same calendar day as `2026-08-10`, `10.08.2026`, `10.8.2026`, `10 August 2026`, `10 Aug 2026`, `10 Sept 2026` or `August 10, 2026`. | A slash date (`08/10/2026` is ambiguous), a two-digit year, `2026-8-10`, `20260810`, a day that does not exist, a date with a time. |
+| Identifier | a text named `*_number` or `*_reference` | The same characters. Case, outer spaces, Unicode forms and dash characters (`WPR‑482913` with U+2011) do not count. | A number in place of a text (`482913` loses a leading zero), an inner space, another character. `001840` is not `1840`. |
+| Text | any other text | The same text. Case, runs of spaces and dash characters do not count. | Another word, an accent (`Sanitär` is not `Sanitaer`), punctuation. There is no fuzzy match. |
+
+A missing value is a field that is absent, `null` or blank text, or a field of a reader that raised. A missing value is never right (except when the answer key itself is `null`: no field of the kit is).
+
+`compare` in `backend/app/bench.py` (D64) is not used here: it scores `"1,840.00"` against `1840.0` as wrong, the example of the issue, and `"001840"` against `"1840"` as right.
+
+### How the numbers are counted
+
+- **Right, wrong, missing** per expected field. These three add up to the expected fields. A wrong value and a missing value are always shown apart: a wrong amount can pay a claim, a missing one goes to a person.
+- **Extra**: a field that the answer key does not expect. It is counted apart and is not in the denominator. A name given twice with the same value is right (the document lists it in `duplicates`); with two values it is wrong.
+- **Accuracy** = right values / expected fields.
+- **Source page right**: of the values read, how many have a valid source on the expected page. A value read is a right or wrong value; a field that the answer key gives as `null` and that the reader does not give is right, but has no source to check. A valid source names this document, a page that exists, and a snippet or a box (non-negotiable 3). An invalid source is never "page right".
+- **Verified** = the value is right and its source is on the expected page. The value and the page are measured apart: a right value on the wrong page counts in the accuracy, but not as verified.
+- **Pass rate** = documents with every expected field verified, and with no error of the reader / documents. Extra fields, the type and the line items do not change it.
+- **Line items** are compared by position (description as text; quantity, unit price and amount to the cent), and reported apart: lines right / lines expected, and documents with every line right. They are not in the field accuracy and not in the pass rate.
+- **Type**: the harness counts how many documents `classify` names right. The confusion table is issue #21.
+- **Failures**: a document whose reader raised stays in every denominator, with every field missing and the error in the report. A document whose `expected.json` is absent or broken cannot be scored: the report lists it in `answer_key_errors` and says `complete: false`.
+- **Runs**: each run has its own numbers (`run_details`). The page and the tables add the counts of all runs (`pooled`). `summary` gives the mean, the lowest and the highest value of each run, and the spread (highest − lowest).
+- **Four measures, kept apart.** Field accuracy (right values / expected fields), the strict document pass rate, classification (the type that `classify` names right / documents) and line items (lines right / lines expected) are four numbers. Only the first two are about the fields. The summary gives each one per run (mean, lowest, highest), and the page "Metrics" shows each in its own tile.
+
+### Combine saved runs
+
+`--combine FILE FILE ...` makes one report from the runs of two or more saved reports, in the order of the files. No reader runs and no model is called. Use it to add runs to a measure without making the first runs again.
+
+- **The numbers are made again from the rows.** For each document of each run, the counts and the pass are made again from its field rows. Then every total (per run, added, by type, by kind, by field) and the mean, lowest and highest are made from them. No percentage of a file is averaged.
+- **A file is checked on its own first.** It must be readable JSON of schema version 1, with `runs` equal to its number of runs, numbered 1 to N. The counts it states for each document and each run must match its rows. A file that fails is refused, with the file and the run in the message.
+- **The files must match each other.**
+  - the same reader and the same `settings` (the configuration, and the model settings that the requests held)
+  - the same fingerprint of the reader code, when the files hold one
+  - the same `kit`, `complete` and `answer_key_errors`
+  - in every run: the same documents, kinds, workflows and pages, and the same answer keys (every expected value and page)
+- **Duplicates are refused.** This covers a file given twice, two files with the same content (for example `latest.json` and its dated copy), and a run that is in two files.
+- **Fingerprint of the reader code.** Each new report holds `reader_code_sha256`: the SHA-256 of the source file of the reader (for Omni, `omni.py`, with its prompt, its settings and its code; line ends do not count). A report written before this existed has none. It is combined, and the combined report says so in `combine_notes`: its prompt and code are then checked by its settings only.
+- **Nothing is half done.** When the files are refused, the command writes nothing: `latest.json` stays as it was. The output must not be one of the input files.
+- The combined report holds `combined_from`: the name, the SHA-256, the date and the number of runs of each file. Each run keeps its own `run_id` and `started_at`, and its `source`: the file and the run number in that file.
+- **Seconds per document** = the time of `classify` plus `extract`, per document; the mean, median, lowest and highest.
+- **HTTP** (Omni only): an event hook of the HTTP client counts every request and every answer by status. A 429 that the reader retried is counted too, so `http_429` is the number of 429 answers. `settings.sent` lists the model settings that the request bodies held (model, temperature, `max_tokens`, thinking, response format). The report keeps no header, no key, no image and no answer of the model.
+
+### Result: fixture reader
+
+`cd backend && uv run python -m app.docintel.evaluate --reader fixture --runs 3`, 2026-11-18, Windows laptop.
+
+| | Documents | Fields right | Wrong | Missing | Source page right | All right | Line items right |
+|---|---|---|---|---|---|---|---|
+| Clean | 26 | 94 of 94 | 0 | 0 | 94 of 94 | 26 of 26 | |
+| Scan | 6 | 25 of 25 | 0 | 0 | 25 of 25 | 6 of 6 | |
+| Photo | 3 | 13 of 13 | 0 | 0 | 13 of 13 | 3 of 3 | |
+| **All, per run** | **35** | **132 of 132** | **0** | **0** | **132 of 132** | **35 of 35** | **73 of 73** |
+
+The 3 runs gave the same numbers: accuracy, verified accuracy and pass rate 100% in each. Each of the 11 document types is at 100%. Seconds per document: below 0.001 s (the fixture reader reads a hash); one run of the 35 documents took 0.02 to 0.03 s. This result tests the harness, not a model: the fixture reader returns the answer keys. `backend/tests/test_evaluate.py` checks the 100% in CI, and gives the harness readers that are wrong on purpose (a wrong amount, a missing field, a null, a wrong page, a source of another document, a field given twice, a reader that raises, a broken answer key): each one is counted as wrong or missing, never as right.
+
+### Result: Omni reader, 3 runs
+
+Date: 2026-11-18. Three runs on the 35 documents of the kit, one call at a time, with the free developer key, from a Windows laptop on a home network. Mock data only.
+
+Commands (in `backend/`, with `NVIDIA_KEY`, `VLM_BASE_URL` and `VLM_MODEL` in `.env` at the root):
+
+1. Run 1, 15:44 to 15:47 UTC: `uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 1 --output .dev-data/evaluation/omni-run-1.json`
+2. Runs 2 and 3, 16:12 to 16:18 UTC: `uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 2 --output .dev-data/evaluation/omni-runs-2-3.json`
+3. The three runs in one report, with no model call: `uv run python -m app.docintel.evaluate --combine .dev-data/evaluation/omni-run-1.json .dev-data/evaluation/omni-runs-2-3.json --output .dev-data/evaluation/omni-3-runs.json`
+
+Settings kept fixed. They are the settings of `OmniReader` of #18, unchanged, and the report records them:
+
+- model `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`, at `https://integrate.api.nvidia.com/v1`
+- `response_format` `json_schema` (strict), thinking off, temperature 0.2, `max_tokens` 2048
+- 150 DPI, one call to classify (page 1), then one call per page
+- at most 10 pages and 16 MP per image, timeout 90 s, 2 retries
+- prompt version 1 (`EXTRACT` and `CLASSIFY` in `omni.py`)
+
+The request bodies of all 198 calls held the same model, temperature, `max_tokens`, thinking and response format (`settings.sent`). `omni.py` did not change between the runs: git shows no change since #121, and runs 2 and 3 record its fingerprint `d84bcd22…bef4`. Run 1 was written before the harness recorded a fingerprint; `--combine` notes it in `combine_notes`.
+
+**The four measures** (each run gives one value; the counts are added over the 3 runs):
+
+| Measure | Mean | Lowest | Highest | Counts over the 3 runs |
+|---|---|---|---|---|
+| Field accuracy (right values / expected fields) | 84.9% | 84.9% | 84.9% | 336 right, **24 wrong**, **36 missing** of 396 |
+| Strict document pass rate (every field right and on its page) | 48.6% | 48.6% | 48.6% | 51 of 105 |
+| Classification (type right) | 88.6% | 88.6% | 88.6% | 93 of 105 |
+| Line items (lines right / lines expected) | 72.6% | 72.6% | 72.6% | 159 of 219 |
+| Source page right (of the values read) | 100% | 100% | 100% | 360 of 360 |
+| Seconds per document | 5.45 | 5.35 | 5.50 | median 5.09, lowest 0.87, highest 12.05 |
+
+Per run: 112 right, 8 wrong, 12 missing of 132 fields; 17 of 35 documents all right; 31 of 35 types right; 53 of 73 lines right. One run took 187 to 193 s.
+
+**By document kind** (counts over the 3 runs; each kind gave the same accuracy in each run):
+
+| Kind | Documents per run | Right | Wrong | Missing | Accuracy | All right | Lines right | Seconds per document |
+|---|---|---|---|---|---|---|---|---|
+| Clean | 26 | 231 | 18 | 33 | 81.9% | 33 of 78 | 159 of 159 | 4.99 |
+| Scan | 6 | 69 | 6 | 0 | 92.0% | 12 of 18 | 0 of 42 | 7.82 |
+| Phone photo | 3 | 36 | 0 | 3 | 92.3% | 6 of 9 | 0 of 18 | 4.69 |
+
+**By document type** (counts over the 3 runs; the lowest and the highest run when they differ):
+
+| Type | Documents per run | Accuracy | Right | Wrong | Missing | All right | Lines right | Seconds per document |
+|---|---|---|---|---|---|---|---|---|
+| cancellation_confirmation | 3 | 100% | 27 | 0 | 0 | 9 of 9 | 27 of 27 | 6.24 |
+| repair_invoice | 4 | 100% | 60 | 0 | 0 | 12 of 12 | 24 of 48 | 7.24 |
+| repair_quote | 2 | 96.7% (90% to 100%) | 29 | 0 | 1 | 5 of 6 | 24 of 24 | 7.01 |
+| medical_invoice | 3 | 93.3% | 42 | 0 | 3 | 6 of 9 | 30 of 45 | 8.44 |
+| receipt | 6 | 93.1% (91.7% to 95.8%) | 67 | 0 | 5 | 13 of 18 | 18 of 30 | 4.74 |
+| luggage_report | 2 | 87.5% | 21 | 0 | 3 | 3 of 6 | | 3.48 |
+| booking_confirmation | 5 | 80.0% | 48 | 0 | 12 | 3 of 15 | 36 of 45 | 7.74 |
+| police_report | 2 | 75.0% | 18 | 6 | 0 | 0 of 6 | | 4.36 |
+| medical_certificate | 2 | 66.7% | 12 | 6 | 0 | 0 of 6 | | 4.42 |
+| medical_report | 2 | 50.0% | 12 | 12 | 0 | 0 of 6 | | 3.82 |
+| damage_photo | 4 | 0% | 0 | 0 | 12 | 0 of 12 | | 1.10 |
+
+**The weakest fields** (over the 3 runs):
+
+| Field | Right | Wrong | Missing | What the report shows |
+|---|---|---|---|---|
+| `damage_photo.damage_description` | 0 of 12 | 0 | 12 | The reader does not read a damage photo (issue #25). `classify` also gives `unknown` for all 4 photos: these are the 12 type errors. |
+| `medical_certificate.cause` | 0 of 6 | 6 | 0 | The diagnosis ("gastroenteritis with fever"), not the category `illness`. |
+| `medical_report.diagnosis` | 0 of 6 | 6 | 0 | The right diagnosis with one more sentence ("… No fracture on the X-ray."). The text rule has no fuzzy match. |
+| `medical_report.provider` | 0 of 6 | 6 | 0 | The name of the doctor, not the clinic. |
+| `police_report.offence` | 0 of 6 | 6 | 0 | "Burglary (forced entry)", not `burglary`. |
+| `booking_confirmation.booking_reference` | 3 of 15 | 0 | 12 | Refused on the 4 clean PDFs: the model gives the page title as its snippet (as in #18). Right on the scan, where no text layer can refuse it. |
+| `receipt.amount_paid` | 13 of 18 | 0 | 5 | Missing on the trolley receipt in the 3 runs, and on the lock-set receipt in runs 2 and 3. |
+| `medical_invoice.invoice_number` | 6 of 9 | 0 | 3 | Missing on the clean medical invoice of Lukas in each run. |
+| `luggage_report.airline` | 3 of 6 | 0 | 3 | Missing on the phone photo in each run. |
+| `repair_quote.total` | 5 of 6 | 0 | 1 | Missing on the quote of Anna in run 1 only. |
+
+**Line items**: every line of the clean PDFs is right (159 of 159). No line is read on a scan or a photo (0 of 60): the reader keeps the lines only when it can confirm each one on the text layer of the page (D80 (6)), and a scan or a photo has none.
+
+**HTTP**: 198 requests (66 per run: 35 to classify, 31 to read a page; a damage photo is not read), every answer 200. No 429, no other error status, no transport error, no reader error. One call at a time is about 20 requests per minute.
+
+**Variation between runs**: the totals are the same in the 3 runs, but 2 of the 132 field results changed: `amount_paid` of the lock-set receipt (right in run 1, missing in runs 2 and 3) and `total` of the quote of Anna (missing in run 1, right in runs 2 and 3). The two changes cancel out in the totals. So the run-to-run variation is at least 2 fields of 132, and a change of #20 that moves the accuracy by one or two fields is not a gain.
+
+**What the numbers say**:
+
+- The 24 wrong values are all text fields where the answer key holds a short category or the clinic, and the model gives what the page prints. No amount, no date and no identifier was wrong. A wrong amount is the costly error, and there is none.
+- Most of the 36 missing values are refused snippets (`booking_reference`) and documents that the reader does not read (damage photos). A missing value goes to a person.
+- The strict pass rate (48.6%) is much lower than the field accuracy (84.9%): one weak field fails the whole document.
+- Scans and photos have a better field accuracy than the clean PDFs (92% against 81.9%). With no text layer, the reader cannot refuse a snippet, and the source is a box of the whole page (D80 (3)). Their values are stored at confidence 0.5, so a person checks them.
+
+**Limits of this measure**:
+
+- Every document of the kit has one page, so "source page right" is 100% by construction here. The wrong page and an invalid source are tested only offline (`backend/tests/test_evaluate.py`).
+- 35 mock documents, generated by our own script, with one layout per type: a real document is harder.
+- Three runs in one afternoon, on one network; the endpoint load changes with the hour.
+- Four of the ten weakest fields (`cause`, `offence`, `diagnosis`, `provider`) raise one question: which value is right, the text that the page prints or the value of the answer key (a category such as `illness` or `burglary`, a short diagnosis, the clinic and not the doctor). That is a question for #20 (field descriptions) and for Paul, not for the harness.
+- The reports are in `backend/.dev-data/evaluation/` on the laptop, not in git. SHA-256: `omni-run-1.json` `4d1535ff…7227`, `omni-runs-2-3.json` `0e01a924…0a45`.
+
+### Business numbers with the Omni reader (one run)
+
+Date: 2026-11-18, 16:37 to 16:39 UTC. The page "Business numbers", button "Play the kit" (`POST /numbers/kit`, issue #96, D71): the 11 stories of the kit through the reader, the checks, the routing and the settlement, with no agent model. Same Omni settings as above, `CLAIMS_MODE=local`, `CLAIMS_READER=omni`. One run only.
+
+How it was run: the backend app in one process (FastAPI `TestClient`, as `scripts/measure_agent.py` does), with the variables of `.env`, then one `POST /numbers/kit`. A script outside the repository put the HTTP counter of the harness on the client of `OmniReader`, and played the fixture reader first through the same function (`play_kit`). With the app running (`CLAIMS_READER=omni` in `.env`, `scripts/dev.sh`), the button "Play the kit" makes the same call.
+
+| Reader | Outcomes right | Signal sets right | Amounts right | Seeded fraud caught | False alarms | Seconds | Model requests |
+|---|---|---|---|---|---|---|---|
+| Fixture (baseline) | 11 of 11 | 11 of 11 | 11 of 11 | 3 of 3 | 0 | < 1 | none |
+| **Omni** | **10 of 11** | **8 of 11** | **10 of 11** | **3 of 3** | **0** | 128.3 | 52, all 200; no 429 |
+
+The differences, story by story (the 7 other stories are the same as with the fixture reader):
+
+| Story | Outcome (expected) | Signals (expected) | Amount (expected) | Cause, in the reading |
+|---|---|---|---|---|
+| `kit-anna-luggage/787` | `handler_review` (`straight_through`) | none (none) | CHF 398 (CHF 787) | `amount_paid` of the trolley receipt is missing (its snippet is refused, as in the harness). The documents then prove CHF 398 against CHF 787 claimed, so a person decides (D67). |
+| `claim-2-property/3200` | `handler_review` (same) | R001 (none) | CHF 3,000 (same) | `classify` gives `unknown` for the damage photos, so the workflow sees no damage photo: R001 "A required document is missing". |
+| `kit-anna-theft/2640` | `handler_review` (same) | R001 (none) | CHF 2,440 (same) | The same: the damage photo is `unknown`. |
+| `kit-marco-bathroom/4740` | `investigation` (same) | R001, T001, T002, T003 (T001, T002, T003) | CHF 1,540 (same) | The same: the damage photo is `unknown`. |
+
+What it says:
+
+- No payment is wrong to the business: the one wrong amount is a proposal that goes to a person (`handler_review`), not a payment by the system. No amount was overpaid, every seeded fraud was caught, and there is no false alarm.
+- The costs come from two errors that the field evaluation also shows: the damage photos (type `unknown`, issue #25 and #21) add R001 to 3 stories, and one missing amount sends a clean luggage claim to a person.
+- One run only: the field evaluation shows 2 fields of 132 that change from run to run. One of them is the `total` of the quote of the story `kit-anna-theft`, which the settlement reads: it was read in this run (CHF 2,440 right), but it was missing in run 1 of the field evaluation. Another run can give other business numbers.
+- The risk of #121 (a document with no field read is paid as complete) did not happen in this run.
