@@ -490,10 +490,14 @@ Each variant changes one setting against the control of its stage and runs 3 tim
 |---|---|---|---|
 | S2 prompt | `schema-only`, `described`, `example` | `v1` (the saved runs) | 594 |
 | S3 resolution | 72, 100, 200 DPI | 150 DPI (the S2 winner) | 594 |
-| S4 temperature | 0 | 0.2 (the S3 winner) | 198 |
+| S4 temperature | 0, 0.3, 0.5 | 0.2 (the S3 winner) | 594 |
 | S5 reasoning | thinking on, budget 512 and 2048; `max_tokens` = 2048 + budget + 1024, so the answer keeps 2048 tokens | thinking off (the S4 winner) | 396 |
 | S7 final | the settings of #18, 3 runs | the saved runs | 198 (+198 if drift) |
 
+Total of the stages: 2,376 requests, 2,574 if S7 shows a drift. The smoke checks come in addition: 8 requests before S2 (24 at most with the retries; done on 2026-11-19: 8 requests, all 200, no retry) and 4 to 10 before S5.
+
+- S4 compares 4 temperatures: 0, 0.2, 0.3 and 0.5. 0.2 is the control: its runs are the runs of the S3 winner, used again. Each new temperature (0, 0.3, 0.5) runs 3 times on the full kit. Every other setting is the setting of the S3 winner and does not change in S4. The same rules of "When a variant wins" apply to each of the 3.
+- Changed on 2026-11-19, before any run of a variant, by decision of Nikola. The plan had 0 only (198 requests). The reason: one point below 0.2 shows only one side. With 0.3 and 0.5, the stage also shows whether a temperature above 0.2 helps or hurts, so the choice of 0.2 is measured, not assumed. The cost is 396 more requests.
 - Before S2 and before S5, a short check on 1 or 2 documents (4 to 10 requests) shows that the endpoint accepts the new request. It is not a result.
 - S5 runs only if its check shows that thinking with the strict schema gives an answer. The model card says the thinking text can come in `content`, before the JSON: the reader would then lose every page.
 - One call per page or per document: every document of the kit has one page, so the two give the same request. How to report it is open (Nikola and Paul).
