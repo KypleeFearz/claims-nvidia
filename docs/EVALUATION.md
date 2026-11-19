@@ -672,8 +672,8 @@ Each absent field has one of two kinds:
 | N2 | medical invoice | PDF with text | `invoice_number` lure | date, provider, patient, total, 2 lines | "Patient no.", "Insured no.", the UID of the practice and an IBAN. No "Case no." or "Ref.", which a clerk could take for an invoice reference. |
 | N3 | repair quote | PDF with text | `total` plain; `quote_date` lure | number, company, customer, 3 lines with amounts | No subtotal and no VAT line, so a total would have to be added up. "Valid until" gives another date. |
 | N4 | booking confirmation | PDF with text | `booking_reference` lure; `trip_price` plain | traveller, departure date | "Booking reference: sent separately by e-mail" is on the page, so the sentence can pass the source check. That is the point of the lure. A customer number. No table. |
-| N5 | cancellation confirmation | PDF with text | `refund_received` lure | booking reference, cancellation date | "Refund: under review"; the trip price and a cancellation fee are printed. No table. |
-| N6 | medical report | PDF with text | `provider` lure; `treatment_date` plain | patient, diagnosis | Only the name of the doctor is printed, not a clinic. |
+| N5 | cancellation confirmation | PDF with text | `refund_received` lure | booking reference, cancellation date, 2 lines | "Refund: under review". A table gives the price of the trip and a cancellation charge, so a refund could be worked out but is not printed. |
+| N6 | medical report | PDF with text | `provider` lure; `treatment_date` plain | patient, diagnosis | Only the name of the doctor is printed, not a clinic. Kept on purpose as a trap of meaning (see "Two kinds of accepted value"). |
 | N7 | booking confirmation | scan, no text layer | `booking_reference` plain; `trip_price` plain; `departure_date` plain | traveller | No reference, price or departure date is printed. |
 | N8 | repair invoice | phone photo, no text layer | `invoice_number` lure; `customer_name` plain | date, company, total | A job number and a VAT number; "Cash sale". |
 | N9 | receipt | scan, no text layer | `amount_paid` plain | shop, date, item | No price is printed at all; "Payment: on account". No table. |
@@ -688,6 +688,10 @@ Per run: 16 absent fields and 23 present fields.
 - Every field of the schema of a type is in the key.
 - A document with no table has `"line_items": []`.
 - The scans and photos have an entry in `index.json` (`hard`, `variant` `scan` or `photo`).
+
+**Change of 2026-11-19, before any document existed:**
+- **The problem:** N5 first had no table, with the trip price and a cancellation fee printed apart. In the kit, a cancellation confirmation lists exactly these two amounts as line items. So a model that read them as lines would be right, and a key with `"line_items": []` would be wrong.
+- **The change:** N5 now prints them in a table, and its key gives the 2 lines. Rule 4 (no line read) applies to the documents that print no table and whose schema has lines: N4, N7 and N9 (the first text said N4, N5 and N9; N7 has no table either).
 
 ### How each field is classified
 
@@ -725,7 +729,17 @@ It never logs a header, a key or an image. A call is matched to its document by 
 **What the classes mean for safety:**
 - **On a page with a text layer (N1–N6),** only `_shown` checks a value against the page. So an accepted invention there is always true text of the page in the wrong field, for example the sentence of N4 or a patient number of N2. It is stored at confidence 0.9, which is above the 0.8 threshold of the routing, so no person sees it. Each accepted case is reported with the text that it came from and its label.
 - **On a page with no text layer (N7–N9),** nothing checks a value against the page. A value with a snippet that holds it is stored at confidence 0.5. These pages test the model alone. A stored invention there goes to a person (0.5), so it is less severe than one on a text page.
-- **Line items:** N4, N5 and N9 have no table. A line read there is an invention in the lines and is reported. (On scans and photos the reader always refuses lines, D80 (6).)
+- **Line items:** N4, N7 and N9 print no table. A line read there is an invention in the lines and is reported. (On scans and photos the reader always refuses lines, D80 (6), so on N7 and N9 only the answer of the model can show it.)
+
+**Two kinds of accepted value.** Both are incorrect, and both fail rule 1:
+- **Fabricated:** the value is not printed on the page at all. On a text page the source check refuses it, so it can be accepted only on a scan or a photo.
+- **Wrong field (semantic misassignment):** the value is true text of the page, put into a field that it does not belong to. Examples: a patient number as the invoice number, or the doctor's name as the `provider`. The source check cannot see this: the text is on the page, so on a text page it is stored at 0.9.
+
+The report gives each accepted value with its kind and the line of the page that it came from.
+
+**N6 stays as it is (decision of Nikola, 2026-11-19, before any live run).**
+- **The risk:** the independent review showed that in S2 both prompts gave the name of a doctor as `provider` in every run. So N6 will probably fail both prompts.
+- **The decision:** N6 stays. A doctor's name stored as the clinic is a true wrong-field value, and a difficult case is not removed because a model is expected to fail it. If both prompts fail on N6, that is a shared reliability problem of the reader, and it is reported as one. The rule does not change.
 
 ### The comparison
 
@@ -734,21 +748,39 @@ It never logs a header, a key or an image. A call is matched to its document by 
 - **Why more fields and not more runs:** at temperature 0.2 the answers barely change between runs. In S2, `schema-only` changed 0 of 132 fields over 3 runs. So 3 runs mostly show stability, and the evidence comes from the 16 different absent fields.
 - **Requests:** 9 documents × 2 calls = 18 per run. 2 prompts × 3 runs × 18 = **108 requests**.
   - With the 2 retries of the reader at the most: 324.
-  - If a classify answer is not a known type, the page call classifies again. The highest possible count is then 162, or 486 with the retries.
+  - If a classify call gets no answer, the page call classifies again. The highest possible count is then 162, or 486 with the retries.
+  - Each run made once more (see below) adds 18 requests, at most once per run and prompt: at most 6 × 18 = 108 more.
+  - Without a limit, the highest possible count would be 12 runs × 81 = 972. That is every call failing 3 times, every classify made twice, and every run made once more.
+  - **Hard limit: 150 HTTP requests that are really sent,** retries and repeated classify calls included (Nikola, 2026-11-19).
+    - The runner counts each request before it goes out and never sends one over the limit.
+    - At the limit, the run ends, no other run starts, and the evaluation is marked incomplete (`stopped_at_limit`): no prompt can pass.
+    - Nothing restarts by itself. The live runner refuses a limit above 150.
+    - Tested offline: a stub transport stops at exactly 150 and at exactly 40.
+  - **Expected:** 108.
 - **No smoke check:** both prompts were checked before S2.
 - **First, offline:** the runner first runs on a stub transport, with canned answers for each class: a null, a value from another label, an invented value, no snippet, a snippet that does not hold the value, a value that does not fit the schema, not JSON, and a wrong type. This checks the class logic with no API call.
-- **A page lost because of the transport** (a timeout or a 5xx after the retries): the whole run of that prompt is made once more and both runs are reported. A page lost because of the model (not JSON, cut, wrong schema) counts against the prompt.
+- **A page lost because of the transport** (a timeout or a 5xx after the retries, on the page call, or on every classify call of a document): the whole run of that prompt is made once more, once, and both runs are reported. A page lost because of the model (not JSON, cut, wrong schema) counts against the prompt.
 
 ### When `schema-only` passes
 
 These rules apply over the 3 runs of `schema-only`. All must be true:
 
-1. **0 inventions accepted on all 16 absent fields, in every run:** 0 of 48 (16 × 3). This covers the plain fields and the lure fields, on text pages and on scans and photos alike. To accept as many as `v1` is not a pass.
+1. **0 incorrect values accepted on all 16 absent fields, in every run:** 0 of 48 (16 × 3). Both kinds count: fabricated values and page values in the wrong field. This covers the plain fields and the lure fields, on text pages and on scans and photos alike. To accept as many as `v1` is not a pass.
 2. No page lost because of the model, and no document of the wrong type that `v1` gets right.
 3. No wrong amount, date or identifier in a present field.
-4. No line read on N4, N5 or N9.
+4. No line read on N4, N7 or N9.
 
 Rule 1 was made stricter on 2026-11-19 by Nikola, before any document of the check existed. The first version allowed as many inventions on the lure fields as `v1`.
+
+**How the rules read the runs:** made exact on 2026-11-19, after the independent review of the built check and before any live run. The review found two ways in which an invention could escape rule 1.
+- **Every run counts for rule 1,** and a run made once more does not replace it. An invention in a run that was made again still fails.
+- **A value stored for an absent field is an accepted invention** in every case: also on a document of the wrong type, and also on a lost page.
+- **An absent field counts as observed only with a class from the table** (a right null or an invention).
+  - On a document of the wrong type or a lost page, the field is not observed.
+  - If a counted run has a field that is not observed, the result is **incomplete**: no pass. Three cases still fail: an accepted invention (rule 1), a page lost because of the model, and a wrong type that the other prompt avoids (rule 2). A loss because of the transport, or a wrong type that both prompts make, gives no verdict.
+  - Rules 2–4 read the counted runs: a run made once more replaces the lost one for them.
+  - A problem of the analysis (a class that does not agree with what the reader stored or with the harness) also gives no pass.
+- **Rule 4** counts the lines in the answer of the model, not only the lines that the reader kept, so it can fail on N7 and N9 too.
 
 **Each accepted invention** (of either prompt) is reported apart, with:
 - its document, field, value, snippet and run;
@@ -760,6 +792,14 @@ Rule 1 was made stricter on 2026-11-19 by Nikola, before any document of the che
 It is then investigated before any decision.
 
 Also reported, not as rules:
+- for each prompt, apart:
+  - fabricated values;
+  - page values in the wrong field;
+  - values refused by the source check or by the schema;
+  - right nulls;
+  - wrong values and missing values in present fields;
+  - documents of the wrong type;
+  - pages lost (by the model, by the transport);
 - the same classes for `v1`, side by side with `schema-only`;
 - text pages (N1–N6) and scans and photos (N7–N9) apart, and plain and lure fields apart;
 - each invention dropped, refused or stopped, with its route, apart from the accepted ones;
@@ -771,7 +811,7 @@ Also reported, not as rules:
 **What happens after the check:**
 - **`schema-only` passes:** it stays the provisional winner and the control of S3.
 - **`schema-only` fails:** Nikola and Paul decide, with the numbers. The control of S3 does not change by itself.
-- **Both prompts fail:** the risk is in the reader, not in the prompt. It goes to Nikola and Paul before any other stage.
+- **Both prompts fail:** the risk is in the reader, not in the prompt. It is a shared reliability problem and a finding in its own right. It goes to Nikola and Paul before any other stage. The rule (0 accepted values) does not change because of it.
 
 ### Where it runs
 
