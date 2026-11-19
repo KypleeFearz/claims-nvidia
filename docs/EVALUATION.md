@@ -533,3 +533,115 @@ Accuracy per field (right, wrong, missing; the 132 fields and each group), stric
 - 200 DPI gives more image tokens than the model takes for one image (13,312 patches of 16 px; an A4 page at 200 DPI has about 15,300): the server probably makes it smaller. The 6 scans are images at 150 DPI, so 200 DPI only enlarges them; the 3 phone photos do not change with the DPI.
 - A category value passes the check of its snippet only when the word is on the page (`acute illness` holds `illness`). On a page that does not print it, the field is refused: it goes to a person.
 - The line items of scans and photos stay 0: the reader keeps a line only when the text layer confirms it (D80 (6)). No setting of #20 changes that.
+
+## Tuning of the Omni reader (issue #20): S2, the prompt
+
+Run on 2026-11-19 with the method above. The prompts, the answer keys, the comparison and the reader code did not change during the stage. An independent reviewer recomputed every number below from the JSON reports and found no error.
+
+### What ran
+
+- 3 variants × 3 runs × 35 documents: 594 requests. Every answer was 200, with no retry, no 429, no transport error and no reader error. Every answer ended with `stop` (none cut by `max_tokens`). Before the stage, a smoke check made 8 requests (all 200).
+- Settings of #18 apart from the prompt: 150 DPI, temperature 0.2, `max_tokens` 2048, thinking off.
+- Code fingerprint `49603fe1…` in the 3 reports; git `4cb0a87`.
+- The reports are in `backend/.dev-data/issue-20/s2/` (not in git), with the frozen state (`freeze.txt`), the times (`timeline.txt`), the analysis script (`analyze_s2.py`, `compare_pair.py`) and its outputs (`*.analysis.txt`). The saved reports of #19 and the Metrics `latest.json` did not change.
+
+| Variant | `config_id` | Report |
+|---|---|---|
+| `schema-only` | `3cc3e9264e13` | `s2-schema-only.json` |
+| `described` | `2df4dfdab3b8` | `s2-described.json` |
+| `example` | `f83b155b3d22` | `s2-example.json` |
+
+### Results per run
+
+The control is the 3 saved runs of #19 (`v1`). It gave the same totals in each run.
+
+| Per run (mean; runs) | `v1` (control) | `schema-only` | `described` | `example` |
+|---|---|---|---|---|
+| Right of 132 | 112 | **120** (120, 120, 120) | 115.3 (114, 115, 117) | 119.7 (122, 116, 121) |
+| Wrong | 8 | 8 | 4 | 3.7 |
+| Missing | 12 | 4 | 12.7 | 8.7 |
+| Reading group, right of 117 | 109 | **117** | 110 | 115 |
+| Business category, right of 11 | 3 | 3 | 5.3 | 4.7 |
+| Not read (damage photo), of 4 | 0 | 0 | 0 | 0 |
+| Strict pass, of 35 | 17 | 25 | 19.3 | 24.7 |
+| Classification, of 35 | 31 | 31 | 31 | 31 |
+| Line items, of 73 (clean PDFs 53 of 53) | 53 | 53 | 53 | 53 |
+| Wrong amount, date or identifier | 0 | 0 | 0 | 0 |
+| Fields whose result changes between runs | 2 | **0** | 7 | 8 |
+| Seconds per document (mean) | 5.45 | 4.40 | 4.65 | 5.43 |
+| Prompt tokens per run | not recorded | 149,942 | 155,797 | 168,042 |
+| Completion tokens per run | not recorded | about 10,200 | about 10,300 | about 10,150 |
+
+Classification is 31 of 35 for every prompt. The 4 damage photos give `unknown`, and the prompt of the page call does not change the classify call.
+
+### The rules of "When a variant wins"
+
+| Comparison | Gain per run | Lowest run > highest control run | Guardrails | Gain with any one scenario left out (lowest) | Wins |
+|---|---|---|---|---|---|
+| `schema-only` against `v1` | +8.00 | 120 > 112 | hold | +5.00 | yes |
+| `described` against `v1` | +3.33 | 114 > 112 | hold | +0.33 | yes, narrowly |
+| `example` against `v1` | +7.67 | 116 > 112 | hold | +5.33 | yes |
+| `example` against `described` | +4.33 | 116 > 117: **no** | hold | +3.33 | no |
+
+`example` does not win against `described`, so it does not replace `described`. Of the winners, `schema-only` has the largest gain (+8.00 against +3.33). It is also the cheapest prompt and the only one with no change between runs. **The rules select `schema-only`.** Its margin over `example` (+7.67) is 0.33 field per run: that is noise. The selection holds for each reading of the rule on `example`.
+
+### Where the +8 of `schema-only` comes from
+
+The control misses 9 fields of the reading group:
+- 7 in all 3 runs: the `booking_reference` of 4 booking confirmations (`claim-1-travel`, `kit-anna-luggage`, `kit-elena-travel`, `kit-marco-travel`), the `amount_paid` of `kit-anna-luggage/receipt-trolley.pdf`, the `invoice_number` of `kit-lukas-clean/medical-invoice.pdf` and the `airline` of `hard/kit-anna-luggage-luggage-report-photo.jpg`.
+- 2 in some runs: the `amount_paid` of `kit-anna-theft/receipt-lock-set.pdf` (missing in runs 2 and 3) and the `total` of `kit-anna-theft/repair-quote.pdf` (missing in run 1).
+
+Each control run misses 8 of these 9. `schema-only` reads all 9 right in each run and loses no field that the control reads: 9 documents are better, 0 worse.
+
+All 9 values have their source on the right page. Two kinds:
+- 8 are on PDFs with a text layer: the snippet is on the text layer and holds the value (confidence 0.9).
+- 1, the `airline` of the luggage report photo, has no text layer. Only the model gives its source (confidence 0.5, so a person checks it). `described` and `example` also read it.
+
+The 4 booking references are on the text layer as `Booking reference:` and the value on the next line, and a snippet with or without the line break passes the check. So the control most probably gave null for them. The reports cannot prove it: they do not keep the answer of the model, and a missing field has the one reason `absent` for a null and for a refused snippet.
+
+### What the stage shows, and what it does not
+
+- **Why `schema-only` reads more:** the most probable cause is that the rules of `v1` make the model give null too often, mostly "Use null for a value that is not on this page: never guess". But `schema-only` drops 4 parts at once:
+  - the null rule;
+  - the forms of dates and amounts;
+  - the rule for the line items;
+  - "Read the whole image" and "JSON only".
+
+  The stage cannot say which part does it. `described` keeps the rules of `v1` and on the same day misses the same booking references (11 of 12). So the cause is the prompt, not the day of the control.
+- **The kit cannot test the risk of `schema-only`.** No answer key expects an empty value: the 132 expected fields all have a value. So the kit cannot see a value that the model invents when the page has none, and that is exactly what "never guess" prevents. Two checks reduce the risk:
+  - On a page with a text layer, an invented value is refused: its snippet must be on the page and hold the value.
+  - On a scan or a photo, a value is accepted with confidence 0.5, so the claim goes to a person.
+
+  Neither check finds a true value of the page that goes into the wrong field. In the kit, `schema-only` gives the same 8 wrong values as the control and no new wrong value.
+- **The descriptions fix little, and they make the reader less stable.** The business gain of `described` and `example` comes from 2 documents:
+  - In `kit-lukas-clean/medical-report.pdf`, `diagnosis` and `provider` become right.
+  - In `claim-3-health/medical-report.pdf`, they stay wrong.
+  - `offence` stays wrong for every prompt.
+
+  About half of the drop of wrong values is a wrong value that becomes missing: `cause` "gastroenteritis" becomes no value, because "illness" is not on the page. `described` also wins only through one scenario (+0.33 when `kit-lukas-clean` is left out). The descriptions were written after the errors of the control were seen, so a gain from them is the most likely to be overfitting.
+- **`described` and `example` lose fields that the control reads.** The guardrails written in advance check wrong values, not lost ones, so they pass.
+  - `described` loses a `total` in 4 documents in some runs:
+    - `claim-3-health/medical-invoice.pdf` in 1 of 3 runs, as in the smoke check;
+    - the repair invoice photo in 2 runs;
+    - the `kit-anna-theft` quote in 2 runs;
+    - the `kit-lukas-household` quote in 1 run.
+
+    It also loses `item_description` of `kit-anna-theft/receipt-door-frame.pdf` in 3 of 3 runs, and of `kit-anna-luggage/receipt-jacket-shoes.pdf` in 1 run.
+  - `example` lost all 4 fields of `kit-anna-luggage/booking-confirmation.pdf` in run 2, while the 3 line items of that page were read right. So the answer was parsed, and every field was a null or a refused snippet. No read value copies the worked example.
+  - `schema-only` loses nothing.
+- **Time:** the control ran one day earlier. Its 5.45 s per document cannot be compared exactly with 4.40 s. Run 2 of `example` had one call of 66 s (no retry). S7 checks the drift of the endpoint.
+
+### Limits of the result
+
+- 35 documents, about 11 layouts, one generator, no document of the kit kept apart. A gain on the kit does not prove a gain on documents that the model has not seen.
+- The kit has no field that is expected empty, so the risk of invented values is not measured (see above).
+- 1 of the 8 gained fields comes from a photo, with a source that only the model gives.
+- The reports do not keep why a field is missing (a null or a refused snippet).
+
+### Decision and what comes next
+
+- By the rules, `schema-only` is the winner of S2, and it is the control of S3. The defaults of `OmniReader` (`ISSUE_18`, prompt `v1`) do not change in this stage.
+- Open, for Nikola and Paul, and not started:
+  - a check of invented values on documents where a field is truly absent (this needs new mock documents, so Paul must approve it);
+  - a reason per missing field in the report (a null or a refused snippet);
+  - `schema-only` with the descriptions. This is a new variant made after the results were seen. If it runs, it must say so.
