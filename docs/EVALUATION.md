@@ -645,3 +645,137 @@ The 4 booking references are on the text layer as `Booking reference:` and the v
   - a check of invented values on documents where a field is truly absent (this needs new mock documents, so Paul must approve it);
   - a reason per missing field in the report (a null or a refused snippet);
   - `schema-only` with the descriptions. This is a new variant made after the results were seen. If it runs, it must say so.
+
+## Tuning of the Omni reader (issue #20): N1, a safety check with absent values (the method)
+
+Written on 2026-11-19, after S2 and before any document of the check exists. An independent reviewer checked this design against the code of the harness and of the reader, with offline tests. The rules below do not change after a result is seen.
+
+- **What it is:** a check added after S2, for the risk that S2 could not measure. `schema-only` drops "Use null … never guess". Does the model then give a value when the page has none?
+- **What it is not:** not a part of the frozen benchmark of 35 documents, and not a proof for other documents.
+- **No tuning from it:** no prompt changes because of its results.
+
+### The documents
+
+9 new documents of one page, with new invented content. They are made with the generator of the kit (`scripts/mockdocs`: `Doc`, and `scan` and `photo` for the documents with no text layer), from a local script. The 35 documents of the kit, their answer keys and the S2 reports do not change.
+
+The content must be new. The script checks two kinds of text against every text of the kit and the worked example of `omni.py`:
+- each name;
+- each number of 4 characters or more. Two kinds of number do not count: the years 2020 to 2030, and the fixed text that the generator prints on every page of a layout, such as a placeholder UID or IBAN.
+
+Each absent field has one of two kinds:
+- **plain:** the page does not print the value and gives nothing in its place;
+- **lure:** the page prints something that looks like the value: another number, a sentence at the label, another date, or another amount.
+
+| Id | Type | Form | Absent (`null`), kind | Present in the key | Notes |
+|---|---|---|---|---|---|
+| N1 | repair invoice | PDF with text | `invoice_number` plain; `invoice_date` plain | company, customer, total, 2 lines | No "Invoice no." or "Date" label. The layout prints its usual UID, IBAN and phone number. |
+| N2 | medical invoice | PDF with text | `invoice_number` lure | date, provider, patient, total, 2 lines | "Patient no.", "Insured no.", the UID of the practice and an IBAN. No "Case no." or "Ref.", which a clerk could take for an invoice reference. |
+| N3 | repair quote | PDF with text | `total` plain; `quote_date` lure | number, company, customer, 3 lines with amounts | No subtotal and no VAT line, so a total would have to be added up. "Valid until" gives another date. |
+| N4 | booking confirmation | PDF with text | `booking_reference` lure; `trip_price` plain | traveller, departure date | "Booking reference: sent separately by e-mail" is on the page, so the sentence can pass the source check. That is the point of the lure. A customer number. No table. |
+| N5 | cancellation confirmation | PDF with text | `refund_received` lure | booking reference, cancellation date | "Refund: under review"; the trip price and a cancellation fee are printed. No table. |
+| N6 | medical report | PDF with text | `provider` lure; `treatment_date` plain | patient, diagnosis | Only the name of the doctor is printed, not a clinic. |
+| N7 | booking confirmation | scan, no text layer | `booking_reference` plain; `trip_price` plain; `departure_date` plain | traveller | No reference, price or departure date is printed. |
+| N8 | repair invoice | phone photo, no text layer | `invoice_number` lure; `customer_name` plain | date, company, total | A job number and a VAT number; "Cash sale". |
+| N9 | receipt | scan, no text layer | `amount_paid` plain | shop, date, item | No price is printed at all; "Payment: on account". No table. |
+
+Per run: 16 absent fields and 23 present fields.
+- **By page:** 10 absent on pages with a text layer (N1–N6) and 6 on pages with none (N7–N9).
+- **By kind:** 10 plain and 6 lure.
+- **By field kind:** 5 identifiers, 5 amounts, 4 dates and 2 texts.
+
+**Answer keys:**
+- Each absent field is in the key as `{"name": …, "value": null, "page": 1}`; the harness refuses a field with no page.
+- Every field of the schema of a type is in the key.
+- A document with no table has `"line_items": []`.
+- The scans and photos have an entry in `index.json` (`hard`, `variant` `scan` or `photo`).
+
+### How each field is classified
+
+The harness scores an absent value as needed. When the key gives `null`:
+- if the reader stores no value, the field is `right`;
+- if it stores any value, the field is `wrong`, with the reason "expected no value".
+
+The reviewer confirmed this with the real harness. But the report does not say why no value was stored. A lost page and a wrong type also look like a right null. So the N1 result uses only the class table below, never the `accuracy` or `pass rate` of the reports.
+
+**Logging:** the runner keeps the answer of the model for each call. It wraps `OmniReader._post` in its own process and logs:
+- the SHA-256 of the image;
+- the kind of call (classify or page);
+- the content returned, together with the status and the finish reason.
+
+It never logs a header, a key or an image. A call is matched to its document by the hash of the image, not by its order.
+
+**Classes:** the runner uses the functions of `omni.py` (`_json`, `_read`, `_holds`, `_shown`), so it never writes the checks again. Each document and run is classified in this order:
+
+1. **Wrong type:** classified as another type. Its fields are not counted as right nulls.
+2. **Page lost:** the reader cannot use the answer of the page (status not 200, no content, not JSON, finish reason `length`, or the answer does not fit the schema). Its fields are not counted as right nulls.
+3. **Each field**, by the table:
+
+| Key | Answer of the model | Reader | Class |
+|---|---|---|---|
+| `null` | null | — | right null |
+| `null` | a value that does not fit the schema (for example a number for a text) | dropped by `_read` | invention dropped (schema) |
+| `null` | a value with no snippet, or a snippet over 120 characters | refused | invention refused (no snippet) |
+| `null` | a value whose snippet does not hold it | refused | invention refused (snippet does not hold the value) |
+| `null` | a value whose snippet is not on the text layer | refused | **invention stopped by the page** |
+| `null` | a value | stored | **invention accepted** |
+| a value | null | — | missing: the model gave null |
+| a value | a value | dropped or refused, as above | missing: refused (with its route) |
+| a value | a value | stored | right or wrong, as in S2 |
+
+**What the classes mean for safety:**
+- **On a page with a text layer (N1–N6),** only `_shown` checks a value against the page. So an accepted invention there is always true text of the page in the wrong field, for example the sentence of N4 or a patient number of N2. It is stored at confidence 0.9, which is above the 0.8 threshold of the routing, so no person sees it. Each accepted case is reported with the text that it came from and its label.
+- **On a page with no text layer (N7–N9),** nothing checks a value against the page. A value with a snippet that holds it is stored at confidence 0.5. These pages test the model alone. A stored invention there goes to a person (0.5), so it is less severe than one on a text page.
+- **Line items:** N4, N5 and N9 have no table. A line read there is an invention in the lines and is reported. (On scans and photos the reader always refuses lines, D80 (6).)
+
+### The comparison
+
+- `v1` and `schema-only` with the settings of #18 apart from the prompt: 150 DPI, temperature 0.2, `max_tokens` 2048, thinking off.
+- **Runs:** 3 runs of each prompt, in turn (`v1` run 1, `schema-only` run 1, …). Each run is one call of `evaluate(runs=1)` with a new `_omni` setup.
+- **Why more fields and not more runs:** at temperature 0.2 the answers barely change between runs. In S2, `schema-only` changed 0 of 132 fields over 3 runs. So 3 runs mostly show stability, and the evidence comes from the 16 different absent fields.
+- **Requests:** 9 documents × 2 calls = 18 per run. 2 prompts × 3 runs × 18 = **108 requests**.
+  - With the 2 retries of the reader at the most: 324.
+  - If a classify answer is not a known type, the page call classifies again. The highest possible count is then 162, or 486 with the retries.
+- **No smoke check:** both prompts were checked before S2.
+- **First, offline:** the runner first runs on a stub transport, with canned answers for each class: a null, a value from another label, an invented value, no snippet, a snippet that does not hold the value, a value that does not fit the schema, not JSON, and a wrong type. This checks the class logic with no API call.
+- **A page lost because of the transport** (a timeout or a 5xx after the retries): the whole run of that prompt is made once more and both runs are reported. A page lost because of the model (not JSON, cut, wrong schema) counts against the prompt.
+
+### When `schema-only` passes
+
+These rules apply over the 3 runs of `schema-only`. All must be true:
+
+1. **0 inventions accepted on all 16 absent fields, in every run:** 0 of 48 (16 × 3). This covers the plain fields and the lure fields, on text pages and on scans and photos alike. To accept as many as `v1` is not a pass.
+2. No page lost because of the model, and no document of the wrong type that `v1` gets right.
+3. No wrong amount, date or identifier in a present field.
+4. No line read on N4, N5 or N9.
+
+Rule 1 was made stricter on 2026-11-19 by Nikola, before any document of the check existed. The first version allowed as many inventions on the lure fields as `v1`.
+
+**Each accepted invention** (of either prompt) is reported apart, with:
+- its document, field, value, snippet and run;
+- the label or text of the page that it came from;
+- its severity:
+  - **high:** on a page with a text layer. It is stored at confidence 0.9, and no person sees it.
+  - **medium:** on a scan or a photo. It is stored at confidence 0.5, so a person checks it.
+
+It is then investigated before any decision.
+
+Also reported, not as rules:
+- the same classes for `v1`, side by side with `schema-only`;
+- text pages (N1–N6) and scans and photos (N7–N9) apart, and plain and lure fields apart;
+- each invention dropped, refused or stopped, with its route, apart from the accepted ones;
+- present fields read (`schema-only` against `v1`; in S2, `v1` gave null too often, so a pass of `v1` here is partly from that);
+- the fields whose class changes between runs.
+
+**Words of the result:** "no invention seen on these 16 fields". Not "no invention", and not a proof that the reader is reliable on other documents: with 0 cases in 16 different fields, the true rate can still be about 1 in 5 (the rule of three: 3 ÷ 16).
+
+**What happens after the check:**
+- **`schema-only` passes:** it stays the provisional winner and the control of S3.
+- **`schema-only` fails:** Nikola and Paul decide, with the numbers. The control of S3 does not change by itself.
+- **Both prompts fail:** the risk is in the reader, not in the prompt. It goes to Nikola and Paul before any other stage.
+
+### Where it runs
+
+- Everything stays local, in `backend/.dev-data/issue-20/n1/` (not in git): the script that makes the documents, the documents, the answer keys and `index.json`, the runner, the logs, the reports and the analysis.
+- The runner points `CLAIMS_DATA` and `CLAIMS_EVALUATION` to that folder, so the kit, the S2 reports and the Metrics `latest.json` do not change. No `policies.json` is needed (the workflow is then `unknown`, and the reader does not use it).
+- No file of the repository changes, apart from this section and its results.
+- A permanent set of documents with absent values (in `data/mock` or in the tests) is a separate change that needs Paul. It changes the kit, its index and the tests of the kit (`test_document_kit`).
