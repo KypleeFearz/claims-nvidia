@@ -489,12 +489,12 @@ Each variant changes one setting against the control of its stage and runs 3 tim
 | Stage | Variants | Control | New requests |
 |---|---|---|---|
 | S2 prompt | `schema-only`, `described`, `example` | `v1` (the saved runs) | 594 |
-| S3 resolution | 72, 100, 200 DPI | 150 DPI (the S2 winner) | 594 |
+| S3 resolution | 72, 100, 200 DPI | `v1` at 150 DPI, run again in S3 (changed after N1, see "S3, the resolution (the method)") | 792 |
 | S4 temperature | 0, 0.3, 0.5 | 0.2 (the S3 winner) | 594 |
 | S5 reasoning | thinking on, budget 512 and 2048; `max_tokens` = 2048 + budget + 1024, so the answer keeps 2048 tokens | thinking off (the S4 winner) | 396 |
 | S7 final | the settings of #18, 3 runs | the saved runs | 198 (+198 if drift) |
 
-Total of the stages: 2,376 requests, 2,574 if S7 shows a drift. The smoke checks come in addition: 8 requests before S2 (24 at most with the retries; done on 2026-11-19: 8 requests, all 200, no retry) and 4 to 10 before S5.
+Total of the stages: 2,376 requests, 2,574 if S7 shows a drift. With S3 at 792 (changed on 2026-11-20, see the S3 method): 2,574 requests, 2,772 if S7 shows a drift. The smoke checks come in addition: 8 requests before S2 (24 at most with the retries; done on 2026-11-19: 8 requests, all 200, no retry) and 4 to 10 before S5.
 
 - S4 compares 4 temperatures: 0, 0.2, 0.3 and 0.5. 0.2 is the control: its runs are the runs of the S3 winner, used again. Each new temperature (0, 0.3, 0.5) runs 3 times on the full kit. Every other setting is the setting of the S3 winner and does not change in S4. The same rules of "When a variant wins" apply to each of the 3.
 - Changed on 2026-11-19, before any run of a variant, by decision of Nikola. The plan had 0 only (198 requests). The reason: one point below 0.2 shows only one side. With 0.3 and 0.5, the stage also shows whether a temperature above 0.2 helps or hurts, so the choice of 0.2 is measured, not assumed. The cost is 396 more requests.
@@ -967,5 +967,136 @@ The reader stored none of them.
 - **Open questions for Nikola and Paul, not started:**
   - a check of meaning for fields that a lure can fill (for example, a label next to the value that must match the field);
   - texts like "Not answerable" or "null" read as no value;
-  - the control for S3: `v1` or `schema-only`;
+  - the control for S3: `v1` or `schema-only` (decided on 2026-11-20: `v1`, see the S3 method);
   - whether S3 should wait for a fix of the reader.
+
+## Tuning of the Omni reader (issue #20): S3, the resolution (the method)
+
+Written on 2026-11-20, before any S3 request. The rules below do not change after a result is seen.
+
+### The control: `v1`, not the S2 winner
+
+- **The change:** the method above said that the control of a stage is the winner of the stage before. For S3 that would be `schema-only`. Nikola decided on 2026-11-20 to use `v1` instead.
+- **Why:**
+  - `schema-only` failed the N1 safety check;
+  - on scans it accepts more invented values than `v1`;
+  - it is not approved as a default.
+
+  A tuning stage must not build on a prompt that will not be used.
+- **The settings:** all are those of #18 (`ISSUE_18`): prompt `v1`, temperature 0.2, `max_tokens` 2048, thinking off. Only the DPI changes.
+
+### A control in the same period
+
+- The saved #19 runs are `v1` at 150 DPI from 2026-11-18. S3 makes **3 new runs of `v1` at 150 DPI**, in the same period as the other DPI runs, and uses them as the control.
+- **Why:** S2 showed a change in speed between days. A small effect of the DPI could be a change of the endpoint in that time.
+- **The check of drift:** the new control is compared with the saved #19 runs (same settings). There is drift when either is true:
+  - the right fields per run differ by 3 or more;
+  - the set of wrong business values is not the same.
+
+  With drift, the S3 report says so, and only the new control counts as the reference for later stages. The check does not replace S7.
+
+### The order of the runs
+
+12 runs: 4 DPI values × 3 runs. They make 3 rounds, and each round has each DPI once. The order turns by one place in each round, so each DPI takes a different place in each round, and the order in time does not favour one DPI.
+
+| Round | Order |
+|---|---|
+| 1 | 150, 72, 100, 200 |
+| 2 | 72, 100, 200, 150 |
+| 3 | 100, 200, 150, 72 |
+
+**If the endpoint refuses 200 DPI** (seen in the smoke check), S3 runs a plan with 3 DPI values. It is written now: 9 runs in the order 150, 72, 100 / 72, 100, 150 / 100, 150, 72, with 594 requests expected and a limit of 650.
+
+### Requests and the stopping rule
+
+- 12 runs × 66 requests (35 classify, 31 pages) = **792 requests** expected.
+  - The count is expected, not exact: a different classification (for example at 72 DPI) changes the number of page calls.
+  - Total of all stages with S3 at 792: 2,574 requests, or 2,772 if S7 shows a drift.
+- **Hard limit: 870 HTTP requests that are really sent,** retries and repeated classify calls included. With the 3-DPI plan, the limit is 650.
+  - The runner counts each request before it goes out, and never sends one over the limit.
+  - At the limit, the run in progress is marked `cut_by_limit`, no other run starts, and the experiment is `stopped_at_limit`: incomplete, with no verdict.
+- **A failing endpoint stops the experiment.** When 5 calls in a row get no 200 (for example a bad key, an outage, or a 4xx), the runner sends nothing more. The run is marked `cut_endpoint_failing` and the experiment `stopped_endpoint_failing`. Without this, a dead endpoint would use up the whole budget.
+- **A crash or a stop by hand** marks the run `error` and the experiment `error`. Each call is written to the log at once, so the answers received until then are kept.
+- **Nothing restarts by itself.**
+  - A call with no 200 after the retries is kept and reported.
+  - The analysis then gives no verdict, whether the call was in a control run or in a variant run.
+  - A repeat of that run needs a new approval.
+- **A live start needs an approval reference** (`--approved`) that names who approved it and the date. It is kept in `meta.json`.
+  - A second live experiment of the same kind needs `--repeat-approved`.
+  - One live run at a time: a lock file blocks a second live start.
+
+### How the image changes
+
+The model takes 1,024 to 13,312 patches of 16 × 16 px per image (the documentation of the model). The sizes below were computed on the kit with the code of the reader:
+
+| DPI | A4 PDF page (px) | Patches | Inside the limit |
+|---|---|---|---|
+| 72 | 596 × 842 | 2,014 | yes |
+| 100 | 827 × 1,170 | 3,848 | yes |
+| 150 | 1,241 × 1,754 | 8,580 | yes |
+| 200 | 1,654 × 2,339 | 15,288 | **no** |
+
+- **200 DPI is above the documented limit.** The method makes no guess about what the hosted endpoint does with such an image. It could shrink it, cut it or refuse it.
+  - A smoke check (below) looks at this first, with its own approval.
+  - The S3 report says what was seen.
+  - If the endpoint refuses the image, the 3-DPI plan runs instead.
+- **DPI changes only the 28 PDFs.** The 7 JPGs (3 phone photos, 4 damage photos) are sent as they are at every DPI.
+- **The 6 scans are image PDFs at 150 DPI:** a lower DPI makes them smaller, a higher DPI only enlarges them.
+- **DPI also changes the classify call.** The text layer, and so the check of the sources, does not change.
+
+### The analysis
+
+- **The rules do not change.** "When a variant wins" applies as for S2, with the same code (`analyze_s2.py`), and the new 150 DPI runs are the control of the other DPI values. All the guardrails apply as written.
+- **No verdict (incomplete)** when any of these is true:
+  - the experiment is not `complete`;
+  - any call got no 200 after the retries;
+  - a run has a reader error.
+
+  A timeout that a retry then solved changes no answer: it is reported, and it does not stop a verdict.
+  - a check of integrity fails: the reader code or the kit differs from the run, the reports have more than one reader fingerprint, the settings of a run differ from the plan, or the key is in a file.
+- **Three groups apart:**
+  - PDF with a text layer (22 documents);
+  - PDF scan, image only (6 documents);
+  - JPG (7 documents, not changed by the DPI; any difference there is noise or drift).
+- **Also reported, as plain numbers:** accuracy, tokens and seconds per DPI. A DPI that is cheaper at the same accuracy cannot win by the rules (they need a gain of 3 fields), but its cost is shown.
+- **Also reported:** the drift check, and for 200 DPI what the endpoint did with the image (from the smoke check).
+- **Scope:** S3 does not re-run N1. If a DPI other than 150 wins, N1 is run once at that DPI before any change of a default, with its own approval.
+
+### The answers are kept, for a later change of the reader
+
+- **Kept for each call:**
+  - the answer of the model (the body of each 200);
+  - the start of each error body, with any long text, data URL or base64 replaced by `<redacted>`. A body that holds a key, a token or an authorization header, or any piece of the key, is replaced as a whole by `<redacted: credential>`;
+  - the status, the finish reason, the usage, the Retry-After and the seconds of each attempt;
+  - the hash of the page image, its size in px and its patches;
+  - the hash of the request (the image replaced by its hash);
+  - the document of the kit.
+- **Also kept:** what the reader stored for each document; per experiment, the hashes of the reader code and of each document and answer key, the approval reference, and the order and the time of the runs.
+- **Never kept:** a key, a header or an image. After a live run, the runner looks for the key (and its first 8 characters) in every file of the experiment; if it is found, the experiment is `error`.
+- **Replay:** `replay.py` serves the saved answers again to the reader and the harness, with no API call.
+  - **What it covers:** changes after the model call (parsing, the check of the source, confidence, scoring). With the same reader code, the reports must be identical; the offline tests check this (12 of 12 runs). After such a change of the shared reader, the differences are the effect of the change, with no new model call.
+  - **What it refuses:** changes before the model call (prompt, schema, settings, DPI, the renderer). Each request that the current reader builds must have the recorded hash; otherwise the replay stops with "REQUEST CHANGED". It also refuses a kit that changed since the run.
+  - It succeeds only when the experiment is complete as a whole (status `complete`, every planned run) and every run is identical. A partial experiment is refused.
+  - It is possible for N1 and S3. It is not possible for #19 and S2, whose reports keep no answers.
+
+### Where it runs
+
+- Locally, in `backend/.dev-data/issue-20/s3/` (not in git): the runner (`run_s3.py`), the stub (`stub.py`), the replay, the analysis, the tests (`test_s3.py`, 23 tests) and one folder per experiment.
+- The runner points `CLAIMS_EVALUATION` to the folder of the experiment. The kit, the #19, S2 and N1 results and the Metrics `latest.json` do not change; a test checks their hashes.
+
+### The 200 DPI smoke check (prepared, not run)
+
+- **What:** 2 documents (`claim-1-travel/booking-confirmation.pdf`, a PDF with text, and `hard/kit-lukas-clean-medical-invoice-scan.pdf`, a scan) at 150, 200 and 100 DPI, prompt `v1`.
+- **Requests:** 2 documents × 2 calls × 3 DPI = 12, with a hard limit of 16.
+- **It shows:**
+  - whether the endpoint accepts an image of 15,288 patches (the status, and the reason of a refusal from the error body);
+  - the prompt tokens of each call at the three DPI values, on the same page, in the same minutes.
+- **How to read the tokens:** the text of a call is the same at each DPI, so the difference in prompt tokens between two DPI values, for the same document and kind of call, is the image.
+  - The difference between 150 and 100 DPI gives the tokens per patch of this endpoint, measured, not assumed.
+  - With that factor, an image of 15,288 patches sent whole would add about 6,708 patches' worth of tokens against 150 DPI. One cut or shrunk to 13,312 patches would add about 4,732 patches' worth.
+  - From S2, the factor is probably about 0.25, which gives about +1,677 and +1,183 tokens per image.
+- **What it cannot show:** which pixels the model sees (a shrink and a cut can give the same tokens), the reading quality at 200 DPI, or anything for other documents.
+- **A usable answer** is a 200 with the finish reason `stop` and an answer in JSON. The smoke analysis checks each call.
+- **If the request is refused,** the 3-DPI plan runs.
+- **It is not a result:** the smoke check is not used to choose a DPI.
+- It needs its own approval before it runs: `run_s3.py smoke-live --out <new folder> --approved <reference>`.
