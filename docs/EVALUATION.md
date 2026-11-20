@@ -1086,8 +1086,14 @@ The model takes 1,024 to 13,312 patches of 16 × 16 px per image (the documentat
 
 ### The 200 DPI smoke check (prepared, not run)
 
-- **What:** 2 documents (`claim-1-travel/booking-confirmation.pdf`, a PDF with text, and `hard/kit-lukas-clean-medical-invoice-scan.pdf`, a scan) at 150, 200 and 100 DPI, prompt `v1`.
+- **What:** 2 documents (`claim-1-travel/booking-confirmation.pdf`, a PDF with text, and `hard/kit-lukas-clean-medical-invoice-scan.pdf`, a scan), prompt `v1`, in this order: 150, 100, then 200 DPI.
 - **Requests:** 2 documents × 2 calls × 3 DPI = 12, with a hard limit of 16.
+- **Why 200 DPI comes last** (changed on 2026-11-20 by Nikola, before any smoke request; the first order was 150, 200, 100):
+  - If the endpoint refuses 200 DPI with a 5xx or a timeout, the reader retries each call twice, so 200 DPI can use the rest of the limit of 16.
+  - With 200 DPI last, the calibration at 100 DPI is always done first.
+  - A refusal with a 4xx is not retried and was never a problem.
+
+  The limits do not change. A test checks the case of a 5xx: 4 + 4 + 8 requests, then the limit, with the 150 and 100 DPI runs complete.
 - **It shows:**
   - whether the endpoint accepts an image of 15,288 patches (the status, and the reason of a refusal from the error body);
   - the prompt tokens of each call at the three DPI values, on the same page, in the same minutes.
