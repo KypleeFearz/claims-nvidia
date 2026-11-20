@@ -1480,3 +1480,127 @@ Written on 2026-11-20, while S4 was running and before any S4 result was seen. N
 - **No verdict** under the same conditions as S4: incomplete, a call with no 200, a reader error, or a failed check of integrity. The check covers the code, the kit, one reader fingerprint, the settings of each run, one model and endpoint, the requests, and the key.
 - **A confirmed winner still does not change a default.** N1 runs at its temperature first, with its own approval, and N1 is not repeated automatically.
 - **Where it runs:** `run_s4.py --confirm`, with its offline tests in `test_s4.py`. The tools as they were for the S4 run are kept in `s4/used-by-s4-live-1/`.
+
+## Tuning of the Omni reader (issue #20): S4, the results
+
+**The result:**
+- **0.2 stays.** No temperature wins by the rules (measured).
+- **There is no provisional winner, so the confirmation did not run.** None of its 440 approved requests was used.
+- **Measured, against the S3 control** (114 right fields per run):
+  - temperature 0 gives −1.67 per run and one more wrong value in 2 of 3 runs;
+  - 0.3 gives +0.33, inside the noise between runs;
+  - 0.5 gives −4.00, and it fails the guardrail of the reading group.
+- **Interpretation:** on this kit, the temperature between 0 and 0.3 makes no difference that 3 runs can show, and 0.5 is probably worse. The control is of another period (2.4 hours earlier), so a small difference cannot be given to the temperature alone.
+
+The method was not changed. An independent reviewer checked the numbers (see "Checks"). As in S3, **measured**, **interpretation** and **open** mark what the files show, what is probable, and what these data cannot answer.
+
+### What ran
+
+- **When:** on 2026-11-20, from 14:22 to 14:51 UTC, at git `f7e814a`, with the approval `Nikola-2026-11-20-S4`. No other live run was active. The order was the planned one.
+- **Requests:** 595 sent, against 594 planned and a limit of 650.
+  - The one retry: a page call (`kit-anna-luggage/receipt-jacket-shoes.pdf`, run `r1-t0.3`) got no answer in 90 s (a timeout), then a 200 on the second attempt.
+  - Every one of the 594 calls got a 200 and ended with `stop`. There was no 429 and no reader error.
+  - Each request carried the temperature of its run, the classify calls and the value 0 included.
+- **Tokens of the answers:** 1,372,356 prompt (152,484 per run, the same as the control: the images and texts do not change), 91,602 completion, no reasoning tokens.
+- **Settings:** those of #18 apart from the temperature. The reader fingerprint is `49603fe1…` in the 9 reports and in the 3 control reports.
+
+  | Temperature | `config_id` |
+  |---|---|
+  | 0 | `88dacc926546` |
+  | 0.3 | `8f217e3efac8` |
+  | 0.5 | `2a450cd91e6b` |
+- **Where the files are:** `backend/.dev-data/issue-20/s4/s4-live-1/` (not in git), with the analysis (`analysis*.txt`, `s4-live-1-summary.txt`, `s4-live-1-verify-missing.txt`).
+  - The tools as they were during the run are in `s4/used-by-s4-live-1/`, with their hashes.
+  - The confirmation mode (`--confirm`) was added to `run_s4.py`, `s4lib.py` and `analyze_s4.py` while S4 was running; the running process did not load it. The path of S4 in these files did not change (checked by diff). The current hashes are in `s4/hashes-current.txt`.
+
+### Results per temperature (measured)
+
+Mean per run; the 3 runs in brackets. The control is the 3 S3 runs at 0.2, from 11:32 to 11:58 UTC.
+
+| Per run | 0 | 0.2 (control, S3) | 0.3 | 0.5 |
+|---|---|---|---|---|
+| Right of 132 | 112.33 (112, 113, 112) | 114.00 (114, 114, 114) | **114.33** (115, 113, 115) | 110.00 (111, 110, 109) |
+| Wrong | 8.67 | 8.00 | 8.00 | 8.00 |
+| Missing | 11.00 | 10.00 | 9.67 | 14.00 |
+| PDF with text, right of 90 | 77.33 | 78.00 | 79.00 | 75.00 |
+| PDF scan, right of 25 | 23.00 | 23.00 | 23.00 | 23.00 |
+| JPG, right of 17 | 12.00 | 13.00 | 12.33 | 12.00 |
+| Strict pass, of 35 | 17.33 (17, 18, 17) | 19.00 | 19.33 (20, 18, 20) | 18.00 (19, 18, 17) |
+| Classification, of 35 | 31 | 31 | 31 | 31 |
+| Line items of the clean PDFs, of 53 | 53 | 53 | 53 | 53 |
+| Wrong amount, date or identifier | 0 | 0 | 0 | 0 |
+| Fields whose result changes between runs | 3 | 2 | 3 | 2 |
+| Seconds per document, mean | 4.71 | 4.14 | 6.14 | 5.92 |
+| Seconds per document, median of the runs | 3.97 to 4.44 | 4.02 to 4.25 | 4.44 to 4.49 | 4.00 to 4.37 |
+| Completion tokens per run | 10,175 | 10,350 | 10,250 | 10,109 |
+
+### The rules of "When a variant wins"
+
+| Comparison | Gain per run | Lowest run > highest control run | Guardrails | Gain with any one scenario left out (lowest) | Wins |
+|---|---|---|---|---|---|
+| 0 against 0.2 | −1.67 | 112 > 114: no | **fail:** more wrong values (8.67 > 8) | −2.33 | no |
+| 0.3 against 0.2 | +0.33 | 113 > 114: no | **fail:** "no errors" (see below) | −0.67 | no |
+| 0.5 against 0.2 | −4.00 | 109 > 114: no | **fail:** the reading group loses more than 1 | −5.00 | no |
+
+- **No temperature wins, and none fails on the seconds alone,** so 0.2 stays, and no confirmation runs. The seconds guardrail of 0.3 passes only narrowly (6.14 against a limit of 1.5 × 4.14 = 6.20), because of one slow call (see "Time and drift"). It is not a cost of the temperature.
+- **The guardrail "no errors" of 0.3:**
+  - It fails only because of the one timeout that a retry then solved.
+  - The written rule names a reader error and a 429 that the retries did not solve. The code of the rules (`analyze_s2.py`, frozen since S2) also counts a solved transport error, so it is stricter than the text.
+  - This changes nothing here: 0.3 already fails the gain and the rule of the lowest run. The code was not changed. The difference is noted for the next stages.
+
+### Why fields are missing or wrong (measured, from the saved answers)
+
+As in S3, each field that is not right was sent through the checks of the reader (`verify_missing.py`). Every case has one cause, and the counts equal the reports.
+
+| Over 3 runs | 0 | 0.3 | 0.5 |
+|---|---|---|---|
+| Missing, outside the scope (damage photos, issue #25) | 12 | 12 | 12 |
+| Missing, the model returned null | **0** | **0** | **0** |
+| Missing, a correct value refused at the check of the source | 18 | 16 | 28 |
+| Missing, an incorrect value refused | 3 | 1 | 2 |
+| Wrong, an incorrect value stored (business-category text) | 26 | 24 | 24 |
+
+- **The extra wrong value at 0:** the `provider` of `claim-3-health/medical-invoice.pdf` is read with its address ("Medizinzentrum Seeblick AG, Seestrasse 41, 8800 Thalwil") in 2 of 3 runs. It is a business-category field. The other wrong values are the same 8 per run as in the control.
+- **The loss at 0.5** is mostly more correct values refused at the check of the source (28 against 16 to 18).
+- **The `airline` of the luggage report photo** (JPG) was right in the 3 control runs. In S4 it was refused in 8 of 9 runs, at every temperature (3 of 3 at 0 and 0.5, 2 of 3 at 0.3). Its snippet does not hold the value.
+
+### Time and drift
+
+- **Measured:**
+  - S4 ran 2.4 hours after the control.
+  - The mean seconds per document are higher in S4 (4.71 to 6.14 against 4.14). This comes mostly from a few slow calls: the 90 s timeout in `r1-t0.3`, and one call of 60 s in `r1-t0.5`. The medians of the runs are about the same (about 4.0 to 4.5 s).
+- **Interpretation:**
+  - The `airline` of the photo probably changes with the period, not with the temperature:
+    - it was right in 10 of the 12 S3 runs in the morning, at every DPI (the image of a JPG does not change with the DPI);
+    - it was refused in 8 of the 9 S4 runs in the afternoon, at all three temperatures;
+    - it was also refused in the 3 saved #19 runs.
+  - So the endpoint, or its load, probably changed a little between the morning and the afternoon. This costs each temperature about 0.9 field per run against the control. With it removed, 0.3 would be about +1.2, still far below the gain of 3: no verdict changes.
+- **Open:** without a 0.2 run in the same period, a drift of about 1 field cannot be told apart from an effect of the temperature. This is the limit that the method named before the run. It does not change the verdict: no difference reaches the gain of 3 that the rules need.
+
+### Checks
+
+- **Integrity** (`analyze_s4.py`):
+  - the experiment is `complete`, 9 of 9 runs;
+  - the reader code and the kit are the same now, in the S4 runs and in the control;
+  - one reader fingerprint for the 12 reports;
+  - the settings are those of the plan, with the same model and endpoint;
+  - the requests of the reports equal the count of the runner;
+  - no call is without a 200.
+- **The reports against the raw answers:** the tokens of each report equal the sum of the usage in `calls.jsonl`. There are 66 answered calls and 35 stored documents per run.
+- **Replay:** `replay_s4.py` served the saved answers again to the current reader, with no API call: **9 of 9 runs identical**.
+- **No key in a file:** the runner and a second scan found no key, no part of it, no `nvapi-` and no `Bearer` in the files of the experiment.
+- **Nothing else changed:** the kit, the answer keys, the reports of #19, S2, N1 and S3, and the reader code have the same SHA-256 before and after the run.
+- **Independent review:** a reviewer with no part in the run recomputed the numbers of this section from `calls.jsonl`, the reports and `meta.json`, with no API call. It confirmed every number and each check of integrity, and its own replay gave 9 of 9 identical. It found no wrong number. Its notes are in the text: the narrow seconds guardrail of 0.3, the `airline` of the photo in S3, and the tools changed after the run.
+
+### Limits of the result
+
+- The control is of another period (see "Time and drift").
+- 3 runs per temperature. Temperature 0 did not make the runs identical (112, 113, 112), so the endpoint is not fully deterministic at 0.
+- The temperature changes both calls; the classification was 31 of 35 at every temperature.
+- The kit is the same as before: 35 documents, about 11 layouts, one generator, no field expected empty. N1 was not run at another temperature, because no temperature won.
+
+### Decision and what comes next
+
+- **The temperature stays at 0.2** (`ISSUE_18`). The reader defaults do not change.
+- **The settings of S3 and S4 together:** `v1`, 150 DPI, temperature 0.2. These are the settings of #18.
+- **Next, with its own approval:** S5, reasoning (thinking on, budgets 512 and 2048), after its smoke check. Before S5, decide whether the "no errors" guardrail counts a solved timeout (see above).
