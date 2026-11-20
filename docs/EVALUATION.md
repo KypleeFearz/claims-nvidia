@@ -1111,13 +1111,16 @@ The model takes 1,024 to 13,312 patches of 16 × 16 px per image (the documentat
 
 **The result:**
 - **150 DPI stays.** No other DPI wins by the rules.
-- **72 and 100 DPI lose fields:** −3.33 and −4.33 right fields per run. The model reads more characters wrong; the check of the text layer refuses these values, so they become missing (not wrong). The two DPI values also fail two guardrails: the reading group and the line items of the clean PDFs.
+- **72 and 100 DPI lose fields:** −3.33 and −4.33 right fields per run. They also fail two guardrails: the reading group and the line items of the clean PDFs. The lost fields are missing, not wrong: the reader refused them (see "Why fields are missing").
 - **200 DPI gives no gain:** −1.00 per run, with more change between runs. It costs 41 % more prompt tokens and 6 % more seconds per document.
-- **The endpoint does not refuse 200 DPI. It makes the image smaller,** to about 13,056 patches. The model never sees the full 200 DPI page.
+- **200 DPI is accepted, but it is probably not seen whole.** Every 200 DPI call was answered, and every one used 584 image tokens fewer than the page sent would need (measured). The probable cause is that the server makes the image smaller; this is an interpretation, not a verified fact (see "The smoke check").
 - **There is no drift** against the #19 runs.
-- **A correction to S2:** every missing field of the fresh S3 control is a right value that the reader refused, because its snippet does not hold the value. It is not a null of the model (see "Why fields are missing"). The 4 damage photos (issue #25) are left out of this count.
+- **A correction to S2:** at 150 DPI, 10 fields per run are missing.
+  - 4 are the damage photos, which the reader does not read (issue #25).
+  - The other 6 are values that the model read correctly and that the reader refused at the check of the source.
+  - In no case did the model return null (see "Why fields are missing").
 
-The method was not changed. An independent reviewer recomputed the numbers from the raw answers (see "Checks").
+The method was not changed. An independent reviewer recomputed the numbers from the raw answers (see "Checks"). Below, **measured** marks what the files show directly; **interpretation** marks what is probable but not verified; **open** marks what cannot be answered with these data.
 
 ### What ran
 
@@ -1150,28 +1153,36 @@ The method was not changed. An independent reviewer recomputed the numbers from 
   - the answers of the model (`calls.jsonl`);
   - what the reader stored (`stored.jsonl`);
   - the 12 harness reports;
-  - the analysis (`analysis*.txt`, `s3-live-1-summary.txt`, `s3-live-1-why-missing.txt`).
+  - the analysis (`analysis*.txt`, `s3-live-1-summary.txt`, `s3-live-1-verify-missing.txt`, `s3-live-1-token-model.txt`).
 
 ### The smoke check: what the endpoint does with 200 DPI
 
-All 12 calls answered 200 with `stop` and JSON. The prompt tokens of each call:
+**Measured** (from the requests the reader built and the `usage` that the endpoint returned):
 
-| DPI | Image (px) | Patches sent | Classify call | Page call (booking, scan) |
+| DPI | Image sent (px) | Patches of 16 px in the image sent (computed) | Prompt tokens, classify call | Prompt tokens, page call (booking, scan) |
 |---|---|---|---|---|
 | 100 | 827 × 1,170 | 3,848 | 1,059 | 1,528, 1,549 |
 | 150 | 1,241 × 1,754 | 8,580 | 2,242 | 2,711, 2,732 |
 | 200 | 1,654 × 2,339 | 15,288 | 3,361 | 3,830, 3,851 |
 
-- **The tokens per patch:**
-  - From 100 to 150 DPI, the prompt grows by 1,183 tokens for 4,732 patches: **0.250 tokens per patch** (one token per 2 × 2 patches).
-  - The classify call is then 97 text tokens plus patches ÷ 4. This is exact at 100 and at 150 DPI.
-- **At 200 DPI, the image takes 3,264 tokens, which is 13,056 patches, not 15,288.**
-  - The whole image would add 1,677 tokens against 150 DPI. A cut to the limit of 13,312 patches would add 1,183. The measure is +1,119, in each of the 4 calls.
-  - The S3 runs give the same: 200 DPI costs 62,664 more prompt tokens per run than 150 DPI, which is 56 images × 1,119.
-- **Probable cause:** the server makes the image smaller, so that each side is a multiple of 32 px and the image stays inside the limit, about 1,536 × 2,176 px (96 × 136 patches = 13,056). That is about 186 DPI.
-  - At 100 and 150 DPI, the same rounding gives the patch counts of the reader exactly.
-  - This is an inference from tokens. The tokens cannot show which pixels the model sees, or how the server makes the image smaller.
-- **What this means for S3:** "200 DPI" is a page at about 186 DPI, made smaller by the server. S3 does not measure a full 200 DPI image.
+- **Smoke answers:** all 12 calls answered 200 with `stop` and JSON. No call was refused.
+- **The image sent is the full page.** The SHA-256 of each image sent equals the page that the reader renders at that DPI (the runner finds each document by this hash). The patches are computed from the size of the image; the endpoint does not report them.
+- **A token formula fits every other call exactly.** The prompt tokens of each classify call equal 97 + (width ÷ 32, rounded up) × (height ÷ 32, rounded up). The formula was found on the 100 and 150 DPI smoke calls. It then predicted, with no difference:
+  - all 252 PDF classify calls of S3 at 72, 100 and 150 DPI;
+  - all 84 JPG classify calls (2 image sizes, all 4 DPI values);
+  - the 4 smoke calls at 100 and 150 DPI.
+- **The 200 DPI calls do not fit it.** All 86 classify calls at 200 DPI (84 in S3, 2 in the smoke check) measure exactly **584 tokens fewer** than the formula: 3,264 image tokens instead of 3,848.
+  - The page calls show the same: in S3, 200 DPI costs 62,664 more prompt tokens per run than 150 DPI, which is 56 images × 1,119. The whole image would cost 56 × 1,703 more.
+  - 3,264 tokens is below 3,328, which is the documented limit of 13,312 patches divided by 4.
+
+**Interpretation** (probable, not verified):
+- Probably, the endpoint makes an image that is above its limit smaller before the model reads it. Here that gives 3,264 tokens. With the same formula, that is a grid of 48 × 68 tokens, about 1,536 × 2,176 px, or about 186 DPI on an A4 page. Of the ways to factor 3,264, only 48 × 68 keeps the shape of the page.
+- If this is so, the S3 variant called "200 DPI" shows the model a page of about 186 DPI, and S3 does not measure a full 200 DPI image.
+
+**Open:**
+- Which pixels the model sees. A shrink and a crop can give the same token count.
+- How the endpoint makes the image smaller, and whether this behaviour is the same on another deployment (for example a self-hosted NIM).
+- The tokens per patch and the 97 text tokens are fitted numbers. They are not given by the endpoint.
 
 ### Results per DPI
 
@@ -1223,33 +1234,66 @@ Mean per run; the 3 runs in brackets. The 150 DPI runs are the new control.
 
 ### Why fields are missing (from the saved answers)
 
-S3 keeps each answer of the model, so a missing field can now be explained. For every missing field (the 4 damage photos left out, issue #25), the page answer was compared with what the reader stored.
+S3 keeps each answer of the model, so each field that is not right can now be explained. `verify_missing.py` (in the S3 folder, not in git) takes each field that a report gives as missing or wrong. It sends the saved page answer through the functions of the reader (`_json`, `_read`, then the checks of `_field` in their order), on the text layer of the page at the DPI of the run. It judges the value of the model with `compare_field` of the harness.
 
-| Over 3 runs | 72 DPI | 100 DPI | 150 DPI | 200 DPI |
+**Measured: every case has one cause, and the counts equal the reports** (over 3 runs; per run in brackets for 150 DPI):
+
+| Cause | 72 DPI | 100 DPI | 150 DPI | 200 DPI |
 |---|---|---|---|---|
-| Missing fields | 28 | 32 | 18 | 21 |
-| The model gave null | **0** | **0** | **0** | **0** |
-| The model gave the expected value; the reader refused it | 22 | 28 | 18 | 20 |
-| The model gave another value; the reader refused it | 6 | 4 | 0 | 1 |
+| **Missing, outside the scope of the reader:** damage photo, classified `unknown`, no page call (issue #25) | 12 | 12 | 12 (4) | 12 |
+| **Missing, the model returned null** | **0** | **0** | **0** | **0** |
+| **Missing, the model gave the correct value, and the reader refused it:** | 22 | 28 | 18 (6) | 20 |
+| – no snippet | 3 | 6 | 0 | 3 |
+| – the snippet is longer than 120 characters | 0 | 2 | 0 | 0 |
+| – the snippet does not hold the value | 14 | 20 | 15 | 16 |
+| – the snippet is not on the text layer | 5 | 0 | 3 | 1 |
+| **Missing, the model gave an incorrect value, and the reader refused it** | 6 | 4 | 0 | 1 |
+| **Missing, total** (= the reports) | 40 | 44 | 30 (10) | 33 |
+| **Wrong: an incorrect value, stored** (business-category text) | 24 | 23 | 24 (8) | 24 |
 | Line items of the clean PDFs: given by the model / kept by the reader | 159 / 130 | 159 / 138 | 159 / 159 | 159 / 159 |
 
-- **At 150 DPI, the 6 missing fields per run are right values with a snippet that does not hold the value or is not on the text layer:**
-  - the 4 `booking_reference` values: the snippet is the title `Booking confirmation`, in every run;
-  - the `invoice_number` of `kit-lukas-clean/medical-invoice.pdf`: the snippet is a date, or the date and the number together;
-  - one amount (`amount_paid` of the lock set receipt, or the `total` of the `kit-anna-theft` quote): the snippet is the label (`Total paid`) or a LaTeX table.
-- **At 72 DPI, the model reads characters wrong.** In each of the 3 runs it gives `MZ5-2026-3317` for `MZS-2026-3317`, `Z1-2026-0652` for `ZI-2026-0652`, and the line items `Hotel Miraadouro` for `Hotel Miradouro` and `Re-ile` for `Re-tile`.
-  - On a PDF with a text layer, the check of the source refuses such a value, so it is missing, not wrong. That is why no wrong identifier appears.
-  - A line item read wrong is not confirmed by the text layer. The reader then keeps no line of that page: 3 to 4 lines are lost at once (29 lines over 3 runs).
-- **At 100 DPI, the causes are mixed.** No field value has a misread character, but:
-  - some line items are (`Mira douro`, `Trip price price paid`); 21 lines are lost over 3 runs;
-  - most of the missing fields have a different snippet: no snippet (7 cases), or a snippet that adds the address or more lines (`repair_company` 2 times, `offence` 3 times, `amount_paid` with "of which VAT").
-  - On a scan or a photo, there is no text layer to catch a misread: such a value would be stored at confidence 0.5. In S3 this did not happen: the scans lose fields to missing snippets, not to wrong values.
-- **The correction to S2:**
+- No answer was dropped as a whole (not JSON, or not the asked form), and no value was dropped by the schema.
+- No case passed every check and was still not stored, and no case failed a check and was still stored. The replay of the reader agrees with the reports.
+- **Where they are:**
+  - The out-of-scope fields are the 4 damage photos (JPG).
+  - Every refused incorrect value is on a PDF with a text layer.
+  - The stored wrong values are the same business-category fields at each DPI: 2 per run on scans (`cause`, `offence`) and 6 on PDFs with text (5 at 100 DPI in run 2).
+
+**The 10 missing fields per run at 150 DPI** (measured; the same in the 3 runs, apart from which amount is refused):
+
+| Field | Runs | What the model gave | Why the reader refused it |
+|---|---|---|---|
+| `damage_description` of the 4 damage photos | 3 of 3 | no page call: the photo is classified `unknown` | outside the scope (issue #25) |
+| `booking_reference` of 4 booking confirmations | 3 of 3 | the correct reference | the snippet is the title `Booking confirmation`: it does not hold the value |
+| `invoice_number` of `kit-lukas-clean/medical-invoice.pdf` | 3 of 3 | `GLB-2026-5521`, correct | runs 1 and 2: the snippet joins the date and the number, which are not next to each other on the text layer; run 3: the snippet is the date only |
+| `amount_paid` of `kit-anna-theft/receipt-lock-set.pdf` | runs 1, 2 | 318.00, correct | the snippet is the label `Total paid`: it does not hold the value |
+| `total` of `kit-anna-theft/repair-quote.pdf` | run 3 | 2,640.00, correct | the snippet is a LaTeX table: it is not on the text layer |
+
+**At 72 DPI** (measured):
+- The model reads characters wrong. In each of the 3 runs it gives `MZ5-2026-3317` for `MZS-2026-3317` and `Z1-2026-0652` for `ZI-2026-0652`, and the line items `Hotel Miraadouro` for `Hotel Miradouro` and `Re-ile` for `Re-tile`.
+- The 6 incorrect values were all refused because their snippet is not on the text layer. None was stored, so no wrong identifier appears.
+- A line item read wrong is not confirmed by the text layer, and the reader then keeps no line of that page: 3 to 4 lines are lost at once (29 lines over 3 runs).
+
+**At 100 DPI** (measured): no field value has a misread character, but:
+- some line items have one (`Mira douro`, `Trip price price paid`): 21 lines are lost over 3 runs;
+- most of the missing fields have a different snippet: no snippet (7 cases), a snippet of more than 120 characters (`repair_company`, 2 times), or a snippet that does not hold the value (for example `Total paid`, then "of which VAT").
+
+**Interpretation:**
+- At 72 DPI, the text layer protects the PDFs with text. A scan or a photo has no text layer, so a misread value there would be stored at confidence 0.5. In S3, no incorrect value was refused or stored on a scan or photo apart from the business-category values that 150 DPI also gives. The 6 scans are the only test of this, so it is not proven for scans in general.
+- Most fields that the control loses are lost at the check of the source, not at the reading of the image. A change of the DPI does not fix that. A change of the prompt or of the snippet rule might.
+
+**The correction to S2:**
+- **Measured:**
   - S2 said that the control "most probably gave null" for the 4 booking references.
-  - The saved S3 answers of the same settings show the opposite: the model reads each reference right, and the reader refuses it because the snippet is the title.
-  - This holds for all 18 missing fields of the 150 DPI runs, not only the booking references. So the S2 explanation that the null rule of `v1` ("never guess") makes the model give null too often is not supported for the missing fields. The gain of `schema-only` in S2 probably comes from better snippets, not from fewer nulls.
-  - Limits: S2 kept no answers, so this cannot be checked on the S2 runs themselves. The saved #19 control missed 2 more fields (the `airline` of the luggage report photo and the `amount_paid` of the trolley receipt); S3 cannot explain those.
-  - The S2 section is left as it was written. Where its text about nulls disagrees with this section ("Where the +8 of `schema-only` comes from", "What the stage shows", "Limits of the result"), this section is the newer evidence.
+  - In S3, with the same settings on another day, the model gave the correct reference in all 12 cases (4 documents × 3 runs). The reader refused each one because its snippet is the title.
+  - The same is true of all 18 refused fields of the 150 DPI runs: none is a null.
+- **Interpretation:**
+  - The S2 explanation, that the null rule of `v1` ("never guess") makes the model give null too often, is not supported for these fields.
+  - The gain of `schema-only` in S2 more probably comes from better snippets.
+- **Open:**
+  - S2 kept no answers, so this cannot be checked on the S2 runs themselves.
+  - The saved #19 control missed 2 more fields (the `airline` of the luggage report photo and the `amount_paid` of the trolley receipt). S3 cannot explain those.
+- **The S2 section is left as it was written.** Where its text about nulls disagrees with this section ("Where the +8 of `schema-only` comes from", "What the stage shows", "Limits of the result"), this section is the newer evidence.
 
 ### The drift check
 
@@ -1281,15 +1325,15 @@ S3 keeps each answer of the model, so a missing field can now be explained. For 
 
 ### What the stage shows, and what it does not
 
-- **150 DPI is the best setting measured.** It is also the most stable: the same 114 fields in each run, and 2 fields that change between runs, against 8 or 9 at the other DPI values.
-- **A lower DPI saves tokens but loses fields.** 72 DPI uses 40 % of the prompt tokens of 150 DPI and 12 % fewer seconds. The cost is 3.33 fields and 9.67 clean line items per run, and 2.67 fewer documents that pass. On a page with a text layer, the loss is safe (missing, not wrong). On scans and photos it would not always be safe.
-- **A higher DPI does not help on this kit.** The endpoint makes the image smaller, so the model sees about 186 DPI. The small loss (−1.00) is inside the noise between runs (110 to 115).
-- **The main loss of the control is not the image.** At every DPI, most missing fields are right values with a wrong snippet. A change of the DPI does not fix that. A change of the prompt or of the snippet rule could. The snippet rule is part of the shared reader: it is a question for Paul, and S3 does not change it.
+- **150 DPI is the best setting measured** (measured). It is also the most stable: the same 114 fields in each run, and 2 fields that change between runs, against 8 or 9 at the other DPI values.
+- **A lower DPI saves tokens but loses fields.** 72 DPI uses 40 % of the prompt tokens of 150 DPI and 12 % fewer seconds. The cost is 3.33 fields and 9.67 clean line items per run, and 2.67 fewer documents that pass. On the PDFs with text, the loss was safe: missing, not wrong (measured). On scans and photos it might not be safe, because no text layer can refuse a misread value (interpretation).
+- **A higher DPI did not help on this kit.** The loss (−1.00) is inside the noise between runs (110 to 115) (measured). The endpoint probably makes the image smaller, to about 186 DPI (interpretation). So S3 says nothing about a full 200 DPI image (open).
+- **The main loss of the control is not the image.** At every DPI, most missing fields in the scope of the reader are correct values that the check of the source refused (measured). A change of the DPI did not fix that. A change of the prompt or of the snippet rule might (interpretation, not tested). The snippet rule is part of the shared reader: it is a question for Paul, and S3 does not change it.
 
 ### Limits of the result
 
 - The kit is the same as in S2: 35 documents, about 11 layouts, one generator. All PDFs are A4, with one page.
-- 200 DPI is about 186 DPI after the server. A DPI above 186 cannot be measured on this endpoint for an A4 page.
+- If the endpoint makes large images smaller (interpretation, see the smoke check), an A4 page above about 186 DPI cannot be measured on this endpoint. What the model sees at "200 DPI" is open.
 - The 6 scans are images at 150 DPI: a DPI above 150 only enlarges them. A real scan at a higher resolution could behave differently.
 - The JPGs do not change with the DPI. A result for photos needs photos at other sizes.
 - N1 was not run again. It is needed only if a DPI other than 150 wins, and none did.
@@ -1299,4 +1343,4 @@ S3 keeps each answer of the model, so a missing field can now be explained. For 
 - **The DPI stays at 150** (`ISSUE_18`). The reader defaults do not change. 150 DPI is the control of S4.
 - **No new runs are needed for S3.** The fresh control (3 runs of `v1` at 150 DPI, 2026-11-20) is the reference of the stages after it.
 - **Next, with its own approval:** S4, the temperature (0, 0.3, 0.5; 594 requests). It uses these 150 DPI runs as its control at 0.2.
-- **For Paul, not started:** most missing fields are right values with a snippet that does not hold the value, such as a title or a label. This is in addition to the N1 findings.
+- **For Paul, not started:** most missing fields in the scope of the reader are correct values whose snippet does not hold the value, such as a title or a label, or is not on the text layer. This is in addition to the N1 findings.
