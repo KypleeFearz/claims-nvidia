@@ -1706,3 +1706,163 @@ Written on 2026-11-20, after the S4 results and before any S5 request. Nikola ap
 - **The temperature** stays at 0.2, not the advised 0.6.
 - **The fields of the answer that the API reference does not describe** (where the thinking text goes, the count of the thinking) are measured, not documented.
 - **3 runs per budget,** on the same kit: 35 documents, about 11 layouts, no field expected empty.
+
+## Tuning of the Omni reader (issue #20): S5, reasoning (the results)
+
+**The result:**
+- **Thinking stays off.** No budget wins by the rules (measured).
+  - Budget 512 gives −0.33 right fields per run; budget 2048 gives −1.00.
+  - Both fail the line items of the clean PDFs and the seconds guardrail: 2.2 and 4.0 times the control.
+- **Thinking changes where the errors are, not how many there are** (measured):
+  - It reads right in every run the fields that the control loses at the check of the source (the 4 booking references and 2 others). The PDFs with text gain up to +4.67 fields per run.
+  - It loses about as much on scans and photos, in 3 ways:
+    - values with no snippet;
+    - 3 answers that ran into a loop until `max_tokens`;
+    - new wrong values on documents with no text layer.
+  - The runs are much less stable: 17 to 18 fields change between runs, against 2.
+- **Interpretation:** thinking helps the model give a snippet that the reader accepts on PDFs with text. The same effect might be reached without its cost, its instability and its new errors (for example by the prompt). That is not tested here.
+
+The method was not changed. An independent reviewer checked the numbers (see "Checks"). **Measured**, **interpretation** and **open** are marked as in S3 and S4.
+
+### The smoke check (measured)
+
+- **Requests:** 8 sent, limit 12, on 2026-11-20 at 15:24 UTC. All 200, all `stop`. Tokens: 19,950 prompt, 7,055 completion, of which 5,355 reasoning.
+- **Every check passed for both budgets:** the JSON answer in `content`, the schema complete, the reasoning tokens counted and within the budget.
+- **What the smoke check showed about the endpoint**, which its documentation does not state:
+  - The thinking text comes in a separate field, `message.reasoning_content`. The `content` holds only the JSON answer. The message also has an empty `refusal` field.
+  - The budget is kept. Each page call stopped its thinking at budget − 1 (511, 2047); the classify calls thought for 34 to 84 tokens.
+  - The completion tokens include the thinking (for example 881 = 511 + 370), so `max_tokens` also limits the thinking. The method had planned for this: `max_tokens` = 2048 + budget + 1024.
+  - A page call took 6.6 to 8.9 s at 512 and 18.7 to 22.9 s at 2048, against about 4 s with thinking off.
+
+### What ran
+
+- **When:** on 2026-11-20, from 15:25 to 16:10 UTC, at git `db63b8d`, with the approval `Nikola-2026-11-20-S5`. No other live run was active. The order was the planned one.
+- **Requests:** 396 sent, as planned, against a limit of 440 (452 with the smoke check). Every call got a 200 at the first attempt: no retry, no 429, no timeout, no reader error.
+- **Finish reasons:** 393 `stop` and 3 `length` (see "The answers that ran into a loop").
+- **Tokens of the answers:** 919,644 prompt, 281,621 completion, of which 213,019 reasoning. Every answer reported its reasoning tokens (`no_reasoning` 0).
+- **Settings:** each request carried `enable_thinking` true, its budget, `max_tokens` 2048 + budget + 1024 and temperature 0.2. The reader fingerprint is `49603fe1…` in the 6 reports and in the 3 control reports. The `config_id`s are `c27892baef7c` (512) and `67ce22347e7f` (2048).
+- **Where the files are:** `backend/.dev-data/issue-20/s5/` (not in git): `smoke-live-1/`, `s5-live-1/`, the analysis (`analysis*.txt`, `s5-live-1-summary.txt`, `s5-live-1-verify-missing.txt`) and the tools with their hashes.
+
+### Results per setting (measured)
+
+Mean per run; the 3 runs in brackets. The control is the 3 S3 runs with thinking off (morning of 2026-11-20).
+
+| Per run | Off (control, S3) | Budget 512 | Budget 2048 |
+|---|---|---|---|
+| Right of 132 | 114.00 (114, 114, 114) | 113.67 (116, 113, 112) | 113.00 (117, 107, 115) |
+| Wrong | 8.00 | 8.00 | 8.67 |
+| Missing | 10.00 | 10.33 | 10.33 |
+| PDF with text, right of 90 | 78.00 | **82.67** | 78.33 |
+| PDF scan, right of 25 | 23.00 | 20.00 | 22.00 |
+| JPG, right of 17 | 13.00 | 11.00 | 12.67 |
+| Strict pass, of 35 | 19.00 | 22.00 (21, 22, 23) | 21.00 (22, 20, 21) |
+| Classification, of 35 | 31.00 | 31.67 | 31.00 |
+| Line items of the clean PDFs, of 53 | 53 | 52.00 (53, 50, 53) | 50.33 (53, 45, 53) |
+| Wrong amount, date or identifier | 0 | 0 | 0 |
+| Fields whose result changes between runs | 2 | 18 | 17 |
+| Answers cut (`length`) | 0 | 1 | 2 |
+| Seconds per document, mean (median) | 4.14 (4.15) | 9.21 (7.91) | 16.60 (18.07) |
+| Completion tokens per run | 10,350 | 28,941 | 64,933 |
+| Of which reasoning | 0 | 18,013 | 52,993 |
+
+- **Classification:** at 512, the photo `kit-anna-theft/damage-photo.jpg` got its right type in 2 runs. The reader does not read a damage photo (issue #25), so no field changes.
+- **Strict pass** is higher with thinking (22 and 21 against 19), because more PDFs with text have every field right. It is not a rule of "When a variant wins".
+
+### The rules of "When a variant wins"
+
+| Comparison | Gain per run | Lowest run > highest control run | Guardrails | Gain with any one scenario left out (lowest) | Wins |
+|---|---|---|---|---|---|
+| 512 against off | −0.33 | 112 > 114: no | **fail:** clean line items (50 in one run); seconds 9.21 > 1.5 × 4.14 | −1.33 | no |
+| 2048 against off | −1.00 | 107 > 114: no | **fail:** more wrong values (8.67 > 8); clean line items (45 in one run); seconds 16.60 > 6.21 | −2.00 | no |
+
+- "No errors" holds for both, under the frozen code and under the S5 retry rule alike: there was no retry and no reader error.
+- No budget passes every rule apart from the seconds, so the cost question for Paul does not arise.
+
+### Why fields are missing or wrong (measured, from the saved answers)
+
+Each field that is not right was sent through the checks of the reader (`verify_missing.py`). Every case has one cause, and the counts equal the reports.
+
+| Over 3 runs | Off (control) | 512 | 2048 |
+|---|---|---|---|
+| Missing, outside the scope (damage photos) | 12 | 12 | 12 |
+| Missing, the model returned null | 0 | **0** | **0** |
+| Missing, a correct value refused at the check of the source | 18 | 10 | 2 |
+| – of which: no snippet | 0 | 10 | 0 |
+| Missing, an incorrect value refused | 0 | 5 | 7 |
+| Missing, the page was lost (the answer ran into a loop) | 0 | 4 | 10 |
+| Wrong, an incorrect value stored | 24 | 24 | 26 |
+
+- **What thinking fixes (PDFs with text):** in every S5 run, at both budgets, these are right:
+  - the 4 `booking_reference` values;
+  - the `invoice_number` of `kit-lukas-clean/medical-invoice.pdf`;
+  - the `amount_paid` of the lock set receipt.
+
+  The control refuses all six at the check of the source, in every run or in some runs. The value of the model was already right: what thinking changes is the snippet that the model writes, not what it reads.
+- **What thinking breaks (scans and photos):**
+  - **No snippet:** at 512, the model gave correct values with no snippet. That happened for every field of `hard/claim-2-property-repair-invoice-scan.pdf` in one run, and for 3 fields of the police report scan. The reader refuses a value with no snippet, so they are missing.
+  - **New wrong values on documents with no text layer,** not in the control. They are stored at confidence 0.5, so a person checks the claim:
+    - `item_description` of the jacket and shoes receipt photo: "Receipt" (512, one run) and "Thank you for shopping with us." (2048, one run);
+    - `customer_name` of the police report scan: "Anna Keller (born 1988-04-12)" (2048, one run).
+  - The other wrong values are the business-category values of the control. There is no wrong amount, date or identifier.
+
+### The answers that ran into a loop (measured)
+
+| Run | Document | Reasoning tokens | What the answer did |
+|---|---|---|---|
+| `r2-b2048` | `kit-anna-theft/repair-quote.pdf` | 2047 | the JSON ends in `]}  ]}  ]}  …` until `max_tokens` (5,120) |
+| `r2-b2048` | `kit-marco-bathroom/repair-invoice.pdf` | 1602 | spaces and new lines until `max_tokens` |
+| `r3-b512` | `hard/kit-anna-luggage-receipt-jacket-shoes-photo.jpg` | 511 | spaces and new lines until `max_tokens` (3,584) |
+
+- The thinking had ended inside its budget. The **answer** then repeated itself until the limit. The answer is not valid JSON, so the reader keeps no field and no line of that page, as it must.
+- This explains most of the low run of 2048 (107: 2 pages, 10 fields and 8 line items lost).
+- **Without the 3 cut pages** (a check, not a rule): `r2-b2048` would be 117 and `r3-b512` 116. The means would be 115.00 (512) and 116.33 (2048), gains of +1.00 and +2.33. That is still below 3, and the verdict does not change: 512 still fails the clean line items (50 in `r2-b512`) and 2048 the wrong values (8.67). Both still fail the seconds.
+- On the PDFs with text, the gain of 2048 (+0.33 in the table) is about +3.67 without its 2 cut pages.
+- **A product risk, for Paul:** the reader does not detect or retry an answer cut by `length`. A page that loops is lost with no trace beyond the missing fields. This is outside S5; the defaults keep thinking off.
+- **Under the method this is a result, not a run with no verdict.** Each call got a 200, and the reader has no error. A cut answer is reported (`length`) and counts as what the reader stores.
+- **Measured:** with thinking off, every one of the 1,980 calls of S2, S3 and S4 (about 930 page calls) ended with `stop`.
+- **Interpretation:** a loop of this kind is a known failure of strict JSON decoding, and here it came only with thinking on.
+- **Open:** whether a larger `max_tokens` or another temperature would avoid it. Neither was tested, and neither would be a change of S5.
+
+### Time and drift
+
+- **Measured:** S5 ran 3.5 hours after the control, on the same day.
+  - The thinking makes each page call 2 to 5 times slower. This is much larger than the change of speed that S4 saw within the day.
+  - The prompt tokens are almost the same (153,241 and 153,307 against 152,484 per run): about 11 to 12 tokens more per call. Probably the template of the thinking adds them (interpretation).
+- **Interpretation:** the drift of about 1 field per run that S4 suggested is small against what thinking changes here (−3 to +5 per group, and 17 to 18 unstable fields). It does not change a verdict: no budget comes near a gain of 3.
+- **Open:**
+  - Whether the gain on the PDFs with text is fully due to the thinking. With thinking off, the booking references were refused in every run of the S3 control and of #19, and in the S4 runs at 0, 0.3 and 0.5 too, so this gain is probably real. Whether the prompt could get it without thinking is not tested.
+  - A confirmation in the same period was not run: there is no provisional winner.
+
+### N1 and safety
+
+- **Interpretation:** S5 does not show that thinking is safer. It adds new wrong values on documents with no text layer, the place where N1 found the most accepted inventions, and it makes the answers less stable.
+- **Open:** N1 was not run with thinking. Under the method it runs only before a change of a default, and no budget won.
+
+### Checks
+
+- **Integrity** (`analyze_s5.py`):
+  - the experiment is `complete`, 6 of 6 runs;
+  - the reader code and the kit are the same now, in S5 and in the control;
+  - one reader fingerprint over 9 reports;
+  - the settings are those of the plan, with the same model and endpoint;
+  - the requests of the reports equal the count of the runner;
+  - no call is without a 200.
+- **The reports against the raw answers:** the tokens of each report equal the sum of the usage in `calls.jsonl`. There are 66 answered calls and 35 stored documents per run, and each request carried its reasoning settings.
+- **Replay:** with no API call, 6 of 6 runs are identical (the smoke check: 2 of 2).
+- **No key in a file:** no key, no part of it, no `nvapi-` and no `Bearer` in the files of S5.
+- **Nothing else changed:** the kit, the answer keys, the earlier results and the reader code have the same SHA-256 before and after.
+- **Offline tests:** 22 of 22 before the run, including each failure of the smoke check and the retry rule.
+- **Independent review:** a reviewer with no part in the run recomputed every number of this section from the raw files, with no API call. It confirmed all of them, the checks of integrity and the replay (6 of 6). It also confirmed that the method was committed (15:23:48 UTC) before the first S5 request (15:24:09 UTC). It found no wrong number. Its notes are in the text: the result without the cut pages, the snippet effect, the gain of 2048 on the PDFs with text, and the risk of a cut answer.
+
+### Limits of the result
+
+- The control is of another period (3.5 hours).
+- The temperature is 0.2, not the 0.6 that the model card advises with thinking.
+- 3 runs per budget; thinking makes the runs vary much more, so 3 runs give a wide range (107 to 117 at 2048).
+- The kit is the same: 35 documents, about 11 layouts, no field expected empty. The 6 scans and 7 photos carry most of the losses.
+
+### Decision and what comes next
+
+- **Thinking stays off** (`ISSUE_18`). The reader defaults do not change.
+- **The settings of S3, S4 and S5 together:** `v1`, 150 DPI, temperature 0.2, thinking off, `max_tokens` 2048. These are the settings of #18. No variant of #20 has beaten them by the rules written in advance.
+- **For Paul, not started:** the fields that the control loses at the check of the source are read right when the model thinks. A prompt that asks for the snippet more clearly might get the same gain with no thinking. That is a new variant, and the result above would be the reason for it.
