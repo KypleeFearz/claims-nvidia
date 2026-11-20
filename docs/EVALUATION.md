@@ -1344,3 +1344,111 @@ S3 keeps each answer of the model, so each field that is not right can now be ex
 - **No new runs are needed for S3.** The fresh control (3 runs of `v1` at 150 DPI, 2026-11-20) is the reference of the stages after it.
 - **Next, with its own approval:** S4, the temperature (0, 0.3, 0.5; 594 requests). It uses these 150 DPI runs as its control at 0.2.
 - **For Paul, not started:** most missing fields in the scope of the reader are correct values whose snippet does not hold the value, such as a title or a label, or is not on the text layer. This is in addition to the N1 findings.
+
+## Tuning of the Omni reader (issue #20): S4, the temperature (the method)
+
+Written on 2026-11-20, after the S3 results and before any S4 request. The rules below do not change after a result is seen. The two decisions marked **(for approval)** need the approval of Nikola before the run.
+
+### What changes
+
+- **Variants:** temperature 0, 0.3 and 0.5, in both calls (classify and page). Each variant runs 3 times on the 35 documents of the kit.
+- **Everything else:** the settings of #18 (`ISSUE_18`): prompt `v1`, 150 DPI (the S3 result), `max_tokens` 2048, thinking off.
+- **The reader does not change:** no change of the defaults, the prompts, the schemas, the answer keys or the checks of the source.
+
+| Temperature | `config_id` |
+|---|---|
+| 0 | `88dacc926546` |
+| 0.2 (control) | `b0f2e2ccab2b` (= #18) |
+| 0.3 | `8f217e3efac8` |
+| 0.5 | `2a450cd91e6b` |
+
+### The control, and its limit
+
+- **The control is the 3 fresh S3 runs** of `v1` at 150 DPI, temperature 0.2 (`s3/s3-live-1`, `r1-dpi150`, `r2-dpi150`, `r3-dpi150`, 2026-11-20, 11:32 to 11:58 UTC). They are not run again: the method says that the runs of the control of a stage are used again (see "The stages"). Nikola confirmed this on 2026-11-20.
+- **The limit:** the control is not of the same period as the S4 runs; S4 runs hours later.
+  - S3 showed no drift between two days (+2.00 right fields per run), but a change of speed (5.45 against 4.14 s per document).
+  - Within S4, a drift cannot be measured: no 0.2 run is made at the same time.
+- **What follows from this (for approval):**
+  - A temperature that wins by the rules is a **provisional winner**. It becomes the control of S5, and a candidate default, only when it wins again in a confirmation in the same period: 3 runs of the winner and 3 runs at 0.2, in one invocation, in a rotated order (396 requests, with its own approval). The same rules apply.
+  - The guardrail on seconds is reported against the S3 control, but it is decided only in the confirmation, at the same time. A temperature that passes every rule apart from the seconds is a candidate for the confirmation, not a loss.
+  - When two temperatures win, the rule of "When a variant wins" chooses: the larger gain, then the cheaper one.
+  - When no temperature wins and none fails on the seconds only, 0.2 stays, and no confirmation is needed. A loss is reported as measured against a control of another period.
+
+### N1 and a winner (for approval)
+
+- N1 found that `v1` at 0.2 accepts incorrect values: 18 of 48 absent fields, 16 in the wrong field and 2 fabricated.
+- The temperature can change this, in either direction, and the 35 documents of the kit cannot show it: no answer key expects an empty value.
+- So, **before a temperature other than 0.2 becomes a default, N1 runs once at that temperature** (108 requests, with its own approval). The criterion of N1 is unchanged. This is the same rule as in S3 for a DPI.
+
+### The order of the runs
+
+9 runs: 3 temperatures × 3 runs, in 3 rounds. Each round has each temperature once, and the order turns by one place in each round.
+
+| Round | Order |
+|---|---|
+| 1 | 0, 0.3, 0.5 |
+| 2 | 0.3, 0.5, 0 |
+| 3 | 0.5, 0, 0.3 |
+
+### Requests and the stopping rule
+
+- 9 runs × 66 requests = **594 requests** expected.
+- **Hard limit: 650 HTTP requests that are really sent,** retries and repeated classify calls included.
+- **The same rules as S3:**
+  - each request is counted before it goes out, and none is sent over the limit;
+  - after 5 calls in a row with no 200, nothing more is sent;
+  - a crash or a stop by hand marks the run and the experiment `error`;
+  - nothing restarts by itself, and a repeat needs a new approval.
+- **A live start needs:**
+  - an approval reference (`--approved`);
+  - no other live S4 folder, unless `--repeat-approved` is given;
+  - no live lock of S3 or S4.
+- **Before any request, the runner checks the control.** It must be:
+  - a live run, `complete`, with no call left without a 200, and 3 runs with no reader error;
+  - made with the same reader code and the same kit;
+  - at the planned settings: `v1`, 150 DPI, 0.2, `max_tokens` 2048, thinking off, no `top_p`, no budget, the strict JSON schema;
+  - made with the model and the endpoint that S4 will use.
+
+  If not, nothing starts. A live start also needs the key and the endpoint in the environment. It refuses the test setting `S4_CONTROL`, which points the runner at another control.
+
+### The analysis
+
+- **The rules do not change.** "When a variant wins" applies as for S2 and S3, with the same code (`analyze_s2.py`): each temperature against the S3 control.
+- **No verdict (incomplete)**, as in S3, when any of these is true:
+  - the experiment is not `complete`;
+  - a call got no 200 after the retries;
+  - a run has a reader error;
+  - a check of integrity fails. For S4 the check covers:
+    - the code and the kit of now, of the S4 runs and of the control;
+    - one reader fingerprint for all 12 reports;
+    - the settings of each run as planned, the control included;
+    - the same model and endpoint for the S4 runs and the control;
+    - a control with no error;
+    - the requests of the reports equal to the requests counted by the runner, and not above 650.
+- **Also reported:**
+  - each run apart;
+  - the three groups (PDF with text, PDF scan, JPG);
+  - the fields whose result changes between runs;
+  - strict pass, classification, line items, seconds and tokens;
+  - the hours between the control and the S4 runs.
+- **Each field that is not right is explained** from the saved answers, as in S3 (`verify_missing.py`): a null of the model, an incorrect value, or a correct value refused at the check of the source, with the fields outside the scope apart.
+- **What is not a rule:** temperature 0 is expected to change less between runs. A smaller change is reported, but it does not make a winner.
+
+### What is kept, and where it runs
+
+- **Kept:** as in S3, every answer of the model, the redacted start of each error body, the usage, the status and the seconds of each attempt, and the hash of each request. In addition, the temperature of each request as it was sent.
+- **Never kept:** a key, a header or an image.
+- **Where it runs:** locally, in `backend/.dev-data/issue-20/s4/` (not in git). It holds:
+  - the runner `run_s4.py`, made from the tested S3 runner, where only the setting that changes is new;
+  - `replay_s4.py` and `analyze_s4.py`;
+  - the offline tests (`test_s4.py`);
+  - one folder per experiment.
+
+  The offline stub of S3 is used again.
+
+### Limits, known before the runs
+
+- The control is of another period (see above).
+- The temperature changes both calls, so a difference can come from the classification as well as from the reading.
+- 3 runs per temperature cannot show a rare event.
+- The kit is the same as in S2 and S3: 35 documents, about 11 layouts, one generator, no field expected empty.
