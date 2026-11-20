@@ -1604,3 +1604,105 @@ As in S3, each field that is not right was sent through the checks of the reader
 - **The temperature stays at 0.2** (`ISSUE_18`). The reader defaults do not change.
 - **The settings of S3 and S4 together:** `v1`, 150 DPI, temperature 0.2. These are the settings of #18.
 - **Next, with its own approval:** S5, reasoning (thinking on, budgets 512 and 2048), after its smoke check. Before S5, decide whether the "no errors" guardrail counts a solved timeout (see above).
+
+## Tuning of the Omni reader (issue #20): S5, reasoning (the method)
+
+Written on 2026-11-20, after the S4 results and before any S5 request. Nikola approved the method, the smoke check (8 requests, limit 12) and, if the smoke check passes, the full S5 (396 requests, limit 440). The rules below do not change after a result is seen.
+
+### What changes
+
+| Setting | Off (the control) | Budget 512 | Budget 2048 |
+|---|---|---|---|
+| `chat_template_kwargs.enable_thinking` | false | true | true |
+| `reasoning_budget` (top level) | not sent | 512 | 2048 |
+| `max_tokens` | 2048 | 3,584 | 5,120 |
+| `config_id` | `b0f2e2ccab2b` | `c27892baef7c` | `67ce22347e7f` |
+
+- **Everything else is the same as #18:** prompt `v1`, 150 DPI, temperature 0.2, timeout 90 s, the strict JSON schema, 2 retries. The reader does not change.
+- **Why `max_tokens` changes (a documented difference, written in the stage table of the method):** `max_tokens` = 2048 + budget + 1024.
+  - 2048 is the answer of #18.
+  - The budget is the thinking.
+  - 1024 is room for the end of the thinking.
+
+  The answer keeps its 2048 tokens even when the thinking counts in `max_tokens`. Without this change, the budget and the answer would share 2048 tokens, so the two settings would not be independent. This happened in the spike of #18 (D80 (2)): with thinking on, the answer was cut before the JSON.
+- **What NVIDIA documents for the hosted endpoint** (the API reference of the model on build.nvidia.com, updated 2026-09-02):
+  - `reasoning_budget` is a top-level integer, −1 to 32,768, default 16,384: "Maximum number of tokens the model is allowed to use for internal reasoning before the reasoning trace is forced to end". It can also be given in `chat_template_kwargs`.
+  - The request example uses `chat_template_kwargs: {"enable_thinking": true}`.
+  - **Not stated:** whether `max_tokens` includes the thinking; where the thinking text comes in the answer; whether `response_format` works with thinking. The response schema shows no field for the thinking and no count of its tokens.
+
+  The smoke check measures these points.
+- **The temperature stays at 0.2.** The model card advises 0.6 with thinking. This is a limit of S5 (the method of the stages: "S5 runs at the temperature of S4"), not a second change.
+
+### The control
+
+- The 3 S3 runs of `v1` at 150 DPI, 0.2, thinking off (`s3/s3-live-1`, 2026-11-20 morning), as in S4. They are not run again.
+- The control is of another period. The same limit as S4 applies, and the S4 results showed a change of about 1 field per run between the morning and the afternoon (the `airline` of a photo).
+- **A budget that wins by the rules is a provisional winner.** A default changes only after both of these, each with its own approval:
+  - a confirmation in the same period, as in the S4 confirmation method;
+  - N1 at that setting.
+
+  None of them runs automatically.
+
+### The retry rule for S5 (a clarification, prospective)
+
+- **The problem:** the written rule says "no reader error, and no 429 that the retries did not solve". The code of the rules (`analyze_s2.py`, frozen since S2) also fails "no errors" on a timeout that a retry then solved (S4, temperature 0.3).
+- **For S5 and later:**
+  - **A call that gets a 200 at the first attempt** is a success.
+  - **A call that gets a 200 after an allowed retry** is a success for the answer. The retry, the first failure (status or timeout) and the extra seconds are recorded in `calls.jsonl` and reported per budget. The extra seconds also count in the seconds per document.
+  - **A call that gets no 200 after the allowed retries** is a failure. The run gives no verdict, as before.
+  - **A reader error** fails "no errors", as before.
+- **How it is applied:** the frozen code of the rules is not changed. `analyze_s5.py` reads its output and sets "no errors" by the rule above; every other rule stays as the code decides it. An offline test checks that this reading gives exactly the verdict of the frozen code on every saved comparison of S2, S3 and S4.
+- **S2, S3 and S4 are not reinterpreted.** Their results stay as written.
+
+### The smoke check
+
+- **What:** the 2 documents of the S3 smoke check (`claim-1-travel/booking-confirmation.pdf`, a PDF with text; `hard/kit-lukas-clean-medical-invoice-scan.pdf`, a scan). Budget 512, then budget 2048: 2 documents × 2 calls × 2 budgets = **8 requests**, hard limit **12**.
+- **It passes only when, for each budget, every call:**
+  - got a 200 that ended with `stop` (not `length`: no answer cut);
+  - has a `content` that is the JSON answer (`omni._json`), with no thinking text in it;
+  - classify: a known document type; page: the asked form, every field of the schema present, accepted by `omni._read`;
+  - reports its reasoning tokens, at most 110 % of the budget;
+
+  and every page call has more than 0 reasoning tokens (thinking is really on).
+- **Also reported:** the seconds and the completion tokens of each call, and the fields of the message (to see whether the thinking text comes in a separate field).
+- **If the smoke check fails, S5 stops.** That covers a refusal, an answer cut, a schema not followed, thinking not applied, the budget not kept, or a need for another setting. No new configuration is tried, and the full S5 does not run.
+
+### The full experiment
+
+- 6 runs on the 35 documents: 512, 2048, 2048, 512, 512, 2048. The places are as even as 3 + 3 runs in 6 places allow (512: 1, 4, 5; 2048: 2, 3, 6).
+- 6 × 66 = **396 requests** expected; **hard limit 440** HTTP requests that are really sent. With the smoke check: 452 at most.
+- The other rules are those of S4:
+  - each request is counted before it goes out;
+  - after 5 calls in a row with no 200, nothing more is sent;
+  - a crash marks the run `error`;
+  - nothing restarts by itself;
+  - only one live run at a time (the locks of S3, S4 and S5).
+- **Before any request, the runner checks the control,** as in S4: live, complete, no error, the same code, kit, model and endpoint, and the settings of the plan.
+
+### The analysis
+
+- **The rules of "When a variant wins"** apply to each budget against the control, with the retry rule above. When two budgets win, the larger gain wins.
+- **The seconds:** thinking is expected to be slower. The guardrail stays as written: at most 1.5 times the control, "or Paul accepts the cost". A budget that passes every rule apart from the seconds is reported as such. It is not a winner without that acceptance.
+- **No verdict** as in S4: incomplete; a call with no 200; a reader error; or a failed check of integrity. The check covers the code, the kit, the fingerprint, the settings of each run and of the control, the model and endpoint, the requests, and the key.
+- **Reported per budget:**
+  - each run, the groups, wrong and missing values, strict pass, classification, line items;
+  - the seconds (mean and median);
+  - the prompt, completion and reasoning tokens, `no_reasoning`, and the finish reasons (`length` = an answer cut);
+  - the retries, and the fields whose result changes between runs.
+- **Each field that is not right is explained** from the saved answers (`verify_missing.py`), as in S3 and S4.
+- **N1:** a gain in accuracy is not a gain in safety. N1 found that `v1` accepts incorrect values for absent fields; thinking can change this either way, and the kit cannot see it. N1 is not repeated automatically.
+
+### Where it runs
+
+`backend/.dev-data/issue-20/s5/` (not in git):
+- `run_s5.py`: modes `offline`, `smoke-offline`, `live` and `smoke-live`;
+- `stub5.py`: the S3 stub, with thinking and its failures;
+- `replay_s5.py` and `analyze_s5.py`;
+- `test_s5.py`: 22 offline tests. They cover the order, the settings sent, the separate requests of each budget, the counting of reasoning tokens, replay, the limit, a failing endpoint, a crash, a solved timeout, a call with no 200, each failure of the smoke check, the live guards and the protected files.
+
+### Limits, known before the runs
+
+- **The control** is of another period (see above).
+- **The temperature** stays at 0.2, not the advised 0.6.
+- **The fields of the answer that the API reference does not describe** (where the thinking text goes, the count of the thinking) are measured, not documented.
+- **3 runs per budget,** on the same kit: 35 documents, about 11 layouts, no field expected empty.
