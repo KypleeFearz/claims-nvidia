@@ -1882,3 +1882,292 @@ Written on 2026-11-20, after the S5 results and before any S7 request. Nikola ap
   - The report then says which comparisons a drift could touch. These are the ones against the #19 runs of 2026-11-18: S2, and the drift check of S3.
 - **The gain over #18:** S7 has the settings of #18. A difference between S7 and #19 is a difference of time, not a gain of tuning, and it is reported that way. The gain of #20 over #18 is 0: no variant won.
 - **Where it runs:** `backend/.dev-data/issue-20/s7/` (not in git). `run_s7.py` and `replay_s7.py` are made from the S5 tools, with the settings `omni.ISSUE_18` and no other change. `analyze_s7.py` and the offline tests are in `test_s7.py`.
+
+## Tuning of the Omni reader (issue #20): S7, the final run of #18 (the results)
+
+**The result (measured):**
+- The settings of #18 gave 115, 114 and 115 right fields of 132 (mean 114.67), with 8 wrong values per run, the same as before.
+- **By the S7 rule there is drift** against the saved #19 runs of 2026-11-18 (112, 8, 12): right +2.67 and missing −2.67, above the limit of 2.
+  - By the rule of S3 there is no drift (+2.67 is below 3, and the wrong business values are the same).
+  - Against the S3 control of the same day (114) the difference is +0.67.
+  - The margin is small: the S3 control itself was +2.00 against #19 (no drift by the S7 rule), and S7 is +2.67. The label rests on 0.67 field per run above the limit; the S3 control and S7 are about the same.
+- **This is not a gain of tuning.** S7, #19 and the S3 control have the same settings, so the differences are differences of time (or of the endpoint). **The gain of #20 over #18 is 0:** no variant won, and the defaults do not change.
+
+### What ran
+
+- **When:** on 2026-11-20, from 16:44 to 16:52 UTC, at git `2094f56`, with the approval `Nikola-2026-11-20-S7`. No other live run was active.
+- **Requests:** 199 sent, against 198 planned and a limit of 220.
+  - The one retry: a classify call (`kit-anna-theft/police-report.pdf`, run 1) got a 502, then a 200 on the second attempt (0.1 s more). Under the retry rule of S5 it is a success, and it is reported.
+  - Every one of the 198 calls ended with `stop`, with no reader error.
+- **Tokens:** 457,452 prompt and 30,654 completion, with no reasoning.
+- **Settings:** `ISSUE_18`, `config_id` `b0f2e2ccab2b` in the 3 reports. The reader fingerprint is `49603fe1…`, the same as in S3, S4 and S5.
+
+### Results (measured)
+
+| Per run | #19 (2026-11-18) | S3 control (2026-11-20, 11:32) | S7 (2026-11-20, 16:44) |
+|---|---|---|---|
+| Right of 132 | 112 (112, 112, 112) | 114 (114, 114, 114) | 114.67 (115, 114, 115) |
+| Wrong / missing | 8 / 12 | 8 / 10 | 8 / 9.33 |
+| PDF with text, of 90 / scan, of 25 / JPG, of 17 | 77 / 23 / 12 | 78 / 23 / 13 | 79.67 / 23 / 12 |
+| Strict pass, of 35 | 17 | 19 | 19.67 |
+| Classification / clean line items | 31 / 53 | 31 / 53 | 31 / 53 |
+| Fields whose result changes between runs | 2 | 2 | 1 |
+| Seconds per document | 5.45 | 4.14 | 4.40 |
+
+- **Where the differences are:** each S7 run reads right 3 fields that the #19 runs lost at the check of the source, in all 3 runs or (the lock set) in 2 of 3:
+  - the `amount_paid` of the trolley receipt;
+  - the `amount_paid` of the lock set receipt;
+  - the `invoice_number` of `kit-lukas-clean/medical-invoice.pdf`.
+
+  The `airline` of the luggage report photo was refused in #19, right in the S3 control of the morning, and refused again in S7. It was also refused in 8 of the 9 S4 runs; with thinking on, S5 read it right in 6 of 6 runs.
+- **Why fields are missing** (`verify_missing.py`):
+  - the model returned null 0 times;
+  - 4 fields per run are the damage photos, outside the scope;
+  - the others are correct values refused at the check of the source.
+
+### What the drift means
+
+- **Measured:** with the same settings, the endpoint gave 112 right fields per run on 2026-11-18, and 114 to 114.67 on 2026-11-20. The fields that move are the ones on the edge of the check of the source: a snippet that sometimes holds the value and sometimes does not.
+- **Measured, within the same day:** S7 (16:44) and the S3 control (11:32) differ on 3 fields, which cancel out to +0.67:
+  - the `invoice_number` of `kit-lukas-clean/medical-invoice.pdf`: missing in 3 of 3 control runs, right in 3 of 3 S7 runs;
+  - the `amount_paid` of the lock set receipt: right in 1 of 3, then 3 of 3;
+  - the `airline` of the photo: right in 3 of 3, then missing in 3 of 3.
+- **Interpretation:** the endpoint (or its load) behaves a little differently between periods, also within one day, by about 2 to 3 fields per run, on the fields at the edge of the check of the source. A drift of this size could move a gain by 2 to 3 fields. Every variant of S3 to S5 is short of the gain of 3 by more than that, or fails a guardrail by its own measure, except temperature 0.3 (+0.33, short by 2.67). For 0.3 the honest reading stays "no difference that 3 runs can show", not a loss.
+- **What a drift touches:** the comparisons against the #19 runs of 2026-11-18, that is S2 (run on 2026-11-19).
+  - `schema-only` (+8.00) and `example` (+7.67) won by much more than 2.67.
+  - `described` (+3.33) won by less than the drift plus the rule of 3, so its narrow win is not robust.
+  - None of the three is a default (see "The summary of issue #20").
+- **As the method says,** no new run is made: the winner is the settings of #18, and S7 ran on the same day as the control of the later stages.
+
+### Checks
+
+- **Integrity** (`analyze_s7.py`):
+  - the run is `complete`;
+  - the code and the kit are the same now, in S7 and in the S3 control;
+  - one reader fingerprint;
+  - the settings and `config_id` of #18;
+  - one model and endpoint;
+  - the requests of the reports equal the count of the runner.
+- **Replay:** 3 of 3 runs identical, with no API call.
+- **No key in a file;** the protected files have the same SHA-256 before and after.
+- **Offline tests:** 9 of 9 before the run (`test_s7.py`).
+- **Independent review:** a reviewer recomputed every number of this section and of the summary from the raw files, with no API call, and confirmed them. Its corrections of the text are in place (the `airline` field in S4 and S5, the drift within the day, the margin of the drift label).
+
+## Tuning of the Omni reader (issue #20): one call per page or per document (feasibility, no run)
+
+Written on 2026-11-20. The task of #20 asks to compare one call per page with one call per document. Nothing was run, the reader was not changed, and no document was made.
+
+### Why the kit cannot answer it
+
+- **Measured:** every one of the 28 PDFs of the kit has one page, and the 7 JPGs are one image each. So "one call per page" and "one call per document" send the same request, and the two modes would give the same answers.
+- The S2 to S7 results therefore say nothing about the scope of a call.
+
+### What the model and the endpoint allow
+
+From the NVIDIA documentation, read on 2026-11-20: the model card (https://huggingface.co/nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16 and https://build.nvidia.com/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning), its API reference (`apireference.md` on build.nvidia.com), and the announcement (https://huggingface.co/blog/nvidia/nemotron-3-nano-omni-multimodal-intelligence):
+- **Several images in one request:** the request schema of the hosted endpoint takes `content` as a list of parts, with images as `image_url` parts, and states no maximum number of images.
+- **The size of a request:** a context of up to 256k tokens. One A4 page at 150 DPI is 2,145 image tokens (measured in S3), so 10 pages are about 21,500 tokens.
+- **Multi-page documents:** the announcement says that the model "can handle 100+ page documents" and gives 57.5 on MMLongBench-Doc, a benchmark of long documents.
+- **But** the examples of the model card send one page per request, and nothing states how strict JSON output behaves with several images. A smoke check must show it first.
+
+### How the reader works now (one call per page)
+
+The settings of #18, in `omni.py`:
+- **Classify:** one call on page 1 only.
+- **Extract:**
+  - one call per page (10 pages at most), each with the prompt "It is page {page} of {pages}" and "Use null for a value that is not on this page";
+  - the page of a field is the page of the request, not a claim of the model (D80 (1));
+  - the snippet is checked on the text layer of that page.
+- **Merging pages:**
+  - the first value of a field wins;
+  - two pages that give two values set the field to confidence 0.5;
+  - the line items of all pages are joined, and they are kept only when every line is on the text layer of its page.
+
+### What one call per document would need
+
+- **A request with all the page images:** the same images and the same DPI, so the comparison changes only the scope of the call.
+- **A prompt for a whole document.** "It is page X of Y" and "not on this page" do not fit, so the prompt must change its words.
+  - A difference of prompt cannot be avoided. It is a limit of the comparison, and the S2 lesson applies: a change of words can move results.
+  - The rules of the values and of the snippets would stay word for word.
+- **A larger `max_tokens`:** one answer holds the values and line items of every page, so 2048 tokens may cut it. The limit must grow with the number of pages, a second difference of configuration that the method must state before the run.
+- **The page of each field:** the answer must give the page of each value (for example a `pages` object next to `snippets`).
+  - On a PDF with a text layer, the reader can check the snippet on the page that the model names, and also find on which page it is.
+  - On a scan or a photo, the page is only a claim of the model. That is weaker than now (D80 (1)): **a decision for Paul.**
+- **Line items:** each line is checked on the text layer of the document (or of the page that the model names).
+- **The classify call stays on page 1,** so that only the extraction changes.
+
+### The smallest implementation, with no change of the shared reader
+
+- **For the experiment only:** a local subclass of `OmniReader` in `backend/.dev-data/issue-20/` (not in git). It holds the scope of the call, its prompt and the merging of the answer.
+  - `omni.py`, the defaults, the schemas and the checks of the source do not change.
+  - The local reader uses the same functions (`_field`, `_holds`, `_shown`, `_on_page`) for its checks.
+- **For a change of the product:** a setting `scope` in `OmniSettings`, a second path in `extract`, and a field for the page in the answer schema. That is a change of the shared reader, which needs Paul.
+
+### A small set of multi-page documents, apart from the kit
+
+- **Not in the kit:** the 35 documents and their answer keys stay frozen. A set of 8 synthetic documents would be made by a local script, as for N1:
+  - 6 PDFs with a text layer and 2 scans (image only);
+  - 2 to 3 pages each, about 19 pages.
+- **Made to need the scope:**
+  - the total on the last page;
+  - line items that run over a page break;
+  - a header with the number and the date on page 1;
+  - a page of terms with distracting numbers (a sub-total, a deposit, a date of validity);
+  - one document whose value appears twice (page 1 summary, page 2 detail).
+
+  The document types are those of the kit: medical invoice, repair invoice, repair quote, booking confirmation, cancellation confirmation, medical report.
+- **Built like the kit:**
+  - the generator of `scripts/mockdocs` (one page today), with a local helper for the page break;
+  - each field with its page in the answer key;
+  - the scans made with the method of `hard.py`, extended to every page.
+- **Checked offline before any request:** every snippet is printed on its page, every answer key passes its schema, and no name, number or text comes from the kit.
+- **Mock data only,** invented, as all the rest. New mock documents need Paul's approval (the same as for N1).
+
+### The comparison that is proposed
+
+- **Two modes, the same day, in one invocation:** per page (the settings of #18) and per document (the same settings, the local reader). 3 runs each, in the order page, doc, doc, page, page, doc. With a control in the same period, the drift seen in S7 does not touch the verdict.
+- **Measured:**
+  - field accuracy;
+  - **the page of each field** (provenance: right page or not);
+  - wrong and missing values, with their cause (`verify_missing.py`);
+  - strict pass, line items;
+  - seconds per document;
+  - requests, prompt and completion tokens;
+  - answers cut, and fields that change between runs.
+- **The rules:** "When a variant wins", unchanged apart from the numbers that depend on the size of the set. These are fixed before the run, in proportion: a gain of 3 fields of 132 is about 2.3 %, so about 1 field of some 30.
+- **Requests:**
+
+  | Part | Requests |
+  |---|---|
+  | Smoke check: per document, 2 documents (one scan) × (classify + 1 call) | **4** (limit 8) |
+  | Per page: 3 runs × (8 classify + 19 page calls) | **81** |
+  | Per document: 3 runs × (8 classify + 8 document calls) | **48** |
+  | **Total** | **133** (proposed limit 150) |
+
+  With other numbers of pages the total changes; it is fixed when the documents are made, before any request.
+
+### Limits and approvals
+
+- **Limits:**
+  - 8 documents from one generator say little about real multi-page claims: the result would be indicative;
+  - the prompt must change with the scope;
+  - on scans, the page of a field would be a claim of the model.
+- **Paul must approve:**
+  - the new mock documents;
+  - the page claimed by the model on scans, if the mode ever goes to the product;
+  - any change of `omni.py`.
+- **Nikola must approve:** the live smoke check and the experiment (133 requests expected with the smoke check, a proposed limit of 150, if the set is as above).
+
+## The summary of issue #20
+
+Written on 2026-11-20, after S7. Every number comes from the saved reports, recomputed by `backend/.dev-data/issue-20/build_summary.py`. The variants of S2 were judged against the #19 runs (2026-11-18). Those of S3 to S5 were judged against the S3 control of the same day (2026-11-20).
+
+### One row per variant (measured; mean of 3 runs, the 3 runs in brackets)
+
+| Variant | Date | Right of 132 (runs) | Field accuracy | Wrong | Missing | Strict pass of 35 | Classification of 35 | Clean line items of 53 | Seconds per document | Fields that change between runs |
+|---|---|---|---|---|---|---|---|---|---|---|
+| #19 baseline (#18 settings) | 2026-11-18 | 112.00 (112, 112, 112) | 84.8 % | 8.00 | 12.00 | 17.00 | 31.00 | 53.00 | 5.45 | 2 |
+| S2 prompt `schema-only` | 2026-11-19 | 120.00 (120, 120, 120) | 90.9 % | 8.00 | 4.00 | 25.00 | 31.00 | 53.00 | 4.40 | 0 |
+| S2 prompt `described` | 2026-11-19 | 115.33 (114, 115, 117) | 87.4 % | 4.00 | 12.67 | 19.33 | 31.00 | 53.00 | 4.66 | 7 |
+| S2 prompt `example` | 2026-11-19 | 119.67 (122, 116, 121) | 90.7 % | 3.67 | 8.67 | 24.67 | 31.00 | 53.00 | 5.43 | 8 |
+| S3 72 DPI | 2026-11-20 | 110.67 (110, 110, 112) | 83.8 % | 8.00 | 13.33 | 16.33 | 31.00 | 43.33 | 3.63 | 9 |
+| S3 100 DPI | 2026-11-20 | 109.67 (110, 111, 108) | 83.1 % | 7.67 | 14.67 | 15.67 | 31.00 | 46.00 | 3.63 | 9 |
+| S3 150 DPI (#18 settings, control of S3 to S5) | 2026-11-20 | 114.00 (114, 114, 114) | 86.4 % | 8.00 | 10.00 | 19.00 | 31.00 | 53.00 | 4.14 | 2 |
+| S3 200 DPI | 2026-11-20 | 113.00 (110, 115, 114) | 85.6 % | 8.00 | 11.00 | 18.33 | 31.00 | 53.00 | 4.37 | 8 |
+| S4 temperature 0 | 2026-11-20 | 112.33 (112, 113, 112) | 85.1 % | 8.67 | 11.00 | 17.33 | 31.00 | 53.00 | 4.71 | 3 |
+| S4 temperature 0.3 | 2026-11-20 | 114.33 (115, 113, 115) | 86.6 % | 8.00 | 9.67 | 19.33 | 31.00 | 53.00 | 6.14 | 3 |
+| S4 temperature 0.5 | 2026-11-20 | 110.00 (111, 110, 109) | 83.3 % | 8.00 | 14.00 | 18.00 | 31.00 | 53.00 | 5.92 | 2 |
+| S5 thinking, budget 512 | 2026-11-20 | 113.67 (116, 113, 112) | 86.1 % | 8.00 | 10.33 | 22.00 | 31.67 | 52.00 | 9.21 | 18 |
+| S5 thinking, budget 2048 | 2026-11-20 | 113.00 (117, 107, 115) | 85.6 % | 8.67 | 10.33 | 21.00 | 31.00 | 50.33 | 16.60 | 17 |
+| S7 #18 settings (final) | 2026-11-20 | 114.67 (115, 114, 115) | 86.9 % | 8.00 | 9.33 | 19.67 | 31.00 | 53.00 | 4.40 | 1 |
+
+### Accuracy per kind of field (measured; share of right fields over the 3 runs)
+
+| Variant | Amount | Date | Identifier | Text |
+|---|---|---|---|---|
+| #19 baseline (#18 settings) | 91 % | 100 % | 76 % | 77 % |
+| S2 prompt `schema-only` | 100 % | 100 % | 100 % | 79 % |
+| S2 prompt `described` | 91 % | 100 % | 83 % | 81 % |
+| S2 prompt `example` | 99 % | 99 % | 98 % | 80 % |
+| S3 72 DPI | 96 % | 100 % | 65 % | 77 % |
+| S3 100 DPI | 90 % | 99 % | 76 % | 74 % |
+| S3 150 DPI (#18 settings, control of S3 to S5) | 96 % | 100 % | 76 % | 79 % |
+| S3 200 DPI | 94 % | 100 % | 76 % | 78 % |
+| S4 temperature 0 | 97 % | 100 % | 79 % | 74 % |
+| S4 temperature 0.3 | 97 % | 100 % | 81 % | 77 % |
+| S4 temperature 0.5 | 90 % | 97 % | 81 % | 74 % |
+| S5 thinking, budget 512 | 94 % | 97 % | 97 % | 73 % |
+| S5 thinking, budget 2048 | 94 % | 98 % | 97 % | 71 % |
+| S7 #18 settings (final) | 99 % | 100 % | 81 % | 77 % |
+
+- "Text" (57 fields per run) includes the 11 business-category fields (`cause`, `offence`, `diagnosis`, `provider`), which the reader reads in another form than the answer key, and the 4 descriptions of the damage photos, which it does not read (issue #25).
+- The seconds of 2026-11-18 and 2026-11-19 are not comparable with those of 2026-11-20 (the endpoint was faster on 2026-11-20).
+
+### The selected configuration, and why (two sentences)
+
+**Selected: the settings of #18 stay the defaults of `OmniReader`: prompt `v1`, 150 DPI, temperature 0.2, thinking off, `max_tokens` 2048, one call per page.**
+
+No variant of resolution, temperature or reasoning beat these settings by the rules written in advance. Three prompts did beat `v1` in S2 (`schema-only` +8.00, `example` +7.67, `described` narrowly +3.33), but none was taken: `schema-only` accepted more invented values than `v1` in the safety check N1 (24 against 18 of 48, so `v1` fails it too), `example` and `described` were never checked by N1, and part of each S2 gain is the drift that S7 measured.
+
+### The gain over #18
+
+- **0.** The selected configuration is the configuration of #18.
+- The higher score of S7 (114.67 right fields per run, against 112 for #19) comes from the **same settings** on another day. It is a difference of time (the S7 drift rule), not a gain of tuning.
+
+### What the tuning showed (measured, with the interpretation marked)
+
+- **Resolution:**
+  - 72 and 100 DPI lose fields and line items (at 72 DPI the model reads characters wrong; at 100 DPI mostly snippets and line items);
+  - 200 DPI gives no gain and is probably made smaller by the server (interpretation).
+- **Temperature:** 0 and 0.3 give no difference that 3 runs can show; 0.5 loses 4 fields per run and fails the guardrail of the reading group.
+- **Reasoning:**
+  - it fixes the snippets of the PDFs with text;
+  - it loses as much on scans and photos;
+  - it adds answers that loop until `max_tokens`;
+  - it makes the runs unstable and 2 to 4 times slower.
+- **Prompt:** `schema-only` gave +8.00 fields per run against #19 (about +5 after the drift that S7 measured: the 3 fields of S7 are 2.67 of it, and also 2.67 of the +3.33 of `described`). It also gave more invented values on absent fields (N1). Which of its changes gives the gain is not known (S2); the S3 answers suggest the snippets.
+- **The main loss of the reader is the check of the source, not the reading.**
+  - In every stage since S3, the model returned null 0 times for a field in scope.
+  - Most missing fields are correct values that the reader refused, because the snippet does not hold the value (a title, a label) or is not on the text layer. The exceptions: in S5, pages lost to answers that looped; at 72 and 100 DPI, values read wrong and refused.
+  - This is where a next step is most likely to gain (interpretation), and it is a question for Paul: it is the shared rule of the source.
+
+### Safety: what the tuning does not show
+
+- **N1 (2026-11-19) stays the main safety result.** With the settings of #18 (`v1`), the reader accepted 18 of 48 values for fields that are absent from the page (16 absent fields, 3 runs each; 6 distinct fields accepted):
+  - 16 are text of the page put in the wrong field; 12 of them are on PDFs with a text layer, stored at confidence 0.9, above the threshold of the routing, so no person sees them;
+  - 2 are invented.
+- No setting of #20 fixes this, and none was chosen for safety apart from keeping `v1` against `schema-only`.
+- **Winning the tuning does not make the reader safe.** The kit has no field that is expected to be empty, so its accuracy cannot see these errors. The safeguards proposed after N1 wait for Paul, and they are not built.
+- **Thinking (S5) added new wrong values on scans and photos.** Nothing in #20 shows that another setting is safer.
+
+### What is still open
+
+- **The scope of a call** (one per page or per document): not measured. The kit has only one-page documents. A small experiment is proposed above; it needs approvals.
+- **For Paul:**
+  - the N1 findings and the safeguards;
+  - the rule of the source (most missing fields);
+  - an answer cut by `length` is not detected or retried;
+  - the rule code counts a solved timeout as an error (settled for S5 and later);
+  - whether a prompt that asks for the snippet more clearly should be tried.
+
+### How to reproduce
+
+- **In git:**
+  - the reader (`backend/app/docintel/omni.py`, with `OmniSettings`, the prompts and `config_id`);
+  - the harness (`evaluate.py`, with `--omni KEY=VALUE`);
+  - their tests;
+  - this file, with every method, rule and result.
+- **Not in git** (by decision: local, in `backend/.dev-data/issue-20/`):
+  - the runners and stubs of S3 to S7, the analysis and replay scripts, and their offline tests;
+  - the N1 documents and their generator;
+  - the saved answers and reports of each run.
+
+  The hashes of the tools are in each folder (`hashes.txt`).
+- **Without them,** a reader of the repository can run a variant with the harness (see "Commands"), but cannot run the experiments with the same limits, logs and replay, or check the numbers above against the saved answers.
+- **What reproducibility needs,** for Paul to decide:
+  - the tools (scripts only, no data);
+  - the N1 generator.
+
+  They could be committed with the pull request, for example under `scripts/issue20/`. The saved answers and reports could be given as an archive outside git.
+- **The model answers depend on the endpoint and the day** (S7: about 2 to 3 fields per run). The hosted model has no pinned revision: its name alone cannot tell an update of the model from a change of load. A new run gives numbers close to these, not the same.
+- **The tables of this summary:** `cd backend && python .dev-data/issue-20/build_summary.py` prints them from the saved reports (no API call). The seconds are rounded from the exact means, so a stage section can differ by 0.01.
