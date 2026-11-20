@@ -1106,3 +1106,197 @@ The model takes 1,024 to 13,312 patches of 16 × 16 px per image (the documentat
 - **If the request is refused,** the 3-DPI plan runs.
 - **It is not a result:** the smoke check is not used to choose a DPI.
 - It needs its own approval before it runs: `run_s3.py smoke-live --out <new folder> --approved <reference>`.
+
+## Tuning of the Omni reader (issue #20): S3, the results
+
+**The result:**
+- **150 DPI stays.** No other DPI wins by the rules.
+- **72 and 100 DPI lose fields:** −3.33 and −4.33 right fields per run. The model reads more characters wrong; the check of the text layer refuses these values, so they become missing (not wrong). The two DPI values also fail two guardrails: the reading group and the line items of the clean PDFs.
+- **200 DPI gives no gain:** −1.00 per run, with more change between runs. It costs 41 % more prompt tokens and 6 % more seconds per document.
+- **The endpoint does not refuse 200 DPI. It makes the image smaller,** to about 13,056 patches. The model never sees the full 200 DPI page.
+- **There is no drift** against the #19 runs.
+- **A correction to S2:** every missing field of the fresh S3 control is a right value that the reader refused, because its snippet does not hold the value. It is not a null of the model (see "Why fields are missing"). The 4 damage photos (issue #25) are left out of this count.
+
+The method was not changed. An independent reviewer recomputed the numbers from the raw answers (see "Checks").
+
+### What ran
+
+- **When:** on 2026-11-20, at git `0d20eca`. One approval (`Nikola-2026-11-20-smoke-and-S3`) covered the two invocations; no other live run was active.
+  - The smoke check ran at 11:31 UTC.
+  - S3 ran from 11:32 to 11:59 UTC, in the planned order.
+- **Requests:**
+
+  | Invocation | Planned | Sent | Limit | Retries |
+  |---|---|---|---|---|
+  | Smoke check | 12 | 12 | 16 | 0 |
+  | S3, 4 DPI × 3 runs | 792 | 798 | 870 | 6: five 429 and one 502, each solved by one retry |
+  | Total | 804 | 810 | 886 (authorized) | |
+
+  - Every one of the 804 calls got a 200 and ended with `stop`. There was no reader error and no transport error.
+  - Each run had 35 classify calls and 31 page calls.
+- **Tokens of the answers:**
+  - S3: 1,544,880 prompt and 123,951 completion;
+  - smoke check: 29,525 prompt and 2,959 completion;
+  - no reasoning tokens.
+- **Settings:** those of #18; only the DPI changes. The reader fingerprint is `49603fe1…` in all 12 reports, the same code as in S2 and N1.
+
+  | DPI | `config_id` |
+  |---|---|
+  | 72 | `31c15b4f1f5e` |
+  | 100 | `43d2587b68c2` |
+  | 150 | `b0f2e2ccab2b` (= #18) |
+  | 200 | `b93199756112` |
+- **Where the files are:** `backend/.dev-data/issue-20/s3/` (not in git), in `smoke-live-1/` and `s3-live-1/`:
+  - the answers of the model (`calls.jsonl`);
+  - what the reader stored (`stored.jsonl`);
+  - the 12 harness reports;
+  - the analysis (`analysis*.txt`, `s3-live-1-summary.txt`, `s3-live-1-why-missing.txt`).
+
+### The smoke check: what the endpoint does with 200 DPI
+
+All 12 calls answered 200 with `stop` and JSON. The prompt tokens of each call:
+
+| DPI | Image (px) | Patches sent | Classify call | Page call (booking, scan) |
+|---|---|---|---|---|
+| 100 | 827 × 1,170 | 3,848 | 1,059 | 1,528, 1,549 |
+| 150 | 1,241 × 1,754 | 8,580 | 2,242 | 2,711, 2,732 |
+| 200 | 1,654 × 2,339 | 15,288 | 3,361 | 3,830, 3,851 |
+
+- **The tokens per patch:**
+  - From 100 to 150 DPI, the prompt grows by 1,183 tokens for 4,732 patches: **0.250 tokens per patch** (one token per 2 × 2 patches).
+  - The classify call is then 97 text tokens plus patches ÷ 4. This is exact at 100 and at 150 DPI.
+- **At 200 DPI, the image takes 3,264 tokens, which is 13,056 patches, not 15,288.**
+  - The whole image would add 1,677 tokens against 150 DPI. A cut to the limit of 13,312 patches would add 1,183. The measure is +1,119, in each of the 4 calls.
+  - The S3 runs give the same: 200 DPI costs 62,664 more prompt tokens per run than 150 DPI, which is 56 images × 1,119.
+- **Probable cause:** the server makes the image smaller, so that each side is a multiple of 32 px and the image stays inside the limit, about 1,536 × 2,176 px (96 × 136 patches = 13,056). That is about 186 DPI.
+  - At 100 and 150 DPI, the same rounding gives the patch counts of the reader exactly.
+  - This is an inference from tokens. The tokens cannot show which pixels the model sees, or how the server makes the image smaller.
+- **What this means for S3:** "200 DPI" is a page at about 186 DPI, made smaller by the server. S3 does not measure a full 200 DPI image.
+
+### Results per DPI
+
+Mean per run; the 3 runs in brackets. The 150 DPI runs are the new control.
+
+| Per run | 72 DPI | 100 DPI | 150 DPI (control) | 200 DPI |
+|---|---|---|---|---|
+| Right of 132 | 110.67 (110, 110, 112) | 109.67 (110, 111, 108) | **114.00** (114, 114, 114) | 113.00 (110, 115, 114) |
+| Wrong | 8.00 | 7.67 | 8.00 | 8.00 |
+| Missing | 13.33 | 14.67 | 10.00 | 11.00 |
+| Reading group, right of 117 | 108.67 | 107.67 | 111.00 | 110.00 |
+| Business category, right of 11 | 2.00 | 2.00 | 3.00 | 3.00 |
+| Not read (damage photo), of 4 | 0 | 0 | 0 | 0 |
+| Strict pass, of 35 | 16.33 (15, 16, 18) | 15.67 (15, 18, 14) | 19.00 (19, 19, 19) | 18.33 (16, 20, 19) |
+| Classification, of 35 | 31 | 31 | 31 | 31 |
+| Line items of the clean PDFs, of 53 | 43.33 (42, 46, 42) | 46.00 (47, 44, 47) | 53 | 53 |
+| Wrong amount, date or identifier | 0 | 0 | 0 | 0 |
+| Fields whose result changes between runs | 9 | 9 | 2 | 8 |
+| Seconds per document (mean) | 3.63 | 3.63 | 4.14 | 4.37 |
+| Prompt tokens per run | 61,092 (40 %) | 86,236 (57 %) | 152,484 (100 %) | 215,148 (141 %) |
+| Completion tokens per run | 10,294 | 10,303 | 10,350 | 10,371 |
+| Retries (429, 502) | 3 | 2 | 0 | 1 |
+
+**By group** (right fields per run, of the expected fields of the group; strict pass in brackets):
+
+| Group | 72 DPI | 100 DPI | 150 DPI | 200 DPI |
+|---|---|---|---|---|
+| PDF with text (22 documents, 90 fields) | 75.67 (10.33) | 75.00 (9.67) | 78.00 (12) | 78.00 (12) |
+| PDF scan (6 documents, 25 fields) | 22.00 (3) | 22.00 (3.33) | 23.00 (4) | 22.33 (3.67) |
+| JPG (7 documents, 17 fields) | 13.00 (3) | 12.67 (2.67) | 13.00 (3) | 12.67 (2.67) |
+
+- **JPG:** the DPI does not change these images. Their difference (up to 0.33 field per run) is the noise between runs: one `airline` of the luggage report photo, refused in 1 run at 100 and at 200 DPI.
+- **The wrong values** are in the same business-category fields at each DPI (`cause`, `offence`, `diagnosis`, `provider`), with nearly the same values:
+  - At 72 DPI, one run reads the `cause` of the scan as "acute illness (gastroenteritis with fever)".
+  - At 100 DPI (8, 7, 8 wrong per run):
+    - the `offence` of `kit-anna-theft/police-report.pdf` is missing in 3 of 3 runs;
+    - the `cause` of `claim-1-travel/medical-certificate.pdf` is missing in run 2;
+    - the `provider` of `kit-lukas-clean/medical-invoice.pdf` is wrong in 2 of 3 runs (the address is added to it).
+
+### The rules of "When a variant wins"
+
+| Comparison | Gain per run | Lowest run > highest control run | Guardrails | Gain with any one scenario left out (lowest) | Wins |
+|---|---|---|---|---|---|
+| 72 DPI against 150 DPI | −3.33 | 110 > 114: no | **fail:** reading group −2.33; clean line items 42 to 46 of 53 | −3.67 | no |
+| 100 DPI against 150 DPI | −4.33 | 108 > 114: no | **fail:** reading group −3.33; clean line items 44 to 47 of 53 | −4.33 | no |
+| 200 DPI against 150 DPI | −1.00 | 110 > 114: no | hold | −1.00 | no |
+
+**No DPI wins. 150 DPI stays.** The other guardrails hold for all three: no wrong amount, date or identifier, no more wrong values, no classification loss, no reader error, no 429 left unsolved, and seconds below 1.5 times the control.
+
+### Why fields are missing (from the saved answers)
+
+S3 keeps each answer of the model, so a missing field can now be explained. For every missing field (the 4 damage photos left out, issue #25), the page answer was compared with what the reader stored.
+
+| Over 3 runs | 72 DPI | 100 DPI | 150 DPI | 200 DPI |
+|---|---|---|---|---|
+| Missing fields | 28 | 32 | 18 | 21 |
+| The model gave null | **0** | **0** | **0** | **0** |
+| The model gave the expected value; the reader refused it | 22 | 28 | 18 | 20 |
+| The model gave another value; the reader refused it | 6 | 4 | 0 | 1 |
+| Line items of the clean PDFs: given by the model / kept by the reader | 159 / 130 | 159 / 138 | 159 / 159 | 159 / 159 |
+
+- **At 150 DPI, the 6 missing fields per run are right values with a snippet that does not hold the value or is not on the text layer:**
+  - the 4 `booking_reference` values: the snippet is the title `Booking confirmation`, in every run;
+  - the `invoice_number` of `kit-lukas-clean/medical-invoice.pdf`: the snippet is a date, or the date and the number together;
+  - one amount (`amount_paid` of the lock set receipt, or the `total` of the `kit-anna-theft` quote): the snippet is the label (`Total paid`) or a LaTeX table.
+- **At 72 DPI, the model reads characters wrong.** In each of the 3 runs it gives `MZ5-2026-3317` for `MZS-2026-3317`, `Z1-2026-0652` for `ZI-2026-0652`, and the line items `Hotel Miraadouro` for `Hotel Miradouro` and `Re-ile` for `Re-tile`.
+  - On a PDF with a text layer, the check of the source refuses such a value, so it is missing, not wrong. That is why no wrong identifier appears.
+  - A line item read wrong is not confirmed by the text layer. The reader then keeps no line of that page: 3 to 4 lines are lost at once (29 lines over 3 runs).
+- **At 100 DPI, the causes are mixed.** No field value has a misread character, but:
+  - some line items are (`Mira douro`, `Trip price price paid`); 21 lines are lost over 3 runs;
+  - most of the missing fields have a different snippet: no snippet (7 cases), or a snippet that adds the address or more lines (`repair_company` 2 times, `offence` 3 times, `amount_paid` with "of which VAT").
+  - On a scan or a photo, there is no text layer to catch a misread: such a value would be stored at confidence 0.5. In S3 this did not happen: the scans lose fields to missing snippets, not to wrong values.
+- **The correction to S2:**
+  - S2 said that the control "most probably gave null" for the 4 booking references.
+  - The saved S3 answers of the same settings show the opposite: the model reads each reference right, and the reader refuses it because the snippet is the title.
+  - This holds for all 18 missing fields of the 150 DPI runs, not only the booking references. So the S2 explanation that the null rule of `v1` ("never guess") makes the model give null too often is not supported for the missing fields. The gain of `schema-only` in S2 probably comes from better snippets, not from fewer nulls.
+  - Limits: S2 kept no answers, so this cannot be checked on the S2 runs themselves. The saved #19 control missed 2 more fields (the `airline` of the luggage report photo and the `amount_paid` of the trolley receipt); S3 cannot explain those.
+  - The S2 section is left as it was written. Where its text about nulls disagrees with this section ("Where the +8 of `schema-only` comes from", "What the stage shows", "Limits of the result"), this section is the newer evidence.
+
+### The drift check
+
+| | Fresh 150 DPI (S3) | Saved #19 runs |
+|---|---|---|
+| Right per run | 114.00 (114, 114, 114) | 112.00 |
+| The set of wrong business values | the same 8 | the same 8 |
+| Seconds per document | 4.14 | 5.45 |
+
+- The difference is +2.00 fields per run, below the limit of 3, and the wrong business values are the same: **no drift** by the rule.
+- The 2 fields: the `airline` of the luggage report photo and the `amount_paid` of the trolley receipt, right in each fresh run and missing in the saved runs.
+- The endpoint was faster on 2026-11-20 (4.14 against 5.45 s per document). Speed is not part of the drift rule. It is the reason why seconds are compared only within the same stage.
+
+### Checks
+
+- **Integrity** (the analysis): the experiment is `complete`, 12 of 12 runs. The reader code and the kit are the same as in the run. One reader fingerprint. The settings of each report are those of the plan. No call is without a 200.
+- **The reports against the raw answers:** the prompt and completion tokens of each report equal the sum of the usage in `calls.jsonl`. There are 66 answered calls and 35 stored documents per run.
+- **Replay:** `replay.py` served the saved answers again to the current reader and harness, with no API call: **12 of 12 runs identical**.
+- **No key in a file:** the runner and a second scan found no key, no part of it and no `nvapi-` in any file of the two experiments or in their console logs.
+- **Nothing else changed:** the kit, the answer keys, the reports of #19, S2 and N1, and the reader code have the same SHA-256 before and after the runs. The reader defaults did not change.
+- **Independent review:** a reviewer with no part in the run recomputed every number of this section from `calls.jsonl`, the reports, `meta.json` and the current files, with no API call. It confirmed all of them. It also found:
+  - the integrity checks: the code and the 70 kit hashes, the settings, and the order of the runs;
+  - a stronger check of the image tokens: they are exactly (width ÷ 32, rounded up) × (height ÷ 32, rounded up) at 100 and 150 DPI, and 3,264 = 48 × 68 at 200 DPI, which fits the shape of the page;
+  - no condition of "no verdict".
+
+  Two notes from the review:
+  - The guardrail "the reading group loses 1 right field per run at most" is applied to the mean of the 3 runs, as in the S2 code. At 200 DPI the mean loss is exactly 1.00, which passes, but run 1 alone lost 4 (107 against 111). This changes nothing: 200 DPI already fails the gain rule and the rule of the lowest run.
+  - The +2.00 of the drift check is close to the limit of 3. It comes from 2 fields on documents whose image the DPI does not change.
+
+### What the stage shows, and what it does not
+
+- **150 DPI is the best setting measured.** It is also the most stable: the same 114 fields in each run, and 2 fields that change between runs, against 8 or 9 at the other DPI values.
+- **A lower DPI saves tokens but loses fields.** 72 DPI uses 40 % of the prompt tokens of 150 DPI and 12 % fewer seconds. The cost is 3.33 fields and 9.67 clean line items per run, and 2.67 fewer documents that pass. On a page with a text layer, the loss is safe (missing, not wrong). On scans and photos it would not always be safe.
+- **A higher DPI does not help on this kit.** The endpoint makes the image smaller, so the model sees about 186 DPI. The small loss (−1.00) is inside the noise between runs (110 to 115).
+- **The main loss of the control is not the image.** At every DPI, most missing fields are right values with a wrong snippet. A change of the DPI does not fix that. A change of the prompt or of the snippet rule could. The snippet rule is part of the shared reader: it is a question for Paul, and S3 does not change it.
+
+### Limits of the result
+
+- The kit is the same as in S2: 35 documents, about 11 layouts, one generator. All PDFs are A4, with one page.
+- 200 DPI is about 186 DPI after the server. A DPI above 186 cannot be measured on this endpoint for an A4 page.
+- The 6 scans are images at 150 DPI: a DPI above 150 only enlarges them. A real scan at a higher resolution could behave differently.
+- The JPGs do not change with the DPI. A result for photos needs photos at other sizes.
+- N1 was not run again. It is needed only if a DPI other than 150 wins, and none did.
+
+### Decision and what comes next
+
+- **The DPI stays at 150** (`ISSUE_18`). The reader defaults do not change. 150 DPI is the control of S4.
+- **No new runs are needed for S3.** The fresh control (3 runs of `v1` at 150 DPI, 2026-11-20) is the reference of the stages after it.
+- **Next, with its own approval:** S4, the temperature (0, 0.3, 0.5; 594 requests). It uses these 150 DPI runs as its control at 0.2.
+- **For Paul, not started:** most missing fields are right values with a snippet that does not hold the value, such as a title or a label. This is in addition to the N1 findings.
