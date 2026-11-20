@@ -1866,3 +1866,19 @@ Each field that is not right was sent through the checks of the reader (`verify_
 - **Thinking stays off** (`ISSUE_18`). The reader defaults do not change.
 - **The settings of S3, S4 and S5 together:** `v1`, 150 DPI, temperature 0.2, thinking off, `max_tokens` 2048. These are the settings of #18. No variant of #20 has beaten them by the rules written in advance.
 - **For Paul, not started:** the fields that the control loses at the check of the source are read right when the model thinks. A prompt that asks for the snippet more clearly might get the same gain with no thinking. That is a new variant, and the result above would be the reason for it.
+
+## Tuning of the Omni reader (issue #20): S7, the final run of #18 (the method)
+
+Written on 2026-11-20, after the S5 results and before any S7 request. Nikola approved the run (198 requests, a hard limit of 220).
+
+- **What:** the settings of #18 (`ISSUE_18`, `config_id` `b0f2e2ccab2b`): `v1`, 150 DPI, temperature 0.2, thinking off, `max_tokens` 2048. 3 runs on the 35 documents of the kit. No variant of #20 won, so the "best combination" of the task is the settings of #18, and S7 runs them against the baseline.
+- **Requests:** 3 × 66 = **198** expected; **hard limit 220** HTTP requests that are really sent, retries included. The other rules of S5 apply:
+  - the stops, the limit, the lock, and the check of the S3 control before any request;
+  - the retry rule of S5: a call answered after an allowed retry is a success and is reported; a call never answered gives no result.
+- **The drift rule (the method, "The control"):** "If they give the totals of the saved runs (2 field results that change per run at most), the endpoint did not drift."
+  - How it is read, written before the run: the mean per run of S7 for right, wrong and missing fields (of 132) is compared with the totals of each saved #19 run (112, 8, 12). **No drift** when each of the three differs by 2 at most; otherwise **drift**.
+  - Also reported, as information: the rule of S3 (a difference of 3 or more right fields, or another set of wrong business values), against #19 and against the S3 control of the same day.
+- **If there is drift:** the method says "the winner runs 3 times again on the same day as the control". The winner is the settings of #18, and S7 runs on the same day as the S3 control (2026-11-20), against which S3, S4 and S5 were judged. So no new run is made.
+  - The report then says which comparisons a drift could touch. These are the ones against the #19 runs of 2026-11-18: S2, and the drift check of S3.
+- **The gain over #18:** S7 has the settings of #18. A difference between S7 and #19 is a difference of time, not a gain of tuning, and it is reported that way. The gain of #20 over #18 is 0: no variant won.
+- **Where it runs:** `backend/.dev-data/issue-20/s7/` (not in git). `run_s7.py` and `replay_s7.py` are made from the S5 tools, with the settings `omni.ISSUE_18` and no other change. `analyze_s7.py` and the offline tests are in `test_s7.py`.
