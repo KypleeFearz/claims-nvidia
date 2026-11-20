@@ -1452,3 +1452,31 @@ Written on 2026-11-20, after the S3 results and before any S4 request. The rules
 - The temperature changes both calls, so a difference can come from the classification as well as from the reading.
 - 3 runs per temperature cannot show a rare event.
 - The kit is the same as in S2 and S3: 35 documents, about 11 layouts, one generator, no field expected empty.
+
+### The confirmation of a provisional winner (the method)
+
+Written on 2026-11-20, while S4 was running and before any S4 result was seen. Nikola approved it on 2026-11-20, and approved that it runs only when S4 gives a provisional winner.
+
+- **When it runs:** only when S4 is complete, passes its checks of integrity, and gives a provisional winner by the rules. There is no confirmation when:
+  - no temperature wins;
+  - S4 is incomplete;
+  - S4 fails a check;
+  - S4 had a technical problem that was not expected.
+
+  A temperature that fails only the seconds guardrail is a candidate under the S4 method, but it is not a provisional winner. It needs a separate decision from Nikola.
+- **What runs:** 3 runs at 0.2 and 3 runs at the winner `W`, in one invocation (`run_s4.py live --confirm W`). All the other settings are those of S4.
+- **The order:** 0.2, W, W, 0.2, 0.2, W.
+  - The places of 0.2 add up to 10 and those of `W` to 11. This is the nearest to even that 3 + 3 runs in 6 places allow.
+  - So neither temperature has all the early or all the late places.
+- **Requests:** 6 × 66 = **396** expected. **Hard limit: 440 HTTP requests that are really sent**, retries included. The other stopping rules are those of S4: 5 calls in a row with no 200; a crash; nothing restarts by itself.
+- **The rules:** "When a variant wins" applies unchanged: `W` against the 0.2 runs of the same invocation, with every guardrail, the seconds included.
+  - **Confirmed:** `W` wins again by every rule.
+  - **Not confirmed:** `W` fails any rule. Then 0.2 stays, and S4 reports its winner as not confirmed.
+- **Also reported:**
+  - **The drift check:** the fresh 0.2 runs against the S3 control. There is drift when either is true:
+    - the right fields per run differ by 3 or more;
+    - the set of wrong business values is not the same.
+  - **Consistency:** the right fields of `W` in the confirmation against `W` in S4.
+- **No verdict** under the same conditions as S4: incomplete, a call with no 200, a reader error, or a failed check of integrity. The check covers the code, the kit, one reader fingerprint, the settings of each run, one model and endpoint, the requests, and the key.
+- **A confirmed winner still does not change a default.** N1 runs at its temperature first, with its own approval, and N1 is not repeated automatically.
+- **Where it runs:** `run_s4.py --confirm`, with its offline tests in `test_s4.py`. The tools as they were for the S4 run are kept in `s4/used-by-s4-live-1/`.
