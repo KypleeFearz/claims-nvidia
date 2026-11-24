@@ -28,7 +28,8 @@ Known limits (each one gives 0.5 or keeps today's behaviour; none drops a value)
   a table whose labels are column headers above a row of values.
 - A value that the page shows with the label of the field is verified even when the
   same text also stands under another label: the stored value is the value of that
-  field. A bare snippet in the same case gets 0.5.
+  field. A bare snippet gets 0.5 when the same text also stands under a label of
+  something else (a veto); an unknown label there does not block it.
 - A scan or a photo has no text layer: nothing is checked, the reader gives 0.5.
 """
 
@@ -1158,7 +1159,11 @@ def _places(
 ) -> list[tuple[str, str]]:
     """(label, verdict) at each place where the snippet is on the page."""
     kind = SAFEGUARDED[name]
-    reported = name == "incident_date" and document_type == "luggage_report"
+    reported = (
+        name == "incident_date"
+        and document_type == "luggage_report"
+        and not _names_the_incident(text)
+    )
     places = []
     for label, after in _labels(snippet, value, text, cut=kind == "id"):
         if kind == "amount" and _QUANTITY.match(_fold(after)):
@@ -1166,6 +1171,17 @@ def _places(
         else:
             places.append((label, _verdict(_RULES[name], label, kind, reported)))
     return places
+
+
+def _names_the_incident(text: str) -> bool:
+    """The page has a label of the date of the incident itself ("Date of loss:"):
+    then "Reported:" is only the day of the report (review of phase 3, F1)."""
+    rules = _RULES["incident_date"]
+    return any(
+        _verdict(rules, line.split(":")[0] + ":") == MATCH
+        for line in text.split("\n")
+        if ":" in line
+    )
 
 
 # A label that says nothing about which field the value is: none, a place and a comma

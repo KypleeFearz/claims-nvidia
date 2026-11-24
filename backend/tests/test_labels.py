@@ -1240,6 +1240,25 @@ def test_a_generic_date_alone_never_verifies_an_event_date() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "event", ["Date of loss: 2026-10-01", "Incident date: 2026-10-01"]
+)
+def test_reported_is_not_the_incident_when_the_page_names_the_incident(
+    event: str,
+) -> None:
+    """Review F1: "Reported:" is the date of the incident on a baggage report only
+    when the page gives no date of the incident itself."""
+    text = f"Baggage irregularity report\nReported: 2026-10-09\n{event}\n"
+    value = date(2026, 10, 9)
+    assert not verified(
+        "luggage_report", "incident_date", value, "Reported: 2026-10-09", text
+    )
+    text = "Baggage irregularity report\nReported: 2026-10-09\nFlight: AW 618\n"
+    assert verified(
+        "luggage_report", "incident_date", value, "Reported: 2026-10-09", text
+    )
+
+
 # The six adversarial false accepts of the review
 
 

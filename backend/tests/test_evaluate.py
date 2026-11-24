@@ -327,7 +327,9 @@ def test_an_extra_field_is_counted_apart_and_does_not_fail_the_document(
 ) -> None:
     report = one(StubReader({"a.pdf": answer(also=[("vat_number", "CHE-1", 1)])}))
     d = doc(report, "a.pdf")
-    assert d["extra"] == [{"name": "vat_number", "value": "CHE-1", "page": 1}]
+    assert d["extra"] == [
+        {"name": "vat_number", "value": "CHE-1", "page": 1, "confidence": 0.9}
+    ]
     assert d["counts"]["extra"] == 1 and d["counts"]["expected"] == 4
     assert d["passed"] is True
     assert report["pooled"]["by_field"]["vat_number"]["expected"] == 0
