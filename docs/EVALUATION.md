@@ -593,3 +593,33 @@ The fix of the safety check N1 of #20: a value in the wrong field must not pass 
 - **In git (CI, no key):** `tests/test_n1_replay.py` and `tests/test_evaluation_safety.py` read the saved N1 answers of 2026-11-19 through a stub of the model.
 - **A live measure:** `cd backend && uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 3 --set n1 --omni prompt=v1` (without `--set` for the kit).
 - **Not in git:** the paired runner and the raw answers of 2026-11-25, in `backend/.dev-data/issue-125/live/` on Nikola's machine (see `EVALUATION-ISSUE-125.md`, section 8).
+
+## One call per page or per document (issue #126)
+
+Status on 2026-11-26: built and tested offline. **Not measured: no request was sent to the model.** The default of `OmniReader` is unchanged: one call per page.
+
+### What is in git
+
+- **The set MP1** (`data/mock/mp1/`, generator `scripts/mockdocs/mp1.py`): 8 mock documents of 2 or 3 pages, 19 pages, 6 text PDFs and 2 scans, 35 scored fields (33 present, 2 absent), 39 line items (35 on the text PDFs). 12 fields are printed on more than one page; their answer keys list every accepted page. `--set mp1` evaluates it. It is not part of the kit (`demo.NOT_KIT`): the kit stays at 35 documents.
+- **The document scope of the reader, an experiment:** `OmniSettings(scope="document")`, `--omni scope=document`. One request holds every page image of a document. The answer holds one block per page, and the checks and the merge of the page scope read the blocks. There is no second call after a failed answer. A document of one page takes the request of #18 in both scopes.
+- **Supplementary numbers of the harness** for a set whose keys name accepted pages (the source page against the accepted pages, right values below 0.8). The official numbers of #19 and #125 do not change.
+- **A controlled runner** (`python -m app.docintel.experiment`): a dry run with a stub, a pilot, the main run, a replay and the verdict. It counts every HTTP attempt before it is sent and stops at a hard cap. A live mode needs its own authorization text and a freeze of the code, of MP1 and of the method.
+
+### The method, written before any request
+
+- **Settings:** those of #18 (prompt `v1`, 150 DPI, temperature 0.2, thinking off, `max_tokens` 2048). Only the scope of the extraction call differs.
+- **Plan:** 3 runs per scope on MP1, in one invocation on one day, in the order page, document, document, page, page, document. 129 planned requests, at most 145 HTTP attempts. Before it, a pilot on 2 other mock documents: 4 planned requests, at most 8 attempts.
+- **Verdict:** the rules of "How a variant was judged" of #20, as written. The control is the page scope. The gain threshold stays 3 right fields per run (3 of 35 on MP1; it was 3 of 132 on the kit).
+- **Mapping to MP1, waits for Paul's confirmation:** "every line item of the clean PDFs stays right" is all 35 lines of the text PDFs in every run of the document scope; "any one scenario is left out" is any one document; a document answer that is cut at the token limit, or not in the asked form, counts as "a call left without an answer" in a valid run, and such an answer of the page scope gives no verdict.
+- **Reported, never the verdict:** thresholds of 1 and 2 fields, and five safety gates proposed from #125.
+- **The full method** is in [`EVALUATION-ISSUE-126.md`](EVALUATION-ISSUE-126.md), committed before any request. The runner refuses a live run when that file, a code file of the experiment or a file of MP1 differs from the freeze.
+
+### A safety limit to decide before any change of the default
+
+A document that gives no field looks like a document that prints nothing (D80 (13)). For a type with no amount (medical certificate, medical report, police report, luggage report) the claim can then be paid with no person. It exists today for a one-page document. In the document scope one failed or cut call loses every page of a document, so it is more likely there. Offline tests pin it (`backend/tests/test_scope_downstream.py`, the tests that end in `_gap`). The evaluation reads documents only and pays nothing, so it is not affected. The fix is a change of the base and is Paul's decision.
+
+### How to reproduce (offline, no key)
+
+- `cd backend && uv run python -m app.docintel.experiment dry-run main --out .dev-data/issue-126/dry/main` (129 requests to a stub; `dry-run pilot` for the pilot).
+- `cd backend && uv run pytest tests/test_mp1_dataset.py tests/test_mp1_reader.py tests/test_omni_document.py tests/test_experiment.py tests/test_acceptance.py`.
+- The results table and the decision come with the live run.
