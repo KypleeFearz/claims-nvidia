@@ -309,9 +309,15 @@ def _score_field(
         "expected_page": expected_page,
         "page": None,
         "page_right": None,
+        # issue #126, supplementary: the source page against the accepted pages of
+        # the key (or against its page when the key has no list). None: nothing read
+        "page_accepted": None,
         "source": None,
         "confidence": None,  # issue #125: of the value that the status is about
     }
+    accepted = expected.get("accepted_pages")
+    if isinstance(accepted, list):  # only a key with a list gets the entry
+        row["accepted_pages"] = list(accepted)
     if not got:
         verdict = compare_field(kind, value, None)
         if verdict.status == "missing":
@@ -345,6 +351,7 @@ def _score_field(
         "read": _jsonable(getattr(first, "value", None)),
         "page": page,
         "page_right": right_page,
+        "page_accepted": valid and page in row.get("accepted_pages", [expected_page]),
         "source": "invalid" if not valid else "right" if right_page else "wrong_page",
     }
 
@@ -357,6 +364,13 @@ def _trusted(x: dict[str, Any]) -> bool:
     return bool(x["confidence"] >= LOW_CONFIDENCE)  # routing: below it, a person
 
 
+def _on_accepted(r: dict[str, Any]) -> bool | None:
+    """`page_accepted` of a row. A row of a report of #19, #20 or #125 has none: the
+    key page stands for it (it had no other accepted page)."""
+    found: bool | None = r["page_accepted"] if "page_accepted" in r else r["page_right"]
+    return found
+
+
 def _safety(
     rows: list[dict[str, Any]], extras: list[dict[str, Any]]
 ) -> dict[str, int | None]:
@@ -364,7 +378,16 @@ def _safety(
     the answer key (a field given twice is one field) and, for the extra fields, per
     stored value. Every stored value needs its confidence: a value of a report of
     #19 or #20 has none, then None ("not available"), never 0. A field with no
-    stored value (a right absence, a missing field) needs none."""
+    stored value (a right absence, a missing field) needs none.
+
+    Issue #126, supplementary, counts of fields (no share), the same rule:
+    - `right_untrusted`: right values of a present field below LOW_CONFIDENCE (a
+      right value that a person must still check); `right_present` is
+      `right_trusted + right_untrusted`
+    - `wrong_page_trusted`: values at LOW_CONFIDENCE or more whose page is not the
+      key page (`page_right` is not true), right or wrong
+    - `unaccepted_page_trusted`: the same against the accepted pages
+    The values at LOW_CONFIDENCE or more are `incorrect_trusted + right_trusted`."""
     read = [
         r for r in rows if r["status"] in ("right", "wrong") and r["read"] is not None
     ]
@@ -386,12 +409,35 @@ def _safety(
         ),
         # not in the answer key: nobody can say if it is right
         "extra_trusted": sum(_trusted(x) for x in extras),
+        "right_untrusted": sum(
+            r["status"] == "right" and r["expected"] is not None and not _trusted(r)
+            for r in read
+        ),
+        "wrong_page_trusted": sum(
+            _trusted(r) and r["page_right"] is not True for r in read
+        ),
+        "unaccepted_page_trusted": sum(
+            _trusted(r) and _on_accepted(r) is not True for r in read
+        ),
     }
 
 
 def _field_counts(
     rows: list[dict[str, Any]], extras: list[dict[str, Any]] | None = None
 ) -> dict[str, Any]:
+    """The counts of some field rows. Denominators of the shares:
+    - `accuracy`: right (a right value or a right absence) / expected fields
+    - `page_accuracy`: values on the key page / `read`, the stored values (right or
+      wrong; a lure for an absent field is one; an absent field has the key page 1)
+    - `accepted_page_accuracy` (issue #126, supplementary): values on an accepted
+      page / `read`. The accepted pages are those of the key, or its page when it
+      has no list; an invalid source is never accepted
+    - `verified_accepted`: right and on an accepted page, or a right absence; out of
+      the expected fields, as `verified`
+    - right_present, incorrect_present, missing: among the present fields (expected
+      minus `absent`); right_absent, incorrect_absent: among the absent ones; a right
+      absence is never counted as a right value
+    - `extra`: stored fields that the key does not name, counted apart"""
     extras = extras or []
     right = sum(r["status"] == "right" for r in rows)
     wrong = sum(r["status"] == "wrong" for r in rows)
@@ -400,6 +446,13 @@ def _field_counts(
     # right and on the expected page; a field expected empty has no page to check
     verified = sum(
         r["status"] == "right" and (r["page_right"] is True or r["expected"] is None)
+        for r in rows
+    )
+    # issue #126: the same against the accepted pages (a row of an old report: the
+    # key page), supplementary
+    page_accepted = sum(_on_accepted(r) is True for r in rows)
+    verified_accepted = sum(
+        r["status"] == "right" and (_on_accepted(r) is True or r["expected"] is None)
         for r in rows
     )
     return _with_shares(
@@ -413,6 +466,8 @@ def _field_counts(
             "read": sum(r["page_right"] is not None for r in rows),
             "page_right": page_right,
             "verified": verified,
+            "page_accepted": page_accepted,
+            "verified_accepted": verified_accepted,
             # issue #125: a right absence apart from a right value, and the
             # incorrect values at any confidence, where the page has one or not
             "absent": len(absent),
@@ -430,6 +485,8 @@ def _with_shares(c: dict[str, Any]) -> dict[str, Any]:
         "accuracy": _share(c["right"], c["expected"]),
         "verified_accuracy": _share(c["verified"], c["expected"]),
         "page_accuracy": _share(c["page_right"], c["read"]),
+        # issue #126, supplementary: the official `page_accuracy` stays the key page
+        "accepted_page_accuracy": _share(c["page_accepted"], c["read"]),
     }
 
 
@@ -437,9 +494,11 @@ COUNTS: tuple[str, ...] = ("expected", "right", "wrong", "missing", "extra", "re
 COUNTS += ("page_right", "verified")
 COUNTS += ("absent", "right_absent", "right_present")
 COUNTS += ("incorrect_absent", "incorrect_present")
+COUNTS += ("page_accepted", "verified_accepted")  # issue #126, supplementary
 # issue #125: None when a part has no confidence (a sum with an unknown is unknown)
 SAFETY: tuple[str, ...] = ("incorrect_trusted", "incorrect_trusted_absent")
 SAFETY += ("incorrect_trusted_present", "right_trusted", "extra_trusted")
+SAFETY += ("right_untrusted", "wrong_page_trusted", "unaccepted_page_trusted")
 
 
 def _sum_counts(many: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -520,6 +579,9 @@ def _score(
         "error": error or None,
         # every expected field right and on its page, and the reader did not raise
         "passed": not error and counts["verified"] == counts["expected"],
+        # issue #126, supplementary: the same against the accepted pages
+        "passed_accepted": not error
+        and counts["verified_accepted"] == counts["expected"],
         "fields": rows,
         "counts": counts,
         "extra": extra,
@@ -553,6 +615,7 @@ def _aggregate(docs: list[dict[str, Any]]) -> dict[str, Any]:
         if d["line_items"]["expected"] or d["line_items"]["read"]
     ]
     passed = sum(d["passed"] for d in docs)
+    passed_accepted = sum(d["passed_accepted"] for d in docs)
     classified = sum(d["classified_right"] for d in docs)
     lines_expected = sum(li["expected"] for li in with_lines)
     lines_right = sum(li["right"] for li in with_lines)
@@ -561,6 +624,9 @@ def _aggregate(docs: list[dict[str, Any]]) -> dict[str, Any]:
             "count": len(docs),
             "passed": passed,
             "pass_rate": _share(passed, len(docs)),
+            # issue #126, supplementary: every field verified on an accepted page
+            "passed_accepted": passed_accepted,
+            "pass_rate_accepted": _share(passed_accepted, len(docs)),
             "errors": sum(d["error"] is not None for d in docs),
             "classified_right": classified,
             # the type that `classify` gives: apart from the fields and the pass rate
@@ -610,6 +676,7 @@ def _documents(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "kind": runs[0]["kind"],
                 "runs": len(runs),
                 "passed_runs": sum(d["passed"] for d in runs),
+                "passed_accepted_runs": sum(d["passed_accepted"] for d in runs),
                 "classified_right_runs": sum(d["classified_right"] for d in runs),
                 "fields": _sum_counts(d["counts"] for d in runs),
                 "seconds": _timing([d["seconds"]["total"] for d in runs]),
@@ -649,6 +716,12 @@ def _summary(overalls: list[dict[str, Any]]) -> dict[str, Any]:
         "incorrect_trusted_present": lambda o: o["fields"]["incorrect_trusted_present"],
         "right_trusted": lambda o: o["fields"]["right_trusted"],
         "errors": lambda o: o["documents"]["errors"],
+        # issue #126, supplementary
+        "accepted_page_accuracy": lambda o: o["fields"]["accepted_page_accuracy"],
+        "pass_rate_accepted": lambda o: o["documents"]["pass_rate_accepted"],
+        "right_untrusted": lambda o: o["fields"]["right_untrusted"],
+        "wrong_page_trusted": lambda o: o["fields"]["wrong_page_trusted"],
+        "unaccepted_page_trusted": lambda o: o["fields"]["unaccepted_page_trusted"],
     }
     out = {name: _stat([get(o) for o in overalls]) for name, get in pick.items()}
     for name in SAFETY_SUMMARY:  # a run with no confidence: no mean, not a mean of 0
@@ -659,6 +732,7 @@ def _summary(overalls: list[dict[str, Any]]) -> dict[str, Any]:
 
 SAFETY_SUMMARY: tuple[str, ...] = ("incorrect_trusted", "incorrect_trusted_absent")
 SAFETY_SUMMARY += ("incorrect_trusted_present", "right_trusted")
+SAFETY_SUMMARY += ("right_untrusted", "wrong_page_trusted", "unaccepted_page_trusted")
 
 
 # ---------------------------------------------------------------- HTTP
@@ -1017,7 +1091,8 @@ def _rescored(doc: dict[str, Any]) -> dict[str, Any]:
     total never comes from a number that a file says."""
     counts = _field_counts(doc["fields"], doc["extra"])
     passed = not doc["error"] and counts["verified"] == counts["expected"]
-    return doc | {"counts": counts, "passed": passed}
+    accepted = not doc["error"] and counts["verified_accepted"] == counts["expected"]
+    return doc | {"counts": counts, "passed": passed, "passed_accepted": accepted}
 
 
 def _report(
@@ -1106,7 +1181,7 @@ DOC_KEYS += ("seconds", "error", "passed", "fields", "counts", "extra", "line_it
 # the totals of a run that its documents must give again (raw counts, no share)
 TOTALS = {
     "fields": COUNTS + SAFETY,
-    "documents": ("count", "passed", "errors", "classified_right"),
+    "documents": ("count", "passed", "errors", "classified_right", "passed_accepted"),
     "line_items": ("documents", "documents_right", "expected", "read", "right"),
 }
 
@@ -1151,9 +1226,15 @@ def _load_saved(path: Path) -> tuple[dict[str, Any], str]:
                 if missing:
                     raise KeyError(", ".join(missing))
                 again = _rescored(d)
-                if again["passed"] != d["passed"] or any(
-                    k in d["counts"] and again["counts"][k] != d["counts"][k]
-                    for k in COUNTS + SAFETY
+                # a document of a report before #126 has no `passed_accepted`
+                stored_accepted = d.get("passed_accepted", again["passed_accepted"])
+                if (
+                    again["passed"] != d["passed"]
+                    or again["passed_accepted"] != stored_accepted
+                    or any(
+                        k in d["counts"] and again["counts"][k] != d["counts"][k]
+                        for k in COUNTS + SAFETY
+                    )
                 ):
                     raise BadCombine(
                         f"{where}: {d['id']}: the counts do not match its fields"
@@ -1171,7 +1252,10 @@ def _load_saved(path: Path) -> tuple[dict[str, Any], str]:
 
 def _documents_signature(run: dict[str, Any]) -> list[Any]:
     """What makes two runs comparable: the same documents, kinds, workflows and
-    pages, and the same answer keys (every expected value and page)."""
+    pages, and the same answer keys (every expected value and page). Issue #126: a
+    field whose row has accepted pages holds them too, so two reports scored with
+    different lists do not combine; a row with none (every report before #126, every
+    key with no list) adds nothing, so the signature of such a report is unchanged."""
     return [
         (
             d["id"],
@@ -1182,6 +1266,7 @@ def _documents_signature(run: dict[str, Any]) -> list[Any]:
             d["line_items"]["expected"],
             [
                 (f["name"], f["kind"], json.dumps(f["expected"]), f["expected_page"])
+                + ((tuple(f["accepted_pages"]),) if "accepted_pages" in f else ())
                 for f in d["fields"]
             ],
         )
@@ -1396,6 +1481,41 @@ def _safety_line(report: dict[str, Any]) -> str:
     )
 
 
+def _accepted_lines(report: dict[str, Any]) -> list[str]:
+    """Issue #126: one line for a set whose keys name accepted pages, with the
+    supplementary numbers; none for any other set (the text of a kit report does not
+    change). A count that needs a confidence and has none is "not available"."""
+    if not any(
+        "accepted_pages" in field
+        for run in report["run_details"]
+        for d in run["documents"]
+        for field in d["fields"]
+    ):
+        return []
+    f, d = report["pooled"]["fields"], report["pooled"]["documents"]
+    t = LOW_CONFIDENCE
+    none = {"mean": None, "min": None, "max": None}
+    spread = _spread(report["summary"].get("accepted_page_accuracy", none))
+
+    def count(name: str) -> str:
+        return "not available" if f[name] is None else str(f[name])
+
+    below = (
+        "not available"
+        if f["right_untrusted"] is None
+        else f"{f['right_untrusted']} of {f['right_present']}"
+    )
+    return [
+        f"- Source page on an accepted page (supplementary; the line above is the key "
+        f"page): {spread}; {f['page_accepted']} of {f['read']}; verified on an "
+        f"accepted page: {f['verified_accepted']} of {f['expected']}; documents with "
+        f"every field verified on an accepted page: {d['passed_accepted']} of "
+        f"{d['count']}; values at >= {t} on a page that is not the key page: "
+        f"{count('wrong_page_trusted')}, on a page that is not accepted: "
+        f"{count('unaccepted_page_trusted')}; right values below {t}: {below}"
+    ]
+
+
 def summary_text(report: dict[str, Any]) -> str:
     """A markdown summary for the terminal and the pull request. The counts are
     added over the runs."""
@@ -1414,6 +1534,7 @@ def summary_text(report: dict[str, Any]) -> str:
         f"{_spread(s['pass_rate'])}; {d['passed']} of {d['count']}",
         f"- Source page right (of the values read): {_spread(s['page_accuracy'])}; "
         f"{f['page_right']} of {f['read']}",
+        *_accepted_lines(report),
         f"- Classification (type right, apart): "
         f"{_spread(s['classification_accuracy'])}; "
         f"{d['classified_right']} of {d['count']}",
