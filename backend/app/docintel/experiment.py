@@ -405,8 +405,11 @@ def run_main(
 
 def unusable(call: Json) -> bool:
     """Is the final answer of an extraction call a 200 that cannot be used: cut at
-    the token limit, not JSON, or not in the asked form? (A call with no 200 is
-    counted apart: it has no answer at all.)"""
+    the token limit (also when its text is whole JSON), empty, not JSON, or not in
+    the asked form? The asked form is the same in both scopes: a page answer, and
+    each block of a document answer, is an object with the objects `values` and
+    `snippets`; a document answer has one block for each page sent and no other
+    key. (A call with no 200 is counted apart: it has no answer at all.)"""
     last = call["attempts"][-1]
     if call["kind"] == "classify" or last.get("status") != 200:
         return False
@@ -418,9 +421,12 @@ def unusable(call: Json) -> bool:
         return True
     if call["kind"] == "document":
         blocks, exact = omni._blocks(content, len(call["images"]))
-        return not exact or any(not isinstance(b, dict) for b in blocks)
-    answer = omni._json(content)
-    return not (
+        return not exact or not all(_formed(block) for block in blocks)
+    return not _formed(omni._json(content))
+
+
+def _formed(answer: Any) -> bool:
+    return (
         isinstance(answer, dict)
         and isinstance(answer.get("values"), dict)
         and isinstance(answer.get("snippets"), dict)
@@ -473,12 +479,19 @@ def assess(out: Path) -> Json:
             integrity.append(f"{tag}: the report is not a complete report of {SET}")
         signatures.add(json.dumps(ev._documents_signature(run), sort_keys=True))
         codes.add(report["reader_code_sha256"])
-        calls = by_call.get(tag, [])
+        cannot_use = sum(unusable(c) for c in by_call.get(tag, []))
+        if scope == "page" and cannot_use:
+            # Rule 3f judges the candidate. An unusable answer of the control would
+            # lower the score of the control and so help the candidate: no verdict.
+            integrity.append(
+                f"{tag}: {cannot_use} extraction answer(s) of the control are cut "
+                "or not in the asked form"
+            )
         runs[scope].append(
             acceptance.facts(
                 run,
                 calls_without_answer=counted.get("calls_without_answer", 0),
-                unusable_answers=sum(unusable(c) for c in calls),
+                unusable_answers=cannot_use,
                 documents=len(ev.kit(SET)),
             )
         )

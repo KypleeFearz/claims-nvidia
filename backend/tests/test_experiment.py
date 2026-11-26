@@ -415,6 +415,46 @@ def test_a_whole_answer_that_the_endpoint_marks_as_cut_stays_a_cut_answer(
         assert cut["line_items"]["read"] == 0
 
 
+def test_a_document_block_in_another_form_is_an_unusable_answer(tmp_path: Path) -> None:
+    """The answer of mp1-02 names both pages and ends with `stop`, and the block of
+    page 2 has no `values` object. A page answer in that form is unusable in the
+    page scope; the same holds for a block: rule 3f fails."""
+
+    def bent(kind: str, name: str, page: int, times: int) -> httpx.Response | None:
+        if kind == "document" and name.startswith("mp1-02"):
+            blocks = page_answers(key_of(name))
+            whole: Json = {f"page_{n}": a for n, a in enumerate(blocks, 1)}
+            whole["page_2"] = {"values": None, "snippets": {}}
+            return answer(whole)
+        return None
+
+    endpoint = Endpoint(mistakes=page_scope_errs, fault=bent)
+    _, verdict, _ = rehearse(tmp_path, endpoint)
+    assert verdict["procedure"]["valid"] is True
+    by_rule = {r["rule"]: r for r in verdict["official"]["rules"]}
+    assert by_rule["3f"]["candidate"] == [(0, 0, 1)] * 3
+    assert "3f" in unmet(verdict) and verdict["decision"] == CONTROL_STAYS
+
+
+def test_an_unusable_answer_of_the_control_gives_no_verdict(tmp_path: Path) -> None:
+    """A page answer of the control is cut in each of its runs: page 1 of mp1-01 is
+    not read and the control loses its fields. With no rule, that loss would be a
+    gain of the candidate (both scopes are perfect here). So it is no verdict."""
+
+    def cut(kind: str, name: str, page: int, times: int) -> httpx.Response | None:
+        if kind == "page" and name.startswith("mp1-01") and page == 1:
+            whole = json.dumps(page_answers(key_of(name))[0])
+            return answer(whole[:200], finish="length")
+        return None
+
+    meta, verdict, _ = rehearse(tmp_path, Endpoint(fault=cut))
+    assert meta["status"] == "complete" and meta["attempts"] == 129
+    assert verdict["procedure"]["valid"] is False and verdict["decision"] == NO_VERDICT
+    problems = verdict["procedure"]["problems"]
+    assert [p.split(":")[0] for p in problems] == PAGE_RUNS
+    assert all("of the control are cut or not in the asked form" in p for p in problems)
+
+
 def test_a_retry_that_gets_an_answer_is_a_success_and_is_counted(
     tmp_path: Path,
 ) -> None:
