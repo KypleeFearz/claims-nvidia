@@ -596,30 +596,47 @@ The fix of the safety check N1 of #20: a value in the wrong field must not pass 
 
 ## One call per page or per document (issue #126)
 
-Status on 2026-11-26: built and tested offline. **Not measured: no request was sent to the model.** The default of `OmniReader` is unchanged: one call per page.
+Measured on 2026-11-26. **Result: the default stays one call per page.** One call per document stored more right fields on the test set, but it does not meet the rules written in advance in #20, and it stored one wrong value at 0.9. The method (committed before the first request), every number, the evidence and the limits are in [`EVALUATION-ISSUE-126.md`](EVALUATION-ISSUE-126.md). Paul has not reviewed this result.
 
-### What is in git
+### What was compared
 
-- **The set MP1** (`data/mock/mp1/`, generator `scripts/mockdocs/mp1.py`): 8 mock documents of 2 or 3 pages, 19 pages, 6 text PDFs and 2 scans, 35 scored fields (33 present, 2 absent), 39 line items (35 on the text PDFs). 12 fields are printed on more than one page; their answer keys list every accepted page. `--set mp1` evaluates it. It is not part of the kit (`demo.NOT_KIT`): the kit stays at 35 documents.
-- **The document scope of the reader, an experiment:** `OmniSettings(scope="document")`, `--omni scope=document`. One request holds every page image of a document. The answer holds one block per page, and the checks and the merge of the page scope read the blocks. There is no second call after a failed answer. A document of one page takes the request of #18 in both scopes.
-- **Supplementary numbers of the harness** for a set whose keys name accepted pages (the source page against the accepted pages, right values below 0.8). The official numbers of #19 and #125 do not change.
-- **A controlled runner** (`python -m app.docintel.experiment`): a dry run with a stub, a pilot, the main run, a replay and the verdict. It counts every HTTP attempt before it is sent and stops at a hard cap. A live mode needs its own authorization text and a freeze of the code, of MP1 and of the method.
+- **Control: the page scope**, one model call per page. **Candidate: the document scope**, one call with every page image of a document (`--omni scope=document`), an experiment that is off by default. Its answer holds one block per page; the checks and the merge of the page scope read the blocks.
+- **The set MP1** (`data/mock/mp1/`, `--set mp1`, not part of the kit): 8 mock documents of 2 or 3 pages, 19 pages, 6 text PDFs and 2 scans, 35 scored fields (2 of them absent), 39 line items (35 on the text PDFs).
+- **Settings and runs:** the settings of #18 for both scopes (prompt `v1`, 150 DPI, temperature 0.2, thinking off, `max_tokens` 2048). 3 runs per scope in one invocation. 133 requests: 4 in a pilot on 2 other documents, 129 in the main run. Each got a 200 at its first attempt and ended with `stop`.
 
-### The method, written before any request
+### The result (main run, 3 runs per scope)
 
-- **Settings:** those of #18 (prompt `v1`, 150 DPI, temperature 0.2, thinking off, `max_tokens` 2048). Only the scope of the extraction call differs.
-- **Plan:** 3 runs per scope on MP1, in one invocation on one day, in the order page, document, document, page, page, document. 129 planned requests, at most 145 HTTP attempts. Before it, a pilot on 2 other mock documents: 4 planned requests, at most 8 attempts.
-- **Verdict:** the rules of "How a variant was judged" of #20, as written. The control is the page scope. The gain threshold stays 3 right fields per run (3 of 35 on MP1; it was 3 of 132 on the kit).
-- **Mapping to MP1, waits for Paul's confirmation:** "every line item of the clean PDFs stays right" is all 35 lines of the text PDFs in every run of the document scope; "any one scenario is left out" is any one document; a document answer that is cut at the token limit, or not in the asked form, counts as "a call left without an answer" in a valid run, and such an answer of the page scope gives no verdict.
-- **Reported, never the verdict:** thresholds of 1 and 2 fields, and five safety gates proposed from #125.
-- **The full method** is in [`EVALUATION-ISSUE-126.md`](EVALUATION-ISSUE-126.md), committed before any request. The runner refuses a live run when that file, a code file of the experiment or a file of MP1 differs from the freeze.
+| Measure | One call per page | One call per document |
+|---|---|---|
+| Right fields per run, of 35 | 25, 27, 24 (mean 25.33) | 28, 28, 28 |
+| Field accuracy | 72.4 % (76 of 105) | 80.0 % (84 of 105) |
+| Wrong values per run | 9, 8, 9 | 7, 7, 7 |
+| **Wrong values at >= 0.8 per run** | 0, 0, 0 | **1, 1, 1** |
+| Source page right, of the values stored (right and wrong) | 79.8 % (79 of 99) | 88.2 % (90 of 102) |
+| of them: right values only / scans only | 70 of 73 / 16 of 21 | 78 of 81 / 12 of 21 |
+| Line items right, text PDFs, of 35 per run | 23, 25, 25 | 28, 23, 29 |
+| Seconds per document | 10.44 | 9.29 (-11 %; the run means overlap) |
+| Requests per run | 27 | 16 (-41 %) |
+| Tokens per run, prompt + completion | 68,573 + 6,016 | 63,296 + 5,714 (-7.5 %) |
 
-### A safety limit to decide before any change of the default
+The type was right for 8 of 8 documents in every run. The three document runs gave the same stored value, page and confidence for all 35 fields: repeatability on the same 8 documents, not a measure on other documents.
 
-A document that gives no field looks like a document that prints nothing (D80 (13)). For a type with no amount (medical certificate, medical report, police report, luggage report) the claim can then be paid with no person. It exists today for a one-page document. In the document scope one failed or cut call loses every page of a document, so it is more likely there. Offline tests pin it (`backend/tests/test_scope_downstream.py`, the tests that end in `_gap`). The evaluation reads documents only and pays nothing, so it is not affected. The fix is a change of the base and is Paul's decision.
+### The verdict
 
-### How to reproduce (offline, no key)
+By the rules of "How a variant was judged" above, as written: **the control stays.**
 
-- `cd backend && uv run python -m app.docintel.experiment dry-run main --out .dev-data/issue-126/dry/main` (129 requests to a stub; `dry-run pilot` for the pilot).
-- `cd backend && uv run pytest tests/test_mp1_dataset.py tests/test_mp1_reader.py tests/test_omni_document.py tests/test_experiment.py tests/test_acceptance.py`.
-- The results table and the decision come with the live run.
+- **Not met:** "at least 3 more right fields per run" (the gain is 2.67); "no wrong amount, date or identifier" (12 in the 3 document runs, all at 0.5; the page scope has 16); "every line item of the clean PDFs stays right" (28, 23, 29 of 35; neither scope stored a line item of one quote, so 35 was out of reach for both). The other seven rules are met.
+- **Provisional:** the mapping of four rules (3c, 3e, 3f and 4) to MP1 waits for Paul. The verdict is the same under every reading that the method holds: rules 1 and 3a have no mapping, and each one alone gives "the control stays".
+
+### What the answers show
+
+- **Two effects make the gain, and this test does not separate them.** The page scope keeps the first value of a field, and MP1 prints lures on page 1 (a subtotal carried forward, a cost estimate): in 18 cases a later page answer held the right value. In the document scope the model saw all pages and wrote the final value itself.
+- **The model copies values into every page block.** On a text page the checks refuse a copy. A copy can hide a conflict between two pages: in 5 fields the copied value was right, in 1 it was not. A name is printed with a date of birth on page 1 and alone on page 2. The page scope sees two values and stores 0.5; the document scope stores the first form at 0.9, in each of its 3 runs. This is the wrong value at >= 0.8 (wrong by the exact comparison with the answer key).
+- **On a scan** the document scope stored one right value with a page that does not print it (in all 3 runs; one more in the pilot), at 0.5.
+- **Line items** are scored by position; the scopes differ on one document only. Both stored "Brought forward" rows of a continued table as line items.
+- **41 % fewer requests gave 11 % less time:** the page images are most of every request.
+
+### Limits
+
+- 8 mock documents from one generator, in English, 3 runs per scope on one day, one prompt. Each finding rests on 1 to 3 documents. The evaluation runs no claim. The raw answers are not in git (`EVALUATION-ISSUE-126.md`, R15).
+- **A document that gives no field** looks like a document that prints nothing (D80 (13)), and such a claim can be paid with no person. No call failed here, so this experiment gives no new evidence. In the document scope one failed or cut call loses every page. This must be fixed in the base, or assessed by Paul, before the document scope can be a default.
