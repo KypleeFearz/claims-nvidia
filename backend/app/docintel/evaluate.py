@@ -857,9 +857,14 @@ def _omni(
         "thinking": o.thinking,
         "reasoning_budget": o.reasoning_budget,
         "prompt": o.prompt,
-        "prompt_sha256": omni.prompt_sha256(o.prompt),
+        "prompt_sha256": omni.prompt_sha256(o.prompt, o.scope),
         "config_id": omni.config_id(o),
     }
+    if o.scope != "page":
+        # issue #126: only another scope is named, so a report of the page mode
+        # stays as #20 wrote it and old and new reports of it still combine
+        settings["scope"] = o.scope
+        settings["max_document_bytes"] = omni.MAX_DOCUMENT_BYTES
     return make, settings, meter
 
 
@@ -883,6 +888,7 @@ OPTIONS: dict[str, Callable[[str], Any]] = {
     "reasoning_budget": _int_or_none,
     "timeout": float,
     "prompt": str,
+    "scope": str,  # issue #126: page (one call per page) or document
 }
 
 
