@@ -92,7 +92,7 @@ def test_six_documents_have_a_text_layer_and_three_have_none() -> None:
 
 
 def test_the_kit_is_still_35_documents_and_holds_no_file_of_n1() -> None:
-    assert demo.NOT_KIT == {"n1"}
+    assert demo.NOT_KIT == {"n1", "mp1"}
     found = demo._kit()
     assert len(found) == 35
     assert all(folder not in demo.NOT_KIT for folder, _ in found)

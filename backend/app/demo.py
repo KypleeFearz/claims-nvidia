@@ -15,7 +15,7 @@ from app.store import DATA, Store
 router = APIRouter(prefix="/demo")
 KIT_SUFFIXES = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg"}
 HARD = "hard"  # the folder of the scans and phone photos
-NOT_KIT = frozenset({"n1"})  # safety sets (issue #125): in data/mock, not in the kit
+NOT_KIT = frozenset({"n1", "mp1"})  # test sets (#125, #126): not in the kit
 
 
 def _data() -> Path:

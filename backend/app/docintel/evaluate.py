@@ -117,10 +117,52 @@ def _check_key(key: Any) -> None:
         if "value" not in f:
             raise BadAnswerKey(f"the field {name} has no value")
         check_expected(kind, f["value"])
+        _check_accepted_pages(name, f)
     lines = key.get("line_items", [])
     if not isinstance(lines, list) or not all(isinstance(x, dict) for x in lines):
         raise BadAnswerKey("`line_items` is not a list of objects")
     compare_lines(lines, lines)  # a bad value in a line raises BadAnswerKey
+
+
+def _check_accepted_pages(name: str, field: dict[str, Any]) -> None:
+    """Issue #126: a value that several pages print as this field can name them in
+    `accepted_pages`, with the text of each page in `page_snippets`. Both are
+    optional and go together. A key with neither is a key of #19. The score of the
+    source page still uses `page` only: how the accepted pages count is not
+    decided yet."""
+    accepted, snippets = field.get("accepted_pages"), field.get("page_snippets")
+    if accepted is None and snippets is None:
+        return
+    if accepted is None or snippets is None:
+        raise BadAnswerKey(
+            f"the field {name} needs accepted_pages and page_snippets together"
+        )
+    if field["value"] is None:
+        raise BadAnswerKey(f"the field {name} is absent: it has no accepted page")
+    if (
+        not isinstance(accepted, list)
+        or len(accepted) < 2
+        or any(isinstance(p, bool) or not isinstance(p, int) or p < 1 for p in accepted)
+        or accepted != sorted(set(accepted))
+    ):
+        raise BadAnswerKey(
+            f"accepted_pages of {name} is not a sorted list of two or more "
+            "different pages"
+        )
+    if field["page"] not in accepted:
+        raise BadAnswerKey(f"accepted_pages of {name} does not hold its page")
+    if (
+        not isinstance(snippets, dict)
+        or set(snippets) != {str(p) for p in accepted}
+        or not all(isinstance(s, str) and s.strip() for s in snippets.values())
+    ):
+        raise BadAnswerKey(
+            f"page_snippets of {name} does not give one text for each accepted page"
+        )
+    if snippets[str(field["page"])] != field.get("snippet"):
+        raise BadAnswerKey(
+            f"page_snippets of {name} differs from the snippet of its page"
+        )
 
 
 def _answer_key(path: Path) -> tuple[dict[str, Any] | None, str | None]:
