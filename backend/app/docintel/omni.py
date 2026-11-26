@@ -386,7 +386,7 @@ def _json(content: str | None) -> Any:
         text = rest.rstrip().removesuffix("```")
     try:
         return json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):  # also an answer nested too deep to read
         return None
 
 
@@ -514,9 +514,12 @@ def _field(
 
 def _retry_after(header: str | None, default: float) -> float:
     try:
-        return min(max(float(header or ""), 0.0), MAX_WAIT)
+        seconds = float(header or "")
     except ValueError:
         return default
+    if math.isnan(seconds):  # "nan" is a float: min and max would keep it
+        return default
+    return min(max(seconds, 0.0), MAX_WAIT)
 
 
 class OmniReader:
