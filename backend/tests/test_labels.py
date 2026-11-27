@@ -1322,6 +1322,46 @@ def test_the_total_paid_stays_verified() -> None:
     assert verified("receipt", "amount_paid", 500.0, "500.00", "Total paid: 500.00\n")
 
 
+# The review of pull request #128 (Paul): four wrong values that passed at 0.9, and
+# one right value that did not.
+
+
+def test_two_words_with_no_digit_are_not_an_identifier() -> None:
+    text = "Booking reference: Sent separately\n"
+    value = "Sent separately"
+    assert not verified("booking_confirmation", "booking_reference", value, value, text)
+
+
+def test_a_date_of_another_thing_is_not_the_date_of_the_document() -> None:
+    def cancelled(text: str) -> bool:
+        value = date(2026, 8, 10)
+        kind = "cancellation_confirmation"
+        return verified(kind, "cancellation_date", value, "2026-08-10", text)
+
+    assert not cancelled("Date of departure: 2026-08-10\n")
+    assert cancelled("Date of cancellation: 2026-08-10\n")
+    assert cancelled("Date: 2026-08-10\n")
+
+
+def test_a_bare_amount_or_sum_is_not_the_amount_paid() -> None:
+    text = "Sum insured: CHF 50'000.00\n"
+    assert not verified("receipt", "amount_paid", 50000.0, "50'000.00", text)
+    assert not verified("receipt", "amount_paid", 45.0, "45.00", "Amount: CHF 45.00\n")
+    text = "Amount paid: CHF 45.00\n"
+    assert verified("receipt", "amount_paid", 45.0, "45.00", text)
+
+
+def test_a_total_of_one_thing_is_not_the_total() -> None:
+    assert not total("300.00", 300.0, "Total labour: 300.00\n")
+    assert not total("Total labour: 300.00", 300.0, "Total labour: 300.00\n")
+
+
+def test_a_total_with_the_rate_of_the_vat_is_the_total() -> None:
+    text = "Total incl. 8.1% VAT: CHF 540.50\n"
+    assert total("540.50", 540.5, text)
+    assert total("Total incl. 8.1% VAT: CHF 540.50", 540.5, text)
+
+
 # F6: the source of the module is ASCII
 
 

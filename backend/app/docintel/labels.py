@@ -440,7 +440,7 @@ _DATE_VETO: Final[tuple[str, ...]] = (
 # A bare word is not the end of a longer name: "Departure date" is not "Date".
 _BARE = r"(?<![a-z0-9] )(?<![a-z0-9]-)"
 _DATE_GENERIC: Final[tuple[str, ...]] = (
-    _BARE + r"date",
+    _BARE + r"date(?! of\b)",
     _BARE + r"datum",
     _BARE + r"data",
     _BARE + r"dated",
@@ -716,7 +716,9 @@ _AMOUNT_VETO: Final[tuple[str, ...]] = (
     r"gegeben",
 )
 _TOTAL_WORDS: Final[tuple[str, ...]] = (
-    _BARE + r"total",
+    # A bare "total" is the total only when no other word follows it: "Total labour"
+    # is the labour. "Total in CHF" and "Total for 2 nights" stay the total.
+    _BARE + r"total(?: in| for(?= \d))?(?! [a-z])",
     r"total (?:amount|price|sum|due|cost|payable|to pay)",
     r"grand total",
     r"amount (?:due|payable|to pay)",
@@ -779,10 +781,6 @@ _AMOUNT_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"paye",
         r"a payer",
         r"pagato",
-        r"importo",
-        r"betrag",
-        r"amount",
-        r"sum",
     )
     + _TOTAL_WORDS,
     "refund_received": (
@@ -919,7 +917,10 @@ _SEPARATOR = re.compile(r"\||;|\t| {2,}")
 _PARENTHESIS = re.compile(r"\([^()]*\)")
 _INCLUDED = r"(?:incl\.?|inkl\.?|including|included|inclus|compris|incluso|inclusa)"
 _TAX = r"(?:vat|mwst|tva|iva|ust)"
-_TAX_INCLUDED = re.compile(rf"\b{_INCLUDED}\s+{_TAX}\b|\b{_TAX}\s+{_INCLUDED}")
+# "incl. VAT", "including 8.1% VAT", "VAT included": a remark, not another amount.
+_TAX_INCLUDED = re.compile(
+    rf"\b{_INCLUDED}\s+(?:\d+(?:[.,]\d+)?\s*%\s*)?{_TAX}\b|\b{_TAX}\s+{_INCLUDED}"
+)
 MAX_AFTER = 4  # words after the keyword: a long sentence is not a label
 MAX_SHORT = 2  # words of a label that is only a name ("Numero client")
 NUMBER = re.compile(r"(?:(?<!\w)[-\u2212])?\d(?:[',]?\d)*(?:\.\d+)?")  # as omni.NUMBER
@@ -1280,8 +1281,9 @@ _WORDLIKE = re.compile(
 
 
 def _is_prose(value: str) -> bool:
-    """An explanation, not an identifier: "sent separately by e-mail", "pending".
-    An identifier with no digit ("XKQZPL") or in a strange format is not prose."""
+    """An explanation, not an identifier: "sent separately by e-mail", "pending",
+    or two words or more with no digit ("Sent separately"). One word with no digit
+    ("XKQZPL") or an identifier in a strange format is not prose."""
     text = value.strip()
     words = text.split()
     lower = [w for w in words if w.isalpha() and w.islower()]
@@ -1289,7 +1291,7 @@ def _is_prose(value: str) -> bool:
         _fold(text) in _STATUS
         or bool(re.search(r"[.!?;:]$|\?|,\s", text))
         or (len(words) >= 3 and len(lower) >= 2)
-        or (len(words) >= 2 and len(lower) == len(words))
+        or (len(words) >= 2 and not any(c.isdigit() for c in text))
         or (len(words) == 1 and len(lower) == 1 and _WORDLIKE.search(text) is not None)
     )
 

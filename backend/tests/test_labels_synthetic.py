@@ -521,7 +521,6 @@ ENTRIES: list[Entry] = [
             "Totalbetrag",
             "Montant total",
             "Total TTC",
-            "Total à payer",
             "Totale",
             "Importo totale",
             "Totale complessivo",
