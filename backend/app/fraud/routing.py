@@ -58,6 +58,13 @@ def route(
     ]
     if low:
         reasons.append(f"A field has low confidence: {', '.join(low)}.")
+    # a document with a type and no field: the reader failed on it, and the rule
+    # above has no field to read. A person looks at it (D80 (13), pull request #129).
+    empty = [
+        d.file for d in claim.documents if d.document_type != "unknown" and not d.fields
+    ]
+    if empty:
+        reasons.append(f"No field was read in a document: {', '.join(empty)}.")
     # the system pays alone only what the contract alone gives (issue #86)
     proposal = propose(claim)
     if proposal is not None and claim.documents:
