@@ -82,3 +82,18 @@ def test_low_confidence_is_handler_review() -> None:
 def test_no_workflow_goes_to_a_person() -> None:
     out, reasons = route(travel_claim(type="property"), [], None)
     assert out == Outcome.handler_review and reasons
+
+
+def test_a_document_with_a_type_and_no_field_read_goes_to_a_person() -> None:
+    # a real reader can fail on a document (found by Nikola, D80 (13)): the type is
+    # there, no field is. The low-confidence rule has nothing to read then.
+    docs = travel_documents()
+    docs[2] = document("D-med", "medical_certificate", {})
+    out, reasons = route(travel_claim(documents=docs), [], TRAVEL)
+    assert out == Outcome.handler_review
+    assert reasons == ["No field was read in a document: D-med.pdf."]
+    # a document that is not read yet has no type: it is not this rule
+    docs[2] = document("D-med", "unknown", {})
+    assert route(travel_claim(documents=docs), [], TRAVEL)[0] == (
+        Outcome.straight_through
+    )
