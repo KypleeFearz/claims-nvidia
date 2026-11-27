@@ -7,25 +7,30 @@ is on the page, and says if they fit the field. Missing, doubtful or contradicti
 evidence gives False: the reader keeps the value and its source and stores it at
 UNVERIFIED, so a person looks at it. Nothing is dropped and no value is changed.
 
-Scope. Identifiers, dates and amounts need a label. The provider (an organisation)
-must not read as one person. A person field must not read as a company. Free text
-fields (cause, diagnosis, offence, item_description, damage_description) and the
-lines are OUT of scope: they are never downgraded here and never claimed as
-verified by meaning. The same holds for repair_company, merchant and airline (a
-sole trader is a legitimate company).
+Scope. Identifiers, dates and amounts need a label. The provider and the person
+fields have NO label check: only the form of the name is read. A provider must not
+read as one person, and a person field must not read as a company. So a doctor can
+pass as the patient, and a patient or an insurer as the provider. Free text fields
+(cause, diagnosis, offence, item_description, damage_description) and the lines are
+OUT of scope: they are never downgraded here and never claimed as verified by
+meaning. The same holds for repair_company, merchant and airline (a sole trader is
+a legitimate company).
 
-The words are general business vocabulary (English, German, French, Italian), never
-the words of one document. A label is the text just before the value, and the
-nearest keyword of it decides: it fits the field (match), it names another thing
-(veto), or it is unknown (none). Accents and case do not count.
+The words are general business vocabulary in English, never the words of one
+document. The 44 mock documents are in English, so no document measures another
+language: a label in German, French or Italian is unknown and gives 0.5. A label is
+the text just before the value, and the nearest keyword of it decides: it fits the
+field (match), it names another thing (veto), or it is unknown (none). Accents and
+case do not count.
 
 Known limits (each one gives 0.5 or keeps today's behaviour; none drops a value):
 - Persons and organisations are told apart by their words only: a title ("Dr. med.")
   with one to four names and no word of an organisation reads as one person, so a
   practice that is named only after its doctor gets 0.5. A bare name with no title
   and no person label ("Corina Muster") stays at 0.9 as a provider.
-- A label the lists do not know ("Fatt. n.", a bare "Price") gives 0.5, and so does
-  a table whose labels are column headers above a row of values.
+- A label the lists do not know (a bare "Price", "Amount" or "Sum", "Total labour")
+  gives 0.5, and so does a table whose labels are column headers above a row of
+  values.
 - A value that the page shows with the label of the field is verified even when the
   same text also stands under another label: the stored value is the value of that
   field. A bare snippet gets 0.5 when the same text also stands under a label of
@@ -80,15 +85,6 @@ _PLACEHOLDER_TEXTS = (
     "not available, not applicable, not specified, not provided, not given, "
     "not stated, not mentioned, not shown, not visible, not legible, illegible, "
     "unreadable, no value, no data, no information, empty, "
-    # German
-    "k.a., keine angabe, keine, unbekannt, nicht verf\u00fcgbar, nicht angegeben, "
-    "nicht bekannt, nicht vorhanden, nicht lesbar, nicht ersichtlich, "
-    # French
-    "inconnu, non disponible, non applicable, n.d., non communiqu\u00e9, "
-    "non indiqu\u00e9, non pr\u00e9cis\u00e9, aucun, "
-    # Italian
-    "sconosciuto, non disponibile, non applicabile, non indicato, non specificato, "
-    "nessuno, "
     # a dash alone
     "-, --, ---, \u2014, \u2013, \u2212"
 )
@@ -150,49 +146,24 @@ _ID_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"invoice\w*",
         r"inv",
         r"bill",
-        r"rechnung\w*",
-        r"rechn",
-        r"rg",
-        r"faktura",
-        r"facture\w*",
-        r"fattura\w*",
     ),
     "quote": (
         r"quot\w*",
         r"offer\w*",
         r"estimate",
-        r"angebot\w*",
-        r"offerte\w*",
-        r"offre\w*",
-        r"offerta",
-        r"devis",
-        r"preventivo",
-        r"kostenvoranschlag",
     ),
     "booking": (
         r"booking\w*",
         r"reservation\w*",
         r"reserv\w*",
-        r"buchung\w*",
-        r"prenotazion\w*",
         r"pnr",
         r"record locator",
         r"confirmation (?:no|nr|num\w*|code)",
-        r"bestatigung\w*",
         r"confirmation",
     ),
     "report": (
         r"reports?",
-        r"anzeige\w*",
-        r"strafanzeige",
-        r"protokoll\w*",
-        r"rapport\w*",
-        r"denuncia",
-        r"verbale",
         r"journal\w*",
-        r"plainte",
-        r"proces-verbal",
-        r"aktenzeichen",
         r"case (?:no|nr|num\w*|n\W)",
     ),
     "luggage": (
@@ -203,8 +174,6 @@ _ID_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"file reference",
         r"reference\w*",
         r"ref",
-        r"referenz\w*",
-        r"riferimento",
         r"claim (?:no|nr|num\w*|ref\w*)",
     ),
 }
@@ -213,143 +182,65 @@ _ID_OTHER: Final[tuple[str, ...]] = (
     r"patient\w*",
     r"customer\w*",
     r"client\w*",
-    r"kund\w*",
     r"insured\w*",
-    r"versicherte\w*",
-    r"versicherung\w*",
     r"policy",
-    r"polizz\w*",
     r"member\w*",
-    r"mitglied\w*",
     r"passenger\w*",
-    r"passagier\w*",
     r"owner",
     r"holder",
     r"job",
-    r"auftrag\w*",
     r"order\w*",
-    r"bestell\w*",
-    r"commande",
-    r"ordine",
     r"tax",
-    r"steuer\w*",
-    r"vat",
-    r"mwst",
-    r"tva",
-    r"iva",
-    r"uid",
-    r"ide",
-    r"iban",
-    r"bic",
-    r"swift",
     r"account",
-    r"konto",
-    r"compte",
-    r"conto",
-    r"tel\w*",
-    r"phone",
-    r"fax",
-    r"mobile",
-    r"handy",
-    r"natel",
-    r"gln",
-    r"zsr",
-    r"ahv\w*",
-    r"avs",
-    r"ssn",
-    r"file",
-    r"case",
-    r"akte",
-    r"dossier",
-    r"fall",
     r"ticket\w*",
     r"flight\w*",
-    r"flug",
-    r"vol",
-    r"volo",
-    r"tracking",
-    r"barcode",
     r"serial\w*",
-    r"plz",
-    r"zip",
-    r"postal",
-    r"npa",
     r"article\w*",
-    r"artikel",
-    r"sku",
     r"passport",
-    r"ausweis",
     r"licen[cs]e",
     r"plate",
-    r"kennzeichen",
-    r"vin",
     r"contract\w*",
-    r"vertrag\w*",
-    r"contrat",
-    r"contratto",
     r"delivery",
-    r"lieferschein",
     r"receipt",
-    r"beleg\w*",
-    r"kassenbon",
-    r"quittung",
-    r"recu",
-    r"ricevuta",
-    r"scontrino",
-    r"bag tag",
-    r"gepackanhanger",
-    r"agent",
-    r"officer",
-    r"date",
-    r"datum",
-    r"data",
-    r"total",
-    r"amount",
-    r"betrag",
-    r"sum",
-    r"summe",
-    r"price",
-    r"preis",
-    r"prix",
-    r"prezzo",
-    r"customer ref\w*",
 )
 
 
 # Short technical names that are labels wherever they stand.
-_ID_TECHNICAL: Final[frozenset[str]] = frozenset(
-    {
-        r"uid",
-        r"ide",
-        r"iban",
-        r"bic",
-        r"swift",
-        r"gln",
-        r"zsr",
-        r"ahv\w*",
-        r"avs",
-        r"ssn",
-        r"vat",
-        r"mwst",
-        r"tva",
-        r"iva",
-        r"tel\w*",
-        r"phone",
-        r"fax",
-        r"mobile",
-        r"handy",
-        r"natel",
-        r"plz",
-        r"zip",
-        r"postal",
-        r"npa",
-        r"sku",
-        r"vin",
-        r"barcode",
-        r"tracking",
-        r"bag tag",
-        r"gepackanhanger",
-    }
+_ID_TECHNICAL: Final[tuple[str, ...]] = (
+    r"vat",
+    r"uid",
+    r"iban",
+    r"bic",
+    r"swift",
+    r"gln",
+    r"zsr",
+    r"ahv\w*",
+    r"ssn",
+    r"tel\w*",
+    r"phone",
+    r"fax",
+    r"mobile",
+    r"zip",
+    r"postal",
+    r"sku",
+    r"vin",
+    r"barcode",
+    r"tracking",
+    r"bag tag",
+)
+# Words of a document that no party owns: a veto as a label, but not a party
+# between a keyword and its value (`_PARTY`).
+_GENERIC_WORDS: Final[tuple[str, ...]] = (
+    r"date",
+    r"total",
+    r"amount",
+    r"sum",
+    r"price",
+    r"file",
+    r"case",
+    r"agent",
+    r"officer",
+    r"customer ref\w*",
 )
 
 
@@ -371,13 +262,11 @@ def _id_rules(own: tuple[str, ...]) -> _Rules:
         for w in words
     )
     # A word of the language ("order", "customer", "date") vetoes as a label ("Order
-    # no.", "Customer:") or when it ends a label of 1-2 words ("Numero client", not
+    # no.", "Customer:") or when it ends a label of 1-2 words ("Your order", not
     # "Customer service"), not inside a sentence ("Thank you for your order").
-    words = others + _ID_OTHER
-    technical = tuple(w for w in words if w in _ID_TECHNICAL)
-    natural = tuple(w for w in words if w not in _ID_TECHNICAL)
+    natural = others + _ID_OTHER + _GENERIC_WORDS
     ends = tuple(f"(?:{w})$" for w in natural)
-    return _rules(mine, technical + tuple(_labelled(w) for w in natural), ends)
+    return _rules(mine, _ID_TECHNICAL + tuple(_labelled(w) for w in natural), ends)
 
 
 # Dates. Words that are never a document date or an event date.
@@ -387,72 +276,30 @@ _DATE_VETO: Final[tuple[str, ...]] = (
     r"till",
     r"through",
     r"thru",
-    r"bis",
     r"(?:due|print|printed|expiry|expiration|return|birth|maturity|closing"
-    r"|end)\s+(?:date|datum|data)",
+    r"|end)\s+date",
     r"date of (?:birth|expiry|expiration|return)",
-    r"jusqu\w*",
-    r"fino",
     r"expir\w*",
-    r"verfall\w*",
-    r"ablauf\w*",
-    r"echeance",
-    r"scadenz\w*",
-    r"scadut\w*",
-    r"valable",
     r"due",
-    r"fallig\w*",
     r"payable",
-    r"zahlbar",
-    r"pagabile",
     r"birth\w*",
     r"born",
     r"dob",
-    r"geburt\w*",
-    r"geboren",
-    r"naissance",
-    r"ne le",
-    r"nee",
-    r"nato",
-    r"nata",
-    r"nascita",
     r"print\w*",
-    r"druck\w*",
-    r"stampa\w*",
     r"return\w*",
-    r"ruckreise",
-    r"ruckflug",
-    r"ruckkehr",
-    r"retour",
-    r"rientro",
-    r"ritorno",
     r"follow-?up",
-    r"nachkontrolle",
-    r"folgetermin",
-    r"suivi",
     r"end",
     r"ends",
-    r"ende",
-    r"fin",
-    r"fine",
 )
 # The generic words for "date": the date of the document itself.
 # A bare word is not the end of a longer name: "Departure date" is not "Date".
 _BARE = r"(?<![a-z0-9] )(?<![a-z0-9]-)"
 _DATE_GENERIC: Final[tuple[str, ...]] = (
     _BARE + r"date(?! of\b)",
-    _BARE + r"datum",
-    _BARE + r"data",
     _BARE + r"dated",
-    _BARE + r"fecha",
     r"date of issue",
     r"issue date",
     r"issued(?: on)?",
-    r"ausstellungsdatum",
-    r"ausgestellt am",
-    r"date d.emission",
-    r"date d.edition",
-    r"data di emissione",
 )
 _DATE_WORDS: Final[dict[str, tuple[str, ...]]] = {
     "invoice_date": (
@@ -460,13 +307,6 @@ _DATE_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"date of (?:the )?invoice",
         r"invoice dated",
         r"invoiced on",
-        r"rechnungsdatum",
-        r"rechnung vom",
-        r"datum der rechnung",
-        r"date de (?:la )?facture",
-        r"facture du",
-        r"data (?:della )?fattura",
-        r"fattura del",
     ),
     "quote_date": (
         r"quote date",
@@ -474,14 +314,6 @@ _DATE_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"quotation date",
         r"quote dated",
         r"offer date",
-        r"offertdatum",
-        r"offertendatum",
-        r"angebotsdatum",
-        r"datum des angebots",
-        r"date du devis",
-        r"date de l.offre",
-        r"data (?:del )?preventivo",
-        r"data offerta",
     ),
     "purchase_date": (
         r"purchase date",
@@ -492,17 +324,6 @@ _DATE_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"sale date",
         r"transaction date",
         r"receipt date",
-        r"kaufdatum",
-        r"einkaufsdatum",
-        r"kauf am",
-        r"verkaufsdatum",
-        r"belegdatum",
-        r"date d.achat",
-        r"achete le",
-        r"date de transaction",
-        r"data (?:di )?acquisto",
-        r"acquistato il",
-        r"data della transazione",
     ),
     "cancellation_date": (
         r"cancellation date",
@@ -510,42 +331,17 @@ _DATE_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"cancell?ed(?: on)?",
         r"termination date",
         r"date of termination",
-        r"stornierungsdatum",
-        r"stornierung am",
-        r"storniert am",
-        r"storno\w*",
-        r"rucktritt\w*",
-        r"date d.annulation",
-        r"annul\w*",
-        r"data (?:di )?annullamento",
     ),
     "departure_date": (
         r"depart\w*",
-        r"abreise\w*",
-        r"abflug\w*",
-        r"reisebeginn",
-        r"reisedatum",
-        r"reisetermin",
-        r"hinreise",
-        r"hinflug",
         r"outbound",
         r"travel date",
         r"date of travel",
         r"travel period",
-        r"reisezeitraum",
         r"start of (?:the )?"
         r"(?:trip|travel|journey)",
         r"trip start",
         r"trip begins",
-        r"beginn der reise",
-        r"date de depart",
-        r"partenza",
-        r"data di partenza",
-        r"andata",
-        r"periode du voyage",
-        r"periodo di viaggio",
-        r"inizio viaggio",
-        r"aller",
     ),
     "incident_date": (
         r"incident\w*",
@@ -566,29 +362,6 @@ _DATE_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"detected",
         r"noticed",
         r"found on",
-        r"tatzeit",
-        r"tatdatum",
-        r"vorfall\w*",
-        r"ereignis\w*",
-        r"schadendatum",
-        r"schadenfall",
-        r"schadentag",
-        r"unfall\w*",
-        r"entdeckt",
-        r"festgestellt",
-        r"faits?",
-        r"date des faits",
-        r"sinistre",
-        r"survenu",
-        r"constate",
-        r"fatto",
-        r"fatti",
-        r"data del fatto",
-        r"avvenuto",
-        r"accaduto",
-        r"scoperto",
-        r"sinistro",
-        r"evento",
     ),
     "treatment_date": (
         r"treat\w*",
@@ -598,38 +371,15 @@ _DATE_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"seen on",
         r"date of (?:the )?(?:service|treatment|examination|consultation|visit)",
         r"service date",
-        r"behandl\w*",
-        r"untersuch\w*",
-        r"leistungsdatum",
-        r"besuch",
-        r"traitement",
-        r"examen",
-        r"visite",
-        r"date des soins",
-        r"soins",
-        r"trattamento",
-        r"visita",
-        r"esame",
-        r"esaminat\w*",
-        r"data della visita",
-        r"prestazione",
     ),
     "unfit_from": (
         r"unfit",
         r"incapacit\w*",
         r"incapable",
-        r"arbeitsunfahig\w*",
-        r"unfahig\w*",
-        r"auf",
-        r"krankgeschrieben",
-        r"krankschreibung",
         r"sick leave",
         r"off work",
         r"not fit",
         r"not able to work",
-        r"inabil\w*",
-        r"arret de travail",
-        r"arret maladie",
         r"certified (?:from|as)",
         r"sick from",
     ),
@@ -638,82 +388,38 @@ _OWN_DATE = frozenset(
     {"invoice_date", "quote_date", "purchase_date", "cancellation_date"}
 )
 
-# Amounts.
-_AMOUNT_VETO: Final[tuple[str, ...]] = (
+# Amounts. A part of an amount is never the amount: a veto for every amount field.
+_AMOUNT_PARTS: Final[tuple[str, ...]] = (
     r"sub[- ]?totals?",
-    r"subtotale",
-    r"sous-?total",
-    r"zwischen\w*",
-    r"net",
-    r"netto",
-    r"excl\w*",
-    r"exkl\w*",
-    r"hors taxe",
-    r"ht",
     r"vat",
-    r"mwst",
-    r"mehrwertsteuer",
-    r"ust",
-    r"tva",
-    r"iva",
     r"tax\w*",
-    r"steuer\w*",
-    r"taxe",
-    r"imposta",
-    r"of which",
-    r"davon",
-    r"dont",
-    r"di cui",
     r"fees?",
     r"charges?",
-    r"gebuhr\w*",
-    r"frais",
-    r"spese",
     r"deposit\w*",
-    r"anzahlung",
-    r"acompte",
-    r"caparra",
-    r"anticipo",
     r"discount\w*",
-    r"rabatt\w*",
-    r"remise",
-    r"sconto",
+)
+_AMOUNT_VETO: Final[tuple[str, ...]] = _AMOUNT_PARTS + (
+    r"net",
+    r"excl\w*",
+    r"of which",
     r"rebate",
-    r"skonto",
     r"previous balance",
     r"balance (?:brought )?forward",
     r"carried forward",
     r"opening balance",
-    r"vortrag",
-    r"saldo (?:precedente|riporto)",
-    r"solde precedent",
-    r"ancien solde",
     r"shipping",
-    r"versand",
     r"freight",
     r"tips?",
-    r"trinkgeld",
-    r"pourboire",
     r"change",
-    r"ruckgeld",
     r"rounding",
-    r"rundung",
-    r"arrondi",
     r"unit\w*",
     r"qty",
     r"quantity",
-    r"menge",
-    r"quantite",
-    r"quantita",
     r"refund\w*",
     r"cancel\w*",
     r"per (?:person|night|day|adult|child)",
-    r"pro (?:person|nacht|tag)",
-    r"par (?:personne|nuit|jour)",
-    r"a persona",
     r"cash",
     r"tendered",
-    r"gegeben",
 )
 _TOTAL_WORDS: Final[tuple[str, ...]] = (
     # A bare "total" is the total only when no other word follows it: "Total labour"
@@ -725,21 +431,6 @@ _TOTAL_WORDS: Final[tuple[str, ...]] = (
     r"balance due",
     r"invoice (?:total|amount)",
     r"to pay",
-    r"gesamt\w*",
-    r"totale\w*",
-    r"total(?:betrag|summe|preis|kosten)",
-    r"summe",
-    r"endbetrag",
-    r"endsumme",
-    r"rechnungsbetrag",
-    r"rechnungstotal",
-    r"zu zahlen",
-    r"zahlbetrag",
-    r"montant (?:total|a payer)",
-    r"total ttc",
-    r"net a payer",
-    r"importo (?:totale|dovuto)",
-    r"da pagare",
     r"offer total",
     r"quote total",
 )
@@ -755,18 +446,6 @@ _AMOUNT_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"trip cost",
         r"cost of the trip",
         r"package price",
-        r"reisepreis",
-        r"pauschalpreis",
-        r"gesamtpreis",
-        r"preis der reise",
-        r"reisekosten",
-        r"prix du voyage",
-        r"prix total",
-        r"prix du sejour",
-        r"prix forfaitaire",
-        r"prezzo del viaggio",
-        r"prezzo totale",
-        r"costo del viaggio",
     )
     + _TOTAL_WORDS,
     "amount_paid": (
@@ -774,13 +453,6 @@ _AMOUNT_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"amount paid",
         r"paid amount",
         r"paid",
-        r"bezahlt",
-        r"gezahlt",
-        r"gesamtbetrag",
-        r"montant paye",
-        r"paye",
-        r"a payer",
-        r"pagato",
     )
     + _TOTAL_WORDS,
     "refund_received": (
@@ -790,41 +462,16 @@ _AMOUNT_WORDS: Final[dict[str, tuple[str, ...]]] = {
         r"paid back",
         r"payed back",
         r"amount returned",
-        r"ruckerstattung\w*",
-        r"ruckzahlung",
-        r"erstattung\w*",
-        r"gutschrift",
-        r"rembours\w*",
         r"restitution",
-        r"rimbors\w*",
-        r"restituzione",
     ),
 }
-_REFUND_VETO: Final[tuple[str, ...]] = (
-    r"fees?",
-    r"charges?",
+_REFUND_VETO: Final[tuple[str, ...]] = _AMOUNT_PARTS + (
     r"price",
-    r"preis",
-    r"prix",
-    r"prezzo",
     r"paid(?! back)",
     r"cost\w*",
     r"deduct\w*",
     r"retain\w*",
     r"penalt\w*",
-    r"gebuhr\w*",
-    r"frais",
-    r"spese",
-    r"tax\w*",
-    r"vat",
-    r"storno\w*",
-    r"deposit\w*",
-    r"anzahlung",
-    r"acompte",
-    r"discount\w*",
-    r"rabatt\w*",
-    r"subtotal",
-    r"zwischen\w*",
 )
 _AMOUNT_NOT_TOTAL = {  # a total is never the amount of these (the veto of a field)
     "total": _AMOUNT_VETO,
@@ -837,51 +484,25 @@ _AMOUNT_NOT_TOTAL = {  # a total is never the amount of these (the veto of a fie
 
 
 # Words that veto wherever they stand in the label, also before the keyword
-# ("Requested refund", "Offener Betrag", "Next visit").
+# ("Requested refund", "Outstanding amount", "Next visit").
 _ANYWHERE: Final[dict[str, tuple[str, ...]]] = {
     "refund_received": (
         r"request\w*",
         r"claim\w*",
-        r"beantrag\w*",
-        r"gefordert",
-        r"demande\w*",
-        r"richiest\w*",
     ),
     "amount_paid": (
         r"amount (?:due|outstanding)",
         r"balance due",
         r"total due",
         r"outstanding",
-        r"offen\w*",
-        r"restbetrag",
-        r"da pagare",
-        r"(?:montant|solde|somme|total) du",
-        r"du$",
         # a part paid in advance is not the total paid (the definition of the field)
         r"deposit",
         r"down payment",
         r"advance\w*",
-        r"anzahlung\w*",
-        r"vorauszahlung\w*",
-        r"acompte\w*",
-        r"arrhes",
-        r"accont\w*",
-        r"caparra",
-        r"anticip\w*",
         # money paid back to the customer is not money that the customer paid
         r"refund\w*",
-        r"\w*erstattung\w*",
-        r"gutschrift\w*",
-        r"rembours\w*",
-        r"rimbors\w*",
     ),
-    "treatment_date": (
-        r"next",
-        r"nachste\w*",
-        r"naechste\w*",
-        r"prochain\w*",
-        r"prossim\w*",
-    ),
+    "treatment_date": (r"next",),
 }
 
 
@@ -915,19 +536,18 @@ CURRENCY = re.compile(
 )
 _SEPARATOR = re.compile(r"\||;|\t| {2,}")
 _PARENTHESIS = re.compile(r"\([^()]*\)")
-_INCLUDED = r"(?:incl\.?|inkl\.?|including|included|inclus|compris|incluso|inclusa)"
-_TAX = r"(?:vat|mwst|tva|iva|ust)"
 # "incl. VAT", "including 8.1% VAT", "VAT included": a remark, not another amount.
+_INCLUDED = r"(?:incl\.?|including|included)"
 _TAX_INCLUDED = re.compile(
-    rf"\b{_INCLUDED}\s+(?:\d+(?:[.,]\d+)?\s*%\s*)?{_TAX}\b|\b{_TAX}\s+{_INCLUDED}"
+    rf"\b{_INCLUDED}\s+(?:\d+(?:[.,]\d+)?\s*%\s*)?vat\b|\bvat\s+{_INCLUDED}"
 )
 MAX_AFTER = 4  # words after the keyword: a long sentence is not a label
-MAX_SHORT = 2  # words of a label that is only a name ("Numero client")
+MAX_SHORT = 2  # words of a label that is only a name ("Your order")
 NUMBER = re.compile(r"(?:(?<!\w)[-\u2212])?\d(?:[',]?\d)*(?:\.\d+)?")  # as omni.NUMBER
 _LETTER = re.compile(r"[^\W\d_]")
 
 
-_ABBREVIATION = re.compile(r"(?:no|nr|n|num|number|nummer|numero|n\u00b0)[:.]*")
+_ABBREVIATION = re.compile(r"(?:no|nr|n|num|number|n\u00b0)[:.]*")
 
 
 def _last_segment(line: str, above: bool = False) -> str | None:
@@ -978,48 +598,12 @@ MATCH, VETO, NONE = "match", "veto", "none"
 # A word that says "reported" is not a word of an incident in general ("Date reported"
 # is the day of the report). On a baggage irregularity report the loss is reported on
 # arrival: there the bare label alone ("Reported:") is the date of the incident.
-_REPORTED_BARE: Final[frozenset[str]] = frozenset(
-    {"reported", "gemeldet", "signale", "segnalato", "denunciato"}
-)
+_REPORTED_BARE = "reported"
 
 # Words of another party or thing: between an identifier keyword and the value they say
 # that the value is theirs ("Invoice for customer 4471").
-_GENERIC_WORDS: Final[frozenset[str]] = frozenset(
-    {
-        r"date",
-        r"datum",
-        r"data",
-        r"total",
-        r"amount",
-        r"betrag",
-        r"sum",
-        r"summe",
-        r"price",
-        r"preis",
-        r"prix",
-        r"prezzo",
-        r"file",
-        r"case",
-        r"akte",
-        r"dossier",
-        r"fall",
-        r"agent",
-        r"officer",
-        r"customer ref\w*",
-    }
-)
 _PARTY: Final[re.Pattern[str]] = re.compile(
-    r"(?<![a-z0-9])(?:"
-    + "|".join(w for w in _ID_OTHER if w not in _GENERIC_WORDS)
-    + r")(?![a-z0-9])"
-)
-# A count after "total": pages, persons, items ... is not an amount.
-_COUNT: Final[re.Pattern[str]] = re.compile(
-    r"(?<![a-z0-9])(?:no|nr|num\w*|number|nummer|numero|nombre|anzahl|count|pages?|seiten?|pagine?"
-    r"|persons?|people|personen|personnes?|persone|items?|artikel|articles?|articoli"
-    r"|pieces?|stuck|pcs|positions?|quantity|qty|menge|quantite|quantita|nights?"
-    r"|days?|passengers?|travell?ers?|adults?|children|kinder|enfants?|bambini)"
-    r"(?![a-z0-9])"
+    r"(?<![a-z0-9])(?:" + "|".join(_ID_TECHNICAL + _ID_OTHER) + r")(?![a-z0-9])"
 )
 
 
@@ -1039,12 +623,12 @@ def _verdict(
 ) -> str:
     """The keyword nearest to the value decides (the longest one when two end at the
     same place; a veto when a match and a veto are the same text). A match is void
-    (none) when the text between the keyword and the value holds another value, a
-    word of another party (identifiers) or a count (amounts)."""
+    (none) when the text between the keyword and the value holds another value or,
+    for an identifier, a word of another party."""
     text = _clean(label)
     if any(p.search(text) for p in rules.anywhere):
         return VETO
-    if reported and text.strip(" :") in _REPORTED_BARE:
+    if reported and text.strip(" :") == _REPORTED_BARE:
         return MATCH
     best: tuple[int, int, bool] | None = None
     short = rules.short if len(text.split()) <= MAX_SHORT else ()
@@ -1063,11 +647,7 @@ def _verdict(
     if best[2]:
         return VETO
     tail = text[best[0] :]
-    if (
-        _other_value(tail)
-        or (kind == "id" and _PARTY.search(tail))
-        or (kind == "amount" and _COUNT.match(tail.strip()))
-    ):
+    if _other_value(tail) or (kind == "id" and _PARTY.search(tail)):
         return NONE
     return MATCH
 
@@ -1112,11 +692,6 @@ def _value_span(snippet: str, value: object) -> tuple[int, int]:
     return found.span() if found else (0, 0)
 
 
-def _value_start(snippet: str, value: object) -> int:
-    """Where the value begins inside the snippet; 0 when it cannot be found."""
-    return _value_span(snippet, value)[0]
-
-
 def _is_cut(after: str) -> bool:
     """Text that sticks to the end of an identifier ("4471-A", "4471/2", "4471A"):
     the value is only the beginning of a longer identifier."""
@@ -1147,10 +722,7 @@ def _labels(
 # A number followed by a unit of time, a quantity or a percent is not an amount.
 _QUANTITY = re.compile(
     r"[ \t]*(?:%|(?:(?:working|business|calendar) )?(?:days?|weeks?|months?|years?|"
-    r"hours?|minutes?|nights?|persons?|people|pieces|pcs|pax|km|kg|cm|mm)|tage\w*|"
-    r"wochen|monate\w*|jahre\w*|stunden|nachte|nachten|personen|stuck|jours?|"
-    r"semaines?|mois|ans|heures?|nuits?|personnes?|giorni|settimane|mesi|anni|"
-    r"ore|notti|persone)(?![a-z])",
+    r"hours?|minutes?|nights?|persons?|people|pieces|pcs|pax|km|kg|cm|mm))(?![a-z])",
     re.I,
 )
 
@@ -1189,7 +761,6 @@ def _names_the_incident(text: str) -> bool:
 # ("Thalwil,"), or only the generic word for a date ("Date:"), wherever it stands on the
 # line. Any word of the vocabulary of a field, or another key with a colon, is a label
 # of its own: never neutral.
-_GENERIC_DATE: Final[frozenset[str]] = frozenset({"date", "datum", "data"})
 _VOCABULARY: Final[tuple[re.Pattern[str], ...]] = tuple(
     pattern
     for rules in _RULES.values()
@@ -1199,7 +770,7 @@ _VOCABULARY: Final[tuple[re.Pattern[str], ...]] = tuple(
 
 
 def _neutral(label: str) -> bool:
-    if not label or _fold(label).strip(" :.") in _GENERIC_DATE:
+    if not label or _fold(label).strip(" :.") == "date":
         return True
     return ":" not in label and not any(p.search(_clean(label)) for p in _VOCABULARY)
 
@@ -1260,10 +831,6 @@ _STATUS = frozenset(
         "follows",
         "separately",
         "later",
-        "ausstehend",
-        "folgt",
-        "en attente",
-        "in attesa",
         "to be determined",
         "to be confirmed",
         "n/a yet",
@@ -1299,42 +866,25 @@ def _is_prose(value: str) -> bool:
 # -------------------------------------------------- organisation and person names
 
 _ORG_PARTS = (
+    # names of Swiss organisations in the mock documents ("Praxis am Lindenhof",
+    # "Medizinzentrum Seeblick AG"), then English words and legal forms
     r"\w*praxis",
-    r"\w*klinik",
     r"\w*zentrum",
-    r"\w*spital",
     r"clinic\w*",
-    r"clinique",
-    r"clinica",
     r"hospital\w*",
-    r"hopital",
-    r"ospedal\w*",
-    r"cent(?:er|re|ro)",
-    r"cabinet",
+    r"cent(?:er|re)",
     r"studio",
-    r"ambulatori\w*",
     r"medical",
-    r"medico",
-    r"medizin\w*",
-    r"gesundheit\w*",
-    r"sante",
-    r"salute",
-    r"permanence",
-    r"apotheke",
     r"pharmac\w*",
     r"labor\w*",
     r"institut\w*",
-    r"stiftung",
     r"foundation",
     r"dental",
-    r"therapie\w*",
     r"physio\w*",
     r"radiolog\w*",
-    r"notfall\w*",
     r"emergency",
     r"health\w*",
     r"group",
-    r"gruppe",
     r"team",
     r"partner\w*",
     r"associ\w*",
@@ -1361,15 +911,11 @@ _ORG_PARTS = (
 )
 _ORG = re.compile(rf"(?<![a-z])(?:{'|'.join(_ORG_PARTS)})(?![a-z])")
 # A personal title: part of a name of one person, never of an organisation alone.
-_TITLES = frozenset(
-    "dr dre drs prof pd med dent pract dott ssa docteur doctor dipl dottore "
-    "dottoressa mag lic phil".split()
-)
+_TITLES = frozenset("dr drs prof pd med dent pract doctor".split())
 _NAME = re.compile(r"[^\W\d_]+(?:[-'\u2019][^\W\d_]+)*")
 _PERSON_LABEL = re.compile(
-    r"(?<![a-z])(?:doctors?|physicians?|arzt\w*|medecin\w*|medico|dottore|dentist\w*|"
-    r"zahnarzt\w*|signed|signature|unterschrift|unterzeichn\w*|signe|firmato|firma|"
-    r"treating|attending|behandelnd\w*|nom du medecin)(?![a-z])"
+    r"(?<![a-z])(?:doctors?|physicians?|dentist\w*|signed|signature|treating|attending)"
+    r"(?![a-z])"
 )
 
 

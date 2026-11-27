@@ -2,7 +2,8 @@
 
 Only the page text and the snippet are used: no model, no network. The page texts
 are written the way pypdf gives them (a label on one line, its value on the next)
-or as one line ("Invoice no.: 4471"), in English, German, French and Italian.
+or as one line ("Invoice no.: 4471"), in English: the mock documents are in English,
+and the German, French and Italian words went out after the review of #128.
 Free text fields (cause, diagnosis, offence, ...) are out of scope: no test here
 claims that a meaning is verified.
 """
@@ -30,21 +31,12 @@ from app.docintel.labels import PLACEHOLDERS, SAFEGUARDED, is_placeholder, verif
         "N/A",
         "N/A.",
         "n.a.",
-        "k.A.",
         "-",
         "--",
         "—",
         "unknown",
         "Not found",
         "not available",
-        "Keine Angabe",
-        "unbekannt",
-        "Nicht verfügbar",
-        "inconnu",
-        "Non disponible",
-        "non communiqué",
-        "sconosciuto",
-        "non applicabile",
         '"n/a"',
         "'null'",
         "(not answerable)",
@@ -163,18 +155,10 @@ def test_a_value_with_no_label_is_not_verified() -> None:
         "Invoice No 4471",
         "Inv. No.: 4471",
         "Inv. no. 4471",
-        "Rechnungsnummer: 4471",
-        "Rechnung Nr. 4471",
-        "Rechnungs-Nr.: 4471",
-        "Facture n° 4471",
-        "N° de facture: 4471",
-        "Numéro de facture 4471",
-        "Fattura n. 4471",
-        "Numero fattura: 4471",
         "Invoice 4471",
     ],
 )
-def test_the_label_of_an_invoice_number_in_four_languages(line: str) -> None:
+def test_the_label_of_an_invoice_number(line: str) -> None:
     text = f"Header\nSome Firm AG\n{line}\nTotal\nCHF 10.00\n"
     assert invoice_number("4471", "4471", text)
     assert invoice_number(line, "4471", text)
@@ -185,9 +169,6 @@ def test_the_label_of_an_invoice_number_in_four_languages(line: str) -> None:
     [
         "Patient no.: 4471",
         "Customer no.: 4471",
-        "Kundennummer: 4471",
-        "Numéro client: 4471",
-        "Numero cliente: 4471",
         "Insured no.: 4471",
         "Order no.: 4471",
         "Job no.: 4471",
@@ -250,8 +231,6 @@ def test_the_evidence_is_the_snippet_occurrence_not_any_label_on_the_page() -> N
         "will be sent later.",
         "see attachment",
         "TBD",
-        "folgt per Post",
-        "à suivre",
     ],
 )
 def test_prose_is_not_an_identifier(value: str) -> None:
@@ -272,22 +251,11 @@ def test_an_identifier_with_a_label_is_verified_whatever_its_shape(value: str) -
     ("name", "kind", "label"),
     [
         ("quote_number", "repair_quote", "Quote no.:"),
-        ("quote_number", "repair_quote", "Offerte Nr.:"),
-        ("quote_number", "repair_quote", "Numéro de devis:"),
-        ("quote_number", "repair_quote", "Preventivo n.:"),
         ("booking_reference", "booking_confirmation", "Booking reference:"),
-        ("booking_reference", "cancellation_confirmation", "Buchungsnummer:"),
-        ("booking_reference", "booking_confirmation", "Réservation:"),
-        ("booking_reference", "booking_confirmation", "Prenotazione n.:"),
         ("booking_reference", "booking_confirmation", "PNR:"),
         ("report_number", "police_report", "Report no.:"),
-        ("report_number", "police_report", "Anzeige-Nr.:"),
-        ("report_number", "police_report", "Rapport n°:"),
-        ("report_number", "police_report", "Denuncia n.:"),
         ("report_reference", "luggage_report", "Report reference:"),
-        ("report_reference", "luggage_report", "Referenz:"),
         ("report_reference", "luggage_report", "PIR:"),
-        ("report_reference", "luggage_report", "Riferimento:"),
     ],
 )
 def test_the_label_of_each_identifier_field(name: str, kind: str, label: str) -> None:
@@ -340,15 +308,10 @@ def test_a_date_with_a_misleading_label_is_not_the_invoice_date(
     [
         "Invoice date: 22.09.2026",
         "Date of invoice: 22.09.2026",
-        "Rechnungsdatum: 22.09.2026",
-        "Datum: 22.09.2026",
-        "Date de facture: 22.09.2026",
         "Date: 22.09.2026",
-        "Data fattura: 22.09.2026",
-        "Data: 22.09.2026",
     ],
 )
-def test_the_label_of_an_invoice_date_in_four_languages(line: str) -> None:
+def test_the_label_of_an_invoice_date(line: str) -> None:
     text = f"Firm\n{line}\n"
     assert invoice_date("22.09.2026", date(2026, 9, 22), text)
     assert invoice_date(line, date(2026, 9, 22), text)
@@ -363,35 +326,17 @@ def test_a_date_with_no_label_is_not_verified() -> None:
     ("name", "kind", "label"),
     [
         ("quote_date", "repair_quote", "Quote date:"),
-        ("quote_date", "repair_quote", "Offertdatum:"),
         ("quote_date", "repair_quote", "Date:"),
         ("purchase_date", "receipt", "Date:"),
-        ("purchase_date", "receipt", "Kaufdatum:"),
-        ("purchase_date", "receipt", "Date d'achat:"),
-        ("purchase_date", "receipt", "Data acquisto:"),
         ("cancellation_date", "cancellation_confirmation", "Cancellation date:"),
         ("cancellation_date", "cancellation_confirmation", "Cancelled on:"),
-        ("cancellation_date", "cancellation_confirmation", "Storniert am:"),
-        ("cancellation_date", "cancellation_confirmation", "Annulé le:"),
-        ("cancellation_date", "cancellation_confirmation", "Annullato il:"),
         ("departure_date", "booking_confirmation", "Departure:"),
-        ("departure_date", "booking_confirmation", "Abreise:"),
-        ("departure_date", "booking_confirmation", "Départ:"),
-        ("departure_date", "booking_confirmation", "Partenza:"),
         ("incident_date", "police_report", "Incident date:"),
-        ("incident_date", "police_report", "Tatzeit:"),
         ("incident_date", "police_report", "Discovered:"),
         ("incident_date", "luggage_report", "Reported:"),
-        ("incident_date", "police_report", "Date des faits:"),
-        ("incident_date", "police_report", "Data del fatto:"),
-        ("treatment_date", "medical_report", "Behandlung:"),
         ("treatment_date", "medical_report", "Date of treatment:"),
         ("treatment_date", "medical_report", "Consultation:"),
-        ("treatment_date", "medical_report", "Data della visita:"),
-        ("unfit_from", "medical_certificate", "Arbeitsunfähig ab:"),
         ("unfit_from", "medical_certificate", "Unfit from:"),
-        ("unfit_from", "medical_certificate", "Incapacité de travail dès le:"),
-        ("unfit_from", "medical_certificate", "Inabilità dal:"),
     ],
 )
 def test_the_label_of_each_date_field(name: str, kind: str, label: str) -> None:
@@ -509,17 +454,9 @@ def test_an_amount_with_another_meaning_is_not_the_total(
         "Total (VAT included)",
         "Grand total",
         "Amount due",
-        "Gesamtbetrag",
-        "Gesamttotal",
-        "Rechnungsbetrag",
-        "Total TTC",
-        "Montant total",
-        "Totale",
-        "Totale fattura",
-        "Importo totale",
     ],
 )
-def test_the_label_of_a_total_in_four_languages(label: str) -> None:
+def test_the_label_of_a_total(label: str) -> None:
     text = f"Firm\n{label}\nCHF 99.50\nThank you\n"
     assert total("99.50", 99.5, text)
     assert total("CHF 99.50", 99.5, text)
@@ -529,20 +466,11 @@ def test_the_label_of_a_total_in_four_languages(label: str) -> None:
     "label",
     [
         "Subtotal",
-        "Zwischensumme",
-        "Sous-total",
-        "Subtotale",
         "VAT 8.1%",
-        "MwSt.",
-        "TVA 8.1%",
-        "IVA",
         "Discount",
-        "Rabatt",
         "Deposit",
-        "Anzahlung",
         "Fee",
         "Service charge",
-        "Gebuhr",
         "Total excl. VAT",
         "Previous balance",
     ],
@@ -556,19 +484,10 @@ def test_a_label_that_is_not_the_total(label: str) -> None:
     ("name", "kind", "label"),
     [
         ("trip_price", "booking_confirmation", "Total trip price"),
-        ("trip_price", "booking_confirmation", "Reisepreis"),
-        ("trip_price", "booking_confirmation", "Prix du voyage"),
-        ("trip_price", "booking_confirmation", "Prezzo del viaggio"),
         ("trip_price", "booking_confirmation", "Trip price paid"),
         ("amount_paid", "receipt", "Total paid"),
         ("amount_paid", "receipt", "Total"),
-        ("amount_paid", "receipt", "Betrag bezahlt"),
-        ("amount_paid", "receipt", "Total payé"),
-        ("amount_paid", "receipt", "Totale pagato"),
         ("refund_received", "cancellation_confirmation", "Refund to your card"),
-        ("refund_received", "cancellation_confirmation", "Rückerstattung"),
-        ("refund_received", "cancellation_confirmation", "Remboursement"),
-        ("refund_received", "cancellation_confirmation", "Rimborso"),
     ],
 )
 def test_the_label_of_each_amount_field(name: str, kind: str, label: str) -> None:
@@ -627,12 +546,7 @@ def provider(value: str, text: str = "") -> bool:
         "Hausarztzentrum Seewinkel AG",
         "Gesundheitszentrum Limmatblick AG",
         "Praxis am Lindenhof",
-        "Klinik Hirslanden",
-        "Cabinet médical du Lac",
-        "Studio medico Dott. Rossi",
-        "Centre médical de Genève",
         "Hospital Zurich",
-        "Ospedale Regionale",
         "Muster Zahnarztpraxis GmbH",
     ],
 )
@@ -648,10 +562,6 @@ def test_a_clinic_or_a_practice_is_an_organisation(value: str) -> None:
         "Dr. med. dent. Hans Meier",
         "Prof. Dr. med. Hans Meier",
         "Dr. Muster",
-        "Dott.ssa Maria Rossi",
-        "Dott. Luca Bianchi",
-        "Dre Anne Dubois",
-        "Docteur Jean Martin",
         "med. pract. Peter Frei",
         "PD Dr. med. Eva Roth",
         "Dr. med. B. Zingg",
@@ -662,10 +572,9 @@ def test_a_doctor_is_a_person_not_the_organisation(value: str) -> None:
 
 
 def test_a_bare_name_after_a_person_label_is_a_person() -> None:
-    text = "Medical report\nArzt:\nHans Muster\nDiagnosis: x\n"
+    text = "Medical report\nDoctor:\nHans Muster\nDiagnosis: x\n"
     assert not provider("Hans Muster", text)
     assert not provider("Hans Muster", "Treating physician: Hans Muster\n")
-    assert not provider("Hans Muster", "Medico: Hans Muster\n")
     assert not provider("Hans Muster", "Signature\nHans Muster\n")
 
 
@@ -677,14 +586,14 @@ def test_a_bare_name_with_no_title_and_no_person_label_is_kept_known_limit() -> 
 
 def test_a_title_alone_on_an_organisation_is_not_a_reason() -> None:
     assert provider("Praxis Dr. med. A. Muster", "Praxis Dr. med. A. Muster\n")
-    assert provider("Dr. Muster AG", "Arzt:\nDr. Muster AG\n")
+    assert provider("Dr. Muster AG", "Doctor:\nDr. Muster AG\n")
     assert provider("Dr. Muster & Partner", "Dr. Muster & Partner\n")
 
 
 def test_a_sole_trader_company_is_out_of_scope() -> None:
     assert verified("repair_invoice", "repair_company", "Dr. Muster", "Dr. Muster", "")
     assert verified(
-        "receipt", "merchant", "Hans Muster", "Hans Muster", "Arzt: Hans Muster"
+        "receipt", "merchant", "Hans Muster", "Hans Muster", "Doctor: Hans Muster"
     )
 
 
@@ -732,12 +641,12 @@ def test_a_person_name_is_kept(value: str) -> None:
 
 
 def test_a_label_inside_an_address_is_not_a_label() -> None:
-    """ "rechnung@firma.example" holds the word "rechnung", but it is an e-mail."""
-    text = "Tel. +41 44 555 04 30  |  rechnung@seeblick-medizin.example\n"
+    """ "invoice@firm.example" holds the word "invoice", but it is an e-mail."""
+    text = "Tel. +41 44 555 04 30  |  invoice@seeblick-medizin.example\n"
     assert not invoice_number(
         "seeblick-medizin.example", "seeblick-medizin.example", text
     )
-    assert not verified("repair_quote", "quote_number", "q-1", "q-1", "offerte@q-1\n")
+    assert not verified("repair_quote", "quote_number", "q-1", "q-1", "quote@q-1\n")
     assert not invoice_number("A-4471", "A-4471", "Invoice no. X-A-4471\n")
 
 
@@ -749,7 +658,7 @@ def test_a_number_followed_by_a_unit_is_not_an_amount() -> None:
     assert verified(
         "cancellation_confirmation", "refund_received", 340.0, "340.00", text
     )
-    for tail in ("days", "nights", "%", "Tage", "jours", "giorni"):
+    for tail in ("days", "nights", "%"):
         line = f"Refund: 5 {tail}\n"
         assert not verified(
             "cancellation_confirmation", "refund_received", 5.0, "5", line
@@ -785,30 +694,22 @@ def test_a_bare_word_is_not_the_end_of_a_longer_label() -> None:
 
 
 def test_a_line_that_has_its_own_value_is_not_the_label_of_the_next_line() -> None:
-    text = "Arzt: Hans Muster\nPeter Frei\n"
+    text = "Doctor: Hans Muster\nPeter Frei\n"
     assert provider("Peter Frei", text)  # no label of its own: kept (known limit)
     assert not provider("Hans Muster", text)  # its own label is on its own line
 
 
 def test_a_word_of_a_sentence_is_not_a_veto_but_a_label_is() -> None:
-    text = (
-        "Invoice no.:\n7788\nThank you for your order\n7788\n"
-        "Vielen Dank fuer Ihren Auftrag\n7788\n"
-    )
+    text = "Invoice no.:\n7788\nThank you for your order\n7788\n"
     assert invoice_number("7788", "7788", text)
     assert not invoice_number("7788", "7788", text + "Order no.:\n7788\n")
-    assert not invoice_number("7788", "7788", text + "Auftragsnummer:\n7788\n")
 
 
-@pytest.mark.parametrize("label", ["Delivery date", "Lieferdatum", "Site visits"])
+@pytest.mark.parametrize("label", ["Delivery date", "Site visits"])
 def test_a_label_that_may_share_the_date_is_not_a_veto(label: str) -> None:
     """A delivery or a site visit can be on the day of the invoice."""
     text = f"Date:\n2026-09-22\n{label}:\n2026-09-22\n"
     assert invoice_date("2026-09-22", date(2026, 9, 22), text)
-
-
-def test_totalbetrag_is_a_total() -> None:
-    assert total("99.50", 99.5, "Totalbetrag\nCHF 99.50\n")
 
 
 def test_case_and_spaces_of_the_page_do_not_count() -> None:
@@ -825,16 +726,14 @@ def test_case_and_spaces_of_the_page_do_not_count() -> None:
 
 
 def test_a_lower_case_word_with_vowels_is_prose_but_not_a_code() -> None:
-    for word in ("pending", "later", "folgt"):
+    for word in ("pending", "later"):
         text = f"Booking reference: {word}\n"
         assert not verified(
             "booking_confirmation", "booking_reference", word, word, text
         )
 
 
-@pytest.mark.parametrize(
-    "label", ["Client", "Numéro client", "Customer", "Kundennummer", "Patient"]
-)
+@pytest.mark.parametrize("label", ["Client", "Customer", "Patient"])
 def test_a_name_alone_is_a_label_of_another_number(label: str) -> None:
     text = f"Invoice no.:\n7788\n{label}\n7788\n"
     assert not invoice_number("7788", "7788", text)
@@ -853,9 +752,7 @@ def test_a_name_in_the_middle_of_a_two_word_label_is_not_a_veto() -> None:
     ("line", "value"),
     [
         ("Invoice 1000, order 4471", "4471"),
-        ("Rechnung F-100 Kunde K-9", "K-9"),
         ("Invoice for customer 4471", "4471"),
-        ("Rechnung fuer Patient 4471", "4471"),
         ("Invoice for the order 4471", "4471"),
     ],
 )
@@ -869,14 +766,13 @@ def test_another_value_or_party_between_the_keyword_and_the_value(
 
 def test_the_first_value_after_the_keyword_is_still_the_invoice_number() -> None:
     assert invoice_number("Invoice 1000", "1000", "Invoice 1000, order 4471\n")
-    assert invoice_number("Rechnung F-100", "F-100", "Rechnung F-100 Kunde K-9\n")
 
 
 def test_two_amounts_on_one_line_the_keyword_belongs_to_the_first() -> None:
-    text = "Total CHF 100.00 / Selbstbehalt CHF 30.00\n"
+    text = "Total CHF 100.00 / Excess CHF 30.00\n"
     assert total("Total CHF 100.00", 100.0, text)
     assert not total("30.00", 30.0, text)
-    assert not total("Total CHF 100.00 / Selbstbehalt CHF 30.00", 30.0, text)
+    assert not total("Total CHF 100.00 / Excess CHF 30.00", 30.0, text)
     text = "Balance due 100.00 Paid 30.00\n"
     assert total("100.00", 100.0, text)
     assert not total("30.00", 30.0, text)
@@ -893,7 +789,6 @@ def test_a_percent_between_the_keyword_and_the_value_is_not_another_value() -> N
         "{k} 2026-02-01 - 2026-03-01",
         "{k}: 2026-02-01 - 2026-03-01",
         "{k} from 2026-02-01 to 2026-03-01",
-        "{k} 2026-02-01 bis 2026-03-01",
     ],
 )
 @pytest.mark.parametrize(
@@ -921,10 +816,6 @@ def test_the_second_date_of_a_range_is_not_the_date_of_the_label(
     "label",
     [
         "Reported:",
-        "Gemeldet:",
-        "Signalé:",
-        "Segnalato:",
-        "Denunciato:",
         "REPORTED",
     ],
 )
@@ -944,10 +835,6 @@ def test_a_bare_reported_label_is_the_incident_date_of_a_luggage_report(
         "Date reported:",
         "Reported on:",
         "Reported on",
-        "Gemeldet am:",
-        "Datum gemeldet:",
-        "Signalé le:",
-        "Segnalato il:",
         "Reported by:",
     ],
 )
@@ -961,11 +848,8 @@ def test_reported_with_other_words_is_not_an_incident_date(
     assert not verified(kind, "incident_date", value, f"{label} 2026-05-14", text)
 
 
-@pytest.mark.parametrize("label", ["Reported:", "Gemeldet:", "Segnalato:"])
-def test_a_bare_reported_label_is_not_an_incident_date_of_other_documents(
-    label: str,
-) -> None:
-    text = f"Office\n{label}\n2026-05-14\n"
+def test_a_bare_reported_label_is_not_an_incident_date_of_other_documents() -> None:
+    text = "Office\nReported:\n2026-05-14\n"
     for kind in ("police_report", "damage_report", "medical_report"):
         value = date(2026, 5, 14)
         assert not verified(kind, "incident_date", value, "2026-05-14", text)
@@ -1011,9 +895,6 @@ def test_a_separator_behind_the_value_does_not_cut_it(after: str) -> None:
         "Total persons",
         "Total items",
         "Total quantity",
-        "Total Anzahl Personen",
-        "Total nombre de personnes",
-        "Totale numero di persone",
         "Total no. of passengers",
     ],
 )
@@ -1034,10 +915,6 @@ def test_a_total_price_for_persons_is_still_the_trip_price() -> None:
         "Amount due",
         "Amount outstanding",
         "Outstanding amount",
-        "Offener Betrag",
-        "Betrag offen",
-        "Montant dû",
-        "Importo da pagare",
         "Balance due",
     ],
 )
@@ -1049,7 +926,7 @@ def test_an_amount_due_is_not_the_amount_paid(label: str) -> None:
 
 
 def test_an_amount_paid_is_still_the_amount_paid() -> None:
-    for label in ("Amount paid", "Paid", "Bezahlt", "Montant payé", "Pagato"):
+    for label in ("Amount paid", "Paid"):
         text = f"Receipt\n{label}: CHF 100.00\n"
         assert verified("repair_invoice", "amount_paid", 100.0, "100.00", text), label
 
@@ -1060,10 +937,6 @@ def test_an_amount_paid_is_still_the_amount_paid() -> None:
         "Refund requested",
         "Requested refund",
         "Refund claimed",
-        "Rückerstattung beantragt",
-        "Erstattung gefordert",
-        "Remboursement demandé",
-        "Rimborso richiesto",
     ],
 )
 def test_a_requested_refund_is_not_the_refund_received(label: str) -> None:
@@ -1074,13 +947,7 @@ def test_a_requested_refund_is_not_the_refund_received(label: str) -> None:
 
 
 def test_a_refund_is_still_the_refund_received() -> None:
-    for label in (
-        "Refund",
-        "Refund received",
-        "Rückerstattung",
-        "Remboursement",
-        "Rimborso",
-    ):
+    for label in ("Refund", "Refund received"):
         text = f"Cancellation\n{label}: CHF 340.00\n"
         assert verified(
             "cancellation_confirmation", "refund_received", 340.0, "340.00", text
@@ -1092,10 +959,6 @@ def test_a_refund_is_still_the_refund_received() -> None:
     [
         "Next visit",
         "Next examination",
-        "Nächster Besuch",
-        "Nächste Untersuchung",
-        "Prochain examen",
-        "Prossima visita",
     ],
 )
 def test_a_next_visit_is_not_the_treatment_date(label: str) -> None:
@@ -1126,18 +989,6 @@ POLICE = (
         ("medical_report", "treatment_date", "Thalwil,\n2026-10-25", REPORT),
         ("medical_report", "treatment_date", "2026-10-25", REPORT),
         ("police_report", "incident_date", "Date: 2026-10-09", POLICE),
-        (
-            "police_report",
-            "incident_date",
-            "Datum: 2026-10-09",
-            POLICE.replace("Date:", "Datum:"),
-        ),
-        (
-            "police_report",
-            "incident_date",
-            "Data: 2026-10-09",
-            POLICE.replace("Date:", "Data:"),
-        ),
     ],
 )
 def test_a_neutral_snippet_falls_back_on_the_other_places_of_the_value(
@@ -1172,18 +1023,14 @@ def test_the_fallback_is_blocked_by_a_veto_anywhere_on_the_page() -> None:
     "snippet",
     [
         "Delivery: 2026-10-25",
-        "Lieferung: 2026-10-25",
         "Invoice 2026-10-25",
-        "Rechnung 2026-10-25",
         "Reference no. 2026-10-25",
         "Thalwil, Zurich: 2026-10-25",
     ],
 )
 def test_a_snippet_with_another_label_never_falls_back(snippet: str) -> None:
-    text = REPORT + "Delivery: 2026-10-25\nLieferung: 2026-10-25\nInvoice 2026-10-25\n"
-    text += (
-        "Rechnung 2026-10-25\nReference no. 2026-10-25\nThalwil, Zurich: 2026-10-25\n"
-    )
+    text = REPORT + "Delivery: 2026-10-25\nInvoice 2026-10-25\n"
+    text += "Reference no. 2026-10-25\nThalwil, Zurich: 2026-10-25\n"
     value = date(2026, 10, 25)
     assert not verified("medical_report", "treatment_date", value, snippet, text)
 
@@ -1280,9 +1127,7 @@ def test_an_identifier_of_two_characters_can_be_verified() -> None:
     assert invoice_number("Invoice no.: A7", "A7", "Invoice no.: A7\n")
 
 
-@pytest.mark.parametrize(
-    "line", ["Total 3 persons 30", "Total for 2 nights 30", "Gesamt 4 Artikel 30"]
-)
+@pytest.mark.parametrize("line", ["Total 3 persons 30", "Total for 2 nights 30"])
 def test_a_count_that_says_what_the_total_covers_keeps_the_total(line: str) -> None:
     """Not a false accept (review probe "persons then 30"): the count says what the
     total is for, the amount after it is the total. A count right after the keyword
@@ -1300,17 +1145,7 @@ def test_a_total_with_its_currency_stays_verified() -> None:
         "Deposit paid",
         "Down payment",
         "Advance payment",
-        "Anzahlung bezahlt",
-        "Vorauszahlung",
-        "Acompte payé",
-        "Arrhes",
-        "Acconto pagato",
-        "Caparra",
         "Refund paid",
-        "Rückerstattung",
-        "Gutschrift",
-        "Remboursement",
-        "Rimborso",
     ],
 )
 def test_a_deposit_or_a_refund_is_not_the_amount_paid(label: str) -> None:

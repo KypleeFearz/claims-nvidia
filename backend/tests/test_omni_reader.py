@@ -337,7 +337,7 @@ def test_a_field_whose_label_fits_stays_verified() -> None:
 
 
 @pytest.mark.parametrize(
-    "placeholder", ["Not answerable", "null", "N/A", "-", "unbekannt"]
+    "placeholder", ["Not answerable", "null", "N/A", "-", "unknown"]
 )
 def test_a_placeholder_is_no_value_and_no_disagreement(placeholder: str) -> None:
     """Page 1 says "Not answerable", page 2 gives the name: the field is the name,
