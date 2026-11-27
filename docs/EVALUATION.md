@@ -323,7 +323,7 @@ The request bodies of all 198 calls held the same model, temperature, `max_token
 
 | Measure | Mean | Lowest | Highest | Counts over the 3 runs |
 |---|---|---|---|---|
-| Field accuracy (right values / expected fields) | 84.9% | 84.9% | 84.9% | 336 right, **24 wrong**, **36 missing** of 396 |
+| Field accuracy (right values / expected fields) | 84.8% | 84.8% | 84.8% | 336 right, **24 wrong**, **36 missing** of 396 |
 | Strict document pass rate (every field right and on its page) | 48.6% | 48.6% | 48.6% | 51 of 105 |
 | Classification (type right) | 88.6% | 88.6% | 88.6% | 93 of 105 |
 | Line items (lines right / lines expected) | 72.6% | 72.6% | 72.6% | 159 of 219 |
@@ -381,7 +381,7 @@ Per run: 112 right, 8 wrong, 12 missing of 132 fields; 17 of 35 documents all ri
 
 - The 24 wrong values are all text fields where the answer key holds a short category or the clinic, and the model gives what the page prints. No amount, no date and no identifier was wrong. A wrong amount is the costly error, and there is none.
 - Most of the 36 missing values are refused snippets (`booking_reference`) and documents that the reader does not read (damage photos). A missing value goes to a person.
-- The strict pass rate (48.6%) is much lower than the field accuracy (84.9%): one weak field fails the whole document.
+- The strict pass rate (48.6%) is much lower than the field accuracy (84.8%): one weak field fails the whole document.
 - Scans and photos have a better field accuracy than the clean PDFs (92% against 81.9%). With no text layer, the reader cannot refuse a snippet, and the source is a box of the whole page (D80 (3)). Their values are stored at confidence 0.5, so a person checks them.
 
 **Limits of this measure**:
@@ -418,3 +418,147 @@ What it says:
 - The costs come from two errors that the field evaluation also shows: the damage photos (type `unknown`, issue #25 and #21) add R001 to 3 stories, and one missing amount sends a clean luggage claim to a person.
 - One run only: the field evaluation shows 2 fields of 132 that change from run to run. One of them is the `total` of the quote of the story `kit-anna-theft`, which the settlement reads: it was read in this run (CHF 2,440 right), but it was missing in run 1 of the field evaluation. Another run can give other business numbers.
 - The risk of #121 (a document with no field read is paid as complete) did not happen in this run.
+
+## Tuning of the Omni reader (issue #20)
+
+Run from 2026-11-18 to 2026-11-20 on the kit of 35 documents (132 expected fields), with the harness of #19: 2,718 requests in all. The method of each stage was committed before its first request, and an independent reviewer recomputed the numbers of each stage from the saved answers. The details of each stage (method, tables, checks) are in [`EVALUATION-ISSUE-20.md`](EVALUATION-ISSUE-20.md).
+
+### The result
+
+**Selected: the settings of #18 stay the defaults of `OmniReader`: prompt `v1`, 150 DPI, temperature 0.2, thinking off, `max_tokens` 2048, one call per page.**
+
+No variant of resolution, temperature or reasoning beat these settings by the rules written in advance. Three prompts did beat `v1` in S2, but none was taken: `schema-only` accepted more invented values than `v1` in the safety check N1 (24 against 18 of 48, so `v1` fails it too), `example` and `described` were never checked by N1, and part of each S2 gain is the drift that S7 measured.
+
+**The gain over #18 is 0: the selected settings are the settings of #18.** That is a valid result of a tuning: the first version was not beaten by any change that also passes the safety check. The final run S7 gave 114.67 right fields per run, against 112 for the #19 runs of 2026-11-18. The settings are the same, so this is a difference of time (see "Limits"), not a gain of tuning.
+
+### How a variant was judged (the rules written before the runs)
+
+- **One change at a time** against a control, 3 runs per variant on the full kit. The control of S2 was the 3 saved #19 runs (2026-11-18). The control of S3 to S5 was 3 new runs of the settings of #18 on 2026-11-20, the same day as the variants.
+- **A variant replaces the control only when all of these are true** (means of the 3 runs):
+  1. It gives at least 3 more right fields per run.
+  2. Its lowest run is higher than the highest run of the control.
+  3. The guardrails hold:
+     - no wrong amount, date or identifier;
+     - no more wrong values than the control;
+     - the reading group loses 1 right field per run at most;
+     - classification loses 1 document per run at most;
+     - every line item of the clean PDFs stays right (53 of 53);
+     - no reader error, and no call left without an answer;
+     - at most 1.5 times the seconds per document of the control, or Paul accepts the cost.
+  4. The gain stays above 0 when any one scenario is left out.
+- When two variants win, the larger gain wins; at the same gain, the cheaper one.
+- **No verdict** when a run is incomplete, a call got no answer after the retries, or a check of integrity fails (code, kit, settings, model).
+- **Clarified for S5 and later, before the runs:** a call answered after an allowed retry is a success, and the retry is reported. The code of the rules also counted such a retry as an error; S2 to S4 were not judged again.
+- **Three groups of fields** are reported apart:
+  - **reading:** 117 fields;
+  - **business category:** 11 fields (`cause`, `offence`, `diagnosis`, `provider`). The reader gives the text of the page where the answer key expects a category.
+  - **not read:** the 4 damage photos (issue #25).
+
+### One row per variant
+
+Measured; mean of 3 runs, the 3 runs in brackets. Field accuracy = right fields of 132. Seconds are the mean seconds per document. The endpoint was faster on 2026-11-20, so seconds compare only within the same day.
+
+| Variant | Date | Right of 132 (runs) | Field accuracy | Wrong | Missing | Strict pass of 35 | Classification of 35 | Clean line items of 53 | Seconds per document | Fields that change between runs |
+|---|---|---|---|---|---|---|---|---|---|---|
+| #19 baseline (#18 settings) | 2026-11-18 | 112.00 (112, 112, 112) | 84.8 % | 8.00 | 12.00 | 17.00 | 31.00 | 53.00 | 5.45 | 2 |
+| S2 prompt `schema-only` | 2026-11-19 | 120.00 (120, 120, 120) | 90.9 % | 8.00 | 4.00 | 25.00 | 31.00 | 53.00 | 4.40 | 0 |
+| S2 prompt `described` | 2026-11-19 | 115.33 (114, 115, 117) | 87.4 % | 4.00 | 12.67 | 19.33 | 31.00 | 53.00 | 4.66 | 7 |
+| S2 prompt `example` | 2026-11-19 | 119.67 (122, 116, 121) | 90.7 % | 3.67 | 8.67 | 24.67 | 31.00 | 53.00 | 5.43 | 8 |
+| S3 72 DPI | 2026-11-20 | 110.67 (110, 110, 112) | 83.8 % | 8.00 | 13.33 | 16.33 | 31.00 | 43.33 | 3.63 | 9 |
+| S3 100 DPI | 2026-11-20 | 109.67 (110, 111, 108) | 83.1 % | 7.67 | 14.67 | 15.67 | 31.00 | 46.00 | 3.63 | 9 |
+| S3 150 DPI (#18 settings, control of S3 to S5) | 2026-11-20 | 114.00 (114, 114, 114) | 86.4 % | 8.00 | 10.00 | 19.00 | 31.00 | 53.00 | 4.14 | 2 |
+| S3 200 DPI | 2026-11-20 | 113.00 (110, 115, 114) | 85.6 % | 8.00 | 11.00 | 18.33 | 31.00 | 53.00 | 4.37 | 8 |
+| S4 temperature 0 | 2026-11-20 | 112.33 (112, 113, 112) | 85.1 % | 8.67 | 11.00 | 17.33 | 31.00 | 53.00 | 4.71 | 3 |
+| S4 temperature 0.3 | 2026-11-20 | 114.33 (115, 113, 115) | 86.6 % | 8.00 | 9.67 | 19.33 | 31.00 | 53.00 | 6.15 | 3 |
+| S4 temperature 0.5 | 2026-11-20 | 110.00 (111, 110, 109) | 83.3 % | 8.00 | 14.00 | 18.00 | 31.00 | 53.00 | 5.92 | 2 |
+| S5 thinking, budget 512 | 2026-11-20 | 113.67 (116, 113, 112) | 86.1 % | 8.00 | 10.33 | 22.00 | 31.67 | 52.00 | 9.21 | 18 |
+| S5 thinking, budget 2048 | 2026-11-20 | 113.00 (117, 107, 115) | 85.6 % | 8.67 | 10.33 | 21.00 | 31.00 | 50.33 | 16.60 | 17 |
+| S7 #18 settings (final) | 2026-11-20 | 114.67 (115, 114, 115) | 86.9 % | 8.00 | 9.33 | 19.67 | 31.00 | 53.00 | 4.40 | 1 |
+
+Accuracy per kind of field (right fields over the 3 runs; per run, 23 amounts, 31 dates, 21 identifiers and 57 texts; the texts include the 11 business-category fields and the 4 damage descriptions):
+
+| Variant | Amount | Date | Identifier | Text |
+|---|---|---|---|---|
+| #19 baseline (#18 settings) | 91 % | 100 % | 76 % | 77 % |
+| S2 prompt `schema-only` | 100 % | 100 % | 100 % | 79 % |
+| S2 prompt `described` | 91 % | 100 % | 83 % | 81 % |
+| S2 prompt `example` | 99 % | 99 % | 98 % | 80 % |
+| S3 72 DPI | 96 % | 100 % | 65 % | 77 % |
+| S3 100 DPI | 90 % | 99 % | 76 % | 74 % |
+| S3 150 DPI (#18 settings) | 96 % | 100 % | 76 % | 79 % |
+| S3 200 DPI | 94 % | 100 % | 76 % | 78 % |
+| S4 temperature 0 | 97 % | 100 % | 79 % | 74 % |
+| S4 temperature 0.3 | 97 % | 100 % | 81 % | 77 % |
+| S4 temperature 0.5 | 90 % | 97 % | 81 % | 74 % |
+| S5 thinking, budget 512 | 94 % | 97 % | 97 % | 73 % |
+| S5 thinking, budget 2048 | 94 % | 98 % | 97 % | 71 % |
+| S7 #18 settings (final) | 99 % | 100 % | 81 % | 77 % |
+
+Values are rounded half up from the exact means: for example 112 / 132 = 84.848 % gives 84.8 %, and 1.5 × 4.1353 s = 6.203 s gives 6.20 s.
+
+### What each stage showed
+
+**S2, the prompt** (against the #19 runs of another day):
+- **Measured:** `schema-only` +8.00 right fields per run, `example` +7.67 and `described` +3.33 (narrowly). All three won by the rules; `schema-only` had the largest gain.
+- **Estimate:** S7 later measured +2.67 per run for the settings of #18 between 2026-11-18 and 2026-11-20. If a drift of that size also touched S2, the gain of `schema-only` at the same time would be about +5 to +6, and the narrow win of `described` would not hold. This is an estimate, not a measure at the same time.
+- **Not adopted:** `schema-only` failed N1 with more accepted invented values than `v1`; `example` and `described` were not checked by N1.
+- **Which part of `schema-only` gives the gain is not known:** it drops four parts of `v1` at once. See "Correct values rejected at the check of the source" for what the later answers show.
+
+**S3, the resolution** (against 150 DPI on the same day):
+- 72 and 100 DPI lose 3.33 and 4.33 fields per run and fail two guardrails (the reading group and the line items of the clean PDFs). At 72 DPI the model reads characters wrong (`MZ5` for `MZS`); the check of the text layer refuses these values, so they are missing, not wrong.
+- 200 DPI gives −1.00 per run, with more change between runs and 41 % more prompt tokens.
+- **Measured:** every 200 DPI call used 584 image tokens fewer than its image needs, while one token formula fits all 340 other classify calls exactly. **Interpretation:** the server probably makes the image smaller, to about 186 DPI; which pixels the model sees is not known.
+
+**S4, the temperature** (against 0.2, 2.4 hours earlier the same day): 0 gives −1.67 per run and one more wrong value; 0.3 gives +0.33, a difference that 3 runs cannot show; 0.5 gives −4.00 and fails the guardrail of the reading group. Temperature 0 did not make the runs identical (112, 113, 112).
+
+**S5, reasoning** (thinking on, budgets 512 and 2048, against thinking off):
+- −0.33 and −1.00 right fields per run; both fail the line items of the clean PDFs, and the seconds: 9.21 and 16.60 s per document against 4.14 (limit 6.20).
+- Thinking made the runs much less stable: 18 and 17 fields change between runs, against 2.
+- It gains on the PDFs with text (the snippets that the reader rejects without thinking pass) and loses about as much on scans and photos:
+  - values with no snippet;
+  - 3 answers that repeated themselves until `max_tokens`, each losing a page;
+  - new wrong values on documents with no text layer.
+- More reasoning was slower and less stable, and it did not meet the rules.
+
+**S7, the final run of #18:** 114.67 right fields per run (115, 114, 115). By the drift rule of the method (each of right, wrong and missing within 2 of the #19 totals 112, 8, 12) there is drift: +2.67 and −2.67. The margin is small: the S3 control of the same morning was +2.00 against #19.
+
+### Correct values rejected at the check of the source
+
+A stored field must have a snippet that is printed on the page and holds the value (D80). From S3 on, the runs kept every answer of the model, so each missing field could be traced.
+
+- **Verified (S3, S4, S5, S7):** the model returned null for 0 fields in scope.
+  - At 150 DPI, the 10 missing fields per run are 4 damage photos (outside the scope) and **6 correct values that the reader refused**, because the snippet does not hold the value (for a booking reference the model gives the title "Booking confirmation") or is not on the text layer.
+  - In every stage, most missing fields are of this kind. The exceptions are the misreads at 72 and 100 DPI and the pages lost in S5.
+- **What this changes in S2:** S2 explained the missing booking references of `v1` as "the model most probably gave null". The later answers with the same settings do not support that: the model read each reference right, and the reader refused its snippet.
+- **What cannot be established:** S2 kept no answers. So the cause of the missing fields in the S2 runs themselves, and which change of `schema-only` gave its gain, cannot be checked. Better snippets are the more probable explanation, not a proven one.
+- **Why it matters:** the largest loss of the reader is at the check of the source, not in the reading. A change of the prompt or of the rule of the source might recover these fields; neither was tested in #20.
+
+### N1: a safety check with absent values
+
+The kit has no field that is expected to be empty, so it cannot see a value invented for an absent field. N1 tested that on 9 new mock documents (6 with a text layer, 3 scans or photos), 16 absent fields, 3 runs per prompt. The rule written in advance: 0 accepted incorrect values of 48.
+
+- **Both prompts fail.** `v1` (the settings of #18) accepted **18 of 48**, `schema-only` **24 of 48**.
+- **On text pages both prompts accept the same 12 values,** all true text of the page put in the wrong field:
+  - a patient number as the invoice number;
+  - a "valid until" date as the quote date;
+  - the sentence "sent separately by e-mail" as the booking reference;
+  - the name of a doctor as the clinic.
+
+  The check of the source proves that the text is on the page, not that it belongs to the field. So these values get the confidence 0.9.
+- **Why it matters:** the review limit of the routing is 0.8. A value at 0.9 does not go to a person, so such a claim can be paid with no human check.
+- On scans and photos the values are stored at 0.5 and go to a person. `schema-only` also invents values and line items there; `v1` accepted 6 of 18 on scans and photos, `schema-only` 12 of 18.
+- **Winning the tuning does not make the reader safe.** The fix is issue #125 (reader safeguards). The 9 documents and their generator go into git there.
+
+### Limits
+
+- **The kit:** 35 documents from one generator, about 11 layouts, no field expected empty. A result on the kit is not a result on real documents.
+- **Time:** the hosted endpoint changes between periods, also within one day. With the same settings S7 differs from #19 by +2.67 fields per run, and the hosted model has no pinned version. S2 used a control of another day; S3 to S5 used a control of the same day but some hours earlier.
+- **3 runs per variant** cannot show a rare event; reasoning made the runs vary much more.
+- **One call per page or per document:** every document of the 35-document kit has one page, so the two ways of calling send the same request on this kit. The real comparison is deferred to issue #126, after the reader safeguards of issue #125.
+
+### How to reproduce
+
+- **In git:** the reader (`backend/app/docintel/omni.py`, with `OmniSettings`, the prompts and `config_id`), the harness (`backend/app/docintel/evaluate.py`), their tests, this section and `EVALUATION-ISSUE-20.md`. A test pins the request bodies of #18, so the default settings send the same requests as #18.
+- **One variant, 3 runs:** `cd backend && uv run --env-file ../.env python -m app.docintel.evaluate --reader omni --runs 3 --omni dpi=100 --output .dev-data/evaluation/s3-dpi-100.json`. `--omni` takes `prompt`, `dpi`, `temperature`, `thinking`, `reasoning_budget`, `max_tokens` and `timeout`; the report records the settings, `config_id` and the tokens.
+- **Not in git:** the runners of the stages (request limits, logs of every answer, replay) and the saved answers. They are in `backend/.dev-data/issue-20/` on Nikola's machine.
+- **The numbers of a new run** will be close to these, not equal: the endpoint changes with time.
