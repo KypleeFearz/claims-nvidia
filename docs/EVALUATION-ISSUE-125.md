@@ -174,7 +174,7 @@ The kit gives about 1 right field less per run than S7, within the drift rule of
 - **N1 in CI:** the 9 documents, their answer keys and their generator are in git (`data/mock/n1/`, `scripts/mockdocs/n1.py`), apart from the kit (`demo.NOT_KIT`; the kit stays at 35). `test_n1_replay.py` reads the saved model answers of 2026-11-19 through a stub of the model: no incorrect value at 0.8 or more and no placeholder, for `v1` and `schema-only`. `test_evaluation_safety.py` checks the same numbers through the harness, before and after.
 - **Sweep** (`test_label_sweep.py`): every value printed on every text page of the kit and N1, as every field of its type, with 5 snippet shapes, and the real snippets of the S7 runs: 0 false downgrades of right values.
 - **Two more test sets, which are not independent.** `test_labels_synthetic.py` (2,287 cases on 2026-11-25) holds invented documents. Its rows were sorted by what the reader passes: the passing rows became plain tests and the 31 others strict `xfail` (all conservative: a right value gets 0.5, never a wrong value 0.9). So it shows what the reader does, not that the reader is right. `test_labels_holdout.py` (551 cases) passed 548 in its single run: one real false accept ("Date reported" taken as the incident date, 2 tests, since fixed) and one bug in the test itself. One row of it was changed after the run, to fit a later decision, and the rules were corrected on its result. Neither set is a held-out set: the author of the rules saw both. After the review they hold English rows only: 962 and 299 cases (section 10).
-- **Reviews:** an independent review of each phase; every finding was fixed with a test or documented.
+- **Reviews:** a review of each phase by a second reader; every finding was fixed with a test or documented.
 
 ## 7. Limits
 
@@ -218,13 +218,13 @@ Paul reviewed commit `8a2dd09`. He accepted the numbers and the paired replay, a
 | `Total labour: 300.00` | `total` | 0.9 | 0.5 | "total" with another word after it is not the total |
 | `Total incl. 8.1% VAT: CHF 540.50` | `total` | 0.5 | 0.9 | a rate between "incl." and "VAT" is part of the remark |
 
-Side effects, all to the safe side (0.5): "Date of document", a bare "Amount:" or "Sum:" on a receipt, "Total gross" and "Total to be paid" are not verified any more. "Total in CHF" and "Total for 2 nights" stay verified.
+Side effects, all to the safe side (0.5): a "Date of" label that the lists do not name ("Date of document", "Date of order"), a bare "Amount:" or "Sum:" on a receipt (also "Amount received", "Net amount"), and "Total" with a word that the lists do not name ("Total gross", "Total to be paid", "Total payment") are not verified any more. "Total in CHF" and "Total for 2 nights" stay verified.
 
 ### What was removed
 
 - The German, French and Italian words of every table, the placeholders of these languages and their tests. Reason: the 44 documents are in English, so no document measured these words. Kept: the names of Swiss organisations that the mock documents hold ("Praxis", "-zentrum"), the legal forms ("AG", "GmbH", "SA", "Sàrl") and the titles ("Dr. med.").
-- Dead or double code: `_value_start` (no caller); the copies of `_ID_OTHER` in `_ID_TECHNICAL` and `_GENERIC_WORDS` (each word is listed once now); the words that `_REFUND_VETO` repeated from `_AMOUNT_VETO` (one shared list, `_AMOUNT_PARTS`); the list of count nouns after "total" (the new rule for "total" covers it).
-- `labels.py`: 1,432 lines before, 980 now.
+- Dead or double code: `_value_start` (no caller); the copies of `_ID_OTHER` in `_ID_TECHNICAL` and `_GENERIC_WORDS` (each word is listed once now); the words that `_REFUND_VETO` repeated from `_AMOUNT_VETO` (one shared list, `_AMOUNT_PARTS`). The list of count nouns (`_COUNT`) stays, in English: it also refuses "Refund number" and "Paid days", not only a count after "total".
+- `labels.py`: 1,432 lines before, 991 now.
 
 ### The same answers through the corrected reader
 
@@ -239,4 +239,4 @@ All 9 criteria pass, and the list of the 51 changed fields is the same file, byt
 
 ### Tests after the review
 
-Windows laptop, 2026-11-27, on top of `main` with D85: 3,154 passed, 15 xfailed (the English known limits), 12 deselected (live and sandbox tests), 7 failed (the same Windows-only failures as on `main`). mypy, ruff and ruff format are clean. The label tests: `test_labels.py` 300 cases, `test_labels_synthetic.py` 962 (15 of them strict `xfail`), `test_labels_holdout.py` 299.
+Windows laptop, 2026-11-27, on top of `main` with D85: 3,160 passed, 15 xfailed (the English known limits), 12 deselected (live and sandbox tests), 7 failed (the same Windows-only failures as on `main`). mypy, ruff and ruff format are clean. The label tests: `test_labels.py` 306 cases, `test_labels_synthetic.py` 962 (15 of them strict `xfail`), `test_labels_holdout.py` 299.

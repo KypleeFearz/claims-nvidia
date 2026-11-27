@@ -537,7 +537,7 @@ CURRENCY = re.compile(
 _SEPARATOR = re.compile(r"\||;|\t| {2,}")
 _PARENTHESIS = re.compile(r"\([^()]*\)")
 # "incl. VAT", "including 8.1% VAT", "VAT included": a remark, not another amount.
-_INCLUDED = r"(?:incl\.?|including|included)"
+_INCLUDED = r"(?:including|included|incl\.?)"
 _TAX_INCLUDED = re.compile(
     rf"\b{_INCLUDED}\s+(?:\d+(?:[.,]\d+)?\s*%\s*)?vat\b|\bvat\s+{_INCLUDED}"
 )
@@ -605,6 +605,13 @@ _REPORTED_BARE = "reported"
 _PARTY: Final[re.Pattern[str]] = re.compile(
     r"(?<![a-z0-9])(?:" + "|".join(_ID_TECHNICAL + _ID_OTHER) + r")(?![a-z0-9])"
 )
+# A number or a count after the keyword of an amount ("Refund number", "Total
+# pages", "Paid days") is not the amount.
+_COUNT: Final[re.Pattern[str]] = re.compile(
+    r"(?<![a-z0-9])(?:no|nr|num\w*|number|count|pages?|persons?|people|items?"
+    r"|articles?|pieces?|pcs|positions?|quantity|qty|nights?|days?|passengers?"
+    r"|travell?ers?|adults?|children)(?![a-z0-9])"
+)
 
 
 def _other_value(tail: str) -> bool:
@@ -623,8 +630,8 @@ def _verdict(
 ) -> str:
     """The keyword nearest to the value decides (the longest one when two end at the
     same place; a veto when a match and a veto are the same text). A match is void
-    (none) when the text between the keyword and the value holds another value or,
-    for an identifier, a word of another party."""
+    (none) when the text between the keyword and the value holds another value, a
+    word of another party (identifiers) or a count (amounts)."""
     text = _clean(label)
     if any(p.search(text) for p in rules.anywhere):
         return VETO
@@ -647,7 +654,11 @@ def _verdict(
     if best[2]:
         return VETO
     tail = text[best[0] :]
-    if _other_value(tail) or (kind == "id" and _PARTY.search(tail)):
+    if (
+        _other_value(tail)
+        or (kind == "id" and _PARTY.search(tail))
+        or (kind == "amount" and _COUNT.match(tail.strip()))
+    ):
         return NONE
     return MATCH
 

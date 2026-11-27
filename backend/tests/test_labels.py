@@ -1195,6 +1195,27 @@ def test_a_total_with_the_rate_of_the_vat_is_the_total() -> None:
     text = "Total incl. 8.1% VAT: CHF 540.50\n"
     assert total("540.50", 540.5, text)
     assert total("Total incl. 8.1% VAT: CHF 540.50", 540.5, text)
+    assert total("540.50", 540.5, "Total VAT included: CHF 540.50\n")
+
+
+@pytest.mark.parametrize(
+    ("name", "line", "value"),
+    [
+        ("refund_received", "Refund number: 884412", 884412.0),
+        ("refund_received", "Refund no.: 884412", 884412.0),
+        ("amount_paid", "Amount paid number: 884412", 884412.0),
+        ("amount_paid", "Paid days: 14", 14.0),
+        ("trip_price", "Total price nights: 7", 7.0),
+        ("total", "Grand total items: 15", 15.0),
+    ],
+)
+def test_a_number_or_a_count_after_an_amount_keyword_is_not_the_amount(
+    name: str, line: str, value: float
+) -> None:
+    """Found by the review of the corrections: the count nouns are not only for a
+    bare "total"."""
+    snippet = line.rsplit(" ", 1)[1]
+    assert not verified("cancellation_confirmation", name, value, snippet, line + "\n")
 
 
 # F6: the source of the module is ASCII
