@@ -577,7 +577,7 @@ The fix of the safety check N1 of #20: a value in the wrong field must not pass 
 | kit, `v1` | **18 -> 12** | 341 -> 341 of 396 | **0** |
 
 - **Safety is not accuracy.** The accuracy of the kit is the same before and after; its safety is better: the 2 doctors stored as the clinic (in every run) now go to a person. The 12 kit values left at 0.9 are the 4 category fields per run (`cause`, `diagnosis` x2, `offence`), outside this issue.
-- **How:** a new module `backend/app/docintel/labels.py`. A placeholder ("Not answerable", "null", "n/a" ...) is no value and is not stored. On a text page, a field keeps 0.9 only when the label before the value, where the snippet is, names the field (English, German, French, Italian); an identifier must not be a sentence; a provider must not read as one titled person. Else the field gets 0.5 with its value and its source (document, page, snippet) unchanged, and the routing that exists sends the claim to a person. No prompt, setting or request byte changed.
+- **How:** a new module `backend/app/docintel/labels.py`. A placeholder ("Not answerable", "null", "n/a" ...) is no value and is not stored. On a text page, a field keeps 0.9 only when the label before the value, where the snippet is, names the field (English words only); an identifier must not be a sentence or two words with no digit; a provider must not read as one titled person. Else the field gets 0.5 with its value and its source (document, page, snippet) unchanged, and the routing that exists sends the claim to a person. No prompt, setting or request byte changed.
 - **Before and after use the same answers.** The model was asked once (360 HTTP attempts, 0 retries, 0 failures); each run was then read by the reader of #20 (commit `0334e55`) and by the reader of #125, with the same request bytes. So the difference is the code alone, not the model or the day.
 - **The safety measure is in the harness:** the report counts the incorrect values at `LOW_CONFIDENCE` or more (from `routing.py`), apart from the incorrect values at any confidence, and the right absences apart from the right values; `--set n1` evaluates N1 apart from the kit. A report of #19 or #20 shows "not available", never 0.
 
@@ -586,7 +586,11 @@ The fix of the safety check N1 of #20: a value in the wrong field must not pass 
 - **N1 is a development set:** the rules were designed on its answers of 2026-11-19. The live answers are new, the documents are not. A held-out document set is future work.
 - **Incorrect values stay stored, at 0.5:** a person checks them; nothing is rejected. Scans and photos have no text layer, so their fields stay at 0.5.
 - **The confidence values are flags, not calibrated probabilities.** Some right values with an unusual label or layout get 0.5 too.
-- **Paul confirms** that the paired replay meets the "control of the same day" of the issue.
+- **The paired replay is the control of the same day** (accepted by Paul in the review of pull request #128, 2026-11-27). It measures the effect of the code on the same model answers. It does not measure new documents.
+- **No label check for the provider and the person fields:** only the form of the name is read, so a doctor can pass as the patient, and a patient or an insurer as the provider.
+- **English only:** the 44 documents are in English, so the German, French and Italian words were removed after the review. A label in another language gives 0.5.
+- **The synthetic and the holdout test sets are not independent:** the synthetic rows were sorted by what the reader passes, and one holdout row was changed after its run.
+- **After the review of 2026-11-27** (four rule fixes, one accepted wording, less code: `EVALUATION-ISSUE-125.md`, section 10), the same answers of 2026-11-25 give the same numbers, read again offline.
 
 ### How to reproduce
 

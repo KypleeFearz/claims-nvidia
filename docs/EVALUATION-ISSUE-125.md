@@ -2,7 +2,7 @@
 
 The short result is in [`EVALUATION.md`](EVALUATION.md), section "Reader safeguards (issue #125)". This file holds the problem, the design, the measures, every number of the offline replays and of the live run, the checks and the limits.
 
-Commits on `nikola-work`: `055a516` (N1 data set and replay tests), `ec056ea` (the safeguards), `984c5e4` (the safety measure of the harness). Live run: 2026-11-25, code `984c5e4`.
+Commits on `nikola-work`: `055a516` (N1 data set and replay tests), `ec056ea` (the safeguards), `984c5e4` (the safety measure of the harness). Live run: 2026-11-25, code `984c5e4`. Paul reviewed pull request #128 on 2026-11-27: the corrections are in section 10, and the text below says where a rule changed.
 
 ## 1. The problem
 
@@ -30,14 +30,14 @@ No prompt, setting or request byte changed: a test pins the request bodies of #1
 
 | Kind | Fields | Rule |
 |---|---|---|
-| identifier | invoice, quote, report number, booking, report reference | the label before the value must name the field, and the value must be an identifier: not prose ("sent separately by e-mail"), at least 2 letters or digits. Identifiers with no digit ("XKQZPL") and unusual formats are allowed. |
-| date | every date field | the label must name the field. A bare "Date" counts only for the date of the document itself (invoice, quote, purchase, cancellation); an event date needs an event word ("Departure", "examined on", "Discovered"). |
-| amount | total, trip price, amount paid, refund | the label must name the field; "Subtotal", "VAT", "Deposit", "Refund" (for the amount paid), "due" and others veto it. |
-| organisation | `provider` only | the value must not read as one person: a title ("Dr. med.") with 1 to 4 names and no word of an organisation gives 0.5. "Praxis Dr. med. A. Muster" and "Dr. Muster AG" stay at 0.9. |
-| person | patient, customer, traveller | the value must not name a company (a legal form or a word of an organisation). |
+| identifier | invoice, quote, report number, booking, report reference | the label before the value must name the field, and the value must be an identifier: not prose ("sent separately by e-mail"), not two words or more with no digit ("Sent separately"), at least 2 letters or digits. One word with no digit ("XKQZPL") and unusual formats are allowed. |
+| date | every date field | the label must name the field. A bare "Date" counts only for the date of the document itself (invoice, quote, purchase, cancellation), and not when "of" and another thing follow ("Date of departure"); an event date needs an event word ("Departure", "examined on", "Discovered"). |
+| amount | total, trip price, amount paid, refund | the label must name the field; "Subtotal", "VAT", "Deposit", "Refund" (for the amount paid), "due" and others veto it. A bare "Amount" or "Sum" names no field ("Sum insured"). "Total" with another word after it is not the total ("Total labour"); "Total incl. 8.1% VAT", "Total in CHF" and "Total for 2 nights" are. |
+| organisation | `provider` only | **no label check**, only the form of the name: the value must not read as one person: a title ("Dr. med.") with 1 to 4 names and no word of an organisation gives 0.5. "Praxis Dr. med. A. Muster" and "Dr. Muster AG" stay at 0.9. |
+| person | patient, customer, traveller | **no label check**, only the form of the name: the value must not name a company (a legal form or a word of an organisation). |
 | out of scope | `cause`, `diagnosis`, `offence`, descriptions, `repair_company`, `merchant`, `airline`, line items | not checked by meaning: never downgraded here. |
 
-**Where the label comes from.** At each place where the snippet stands on the page, the label is the text just before the value: inside the snippet when the model copied it ("Invoice no.: 4471"), else on the same line, else on the line above. A label elsewhere on the page does not count. Each place gives a verdict: match (the label names the field), veto (it names something else, for example "Patient no.", "Valid until", "Customer no.") or none. The field is verified only with at least one match and no veto. The words are general business vocabulary in English, German, French and Italian, with accents and case ignored, never the words of one document.
+**Where the label comes from.** At each place where the snippet stands on the page, the label is the text just before the value: inside the snippet when the model copied it ("Invoice no.: 4471"), else on the same line, else on the line above. A label elsewhere on the page does not count. Each place gives a verdict: match (the label names the field), veto (it names something else, for example "Patient no.", "Valid until", "Customer no.") or none. The field is verified only with at least one match and no veto. The words are general business vocabulary in English, with accents and case ignored, never the words of one document. The first version also had German, French and Italian words; they were removed after the review (section 10), because the 44 mock documents are in English and no document measured them. A label in another language is unknown now: the field gets 0.5.
 
 **One narrow fallback (approved 2026-11-24).** When the snippet itself gives no label, the other places of the same value on the same page decide, but only with clear evidence:
 - every place of the snippet has a neutral label: none, a place and a comma ("Thalwil, 2026-10-25"), or the generic word "Date", wherever it stands on the line;
@@ -48,7 +48,7 @@ The stored source stays the snippet of the model. Why: on the kit, the model giv
 
 **"Reported".** A bare "Reported:" is the incident date only on a luggage report (the loss is reported on arrival; the schema `LuggageReport` has `incident_date`, "the date when the event of the report happened"), and only when the page names no incident date of its own ("Date of loss:").
 
-**Placeholders.** A whole value such as "Not answerable", "null", "n/a", "unknown", "k.A.", "inconnu" or "sconosciuto" (about 70 texts in 4 languages, case, spaces and outer punctuation ignored) is no value. A text that only contains such a word is a value. Numbers, dates and 0.0 are never placeholders.
+**Placeholders.** A whole value such as "Not answerable", "null", "n/a" or "unknown" (about 30 English texts and the dashes; case, spaces and outer punctuation ignored) is no value. A text that only contains such a word is a value. Numbers, dates and 0.0 are never placeholders.
 
 **The confidence is a flag, not a probability.** 0.9 means "the page shows that this value belongs to this field"; 0.5 means "a person checks it". Neither number is calibrated; only the side of 0.8 changes an outcome.
 
@@ -173,19 +173,22 @@ The kit gives about 1 right field less per run than S7, within the drift rule of
 - **Full offline suite** (Windows laptop, 2026-11-25, `pytest -m "not live and not sandbox"`): 4,853 passed, 31 xfailed (the known limits below), 12 deselected (live and sandbox tests), 7 failed. The 7 failures are the known Windows-only ones, also on unchanged `upstream/main`: `test_document_kit` 1 and `test_mock_documents` 2 (CRLF line ends and path separators), `test_sandbox_agent` 1 and `test_sandbox_image` 3 (POSIX file modes). They do not happen on Linux CI. mypy, ruff and ruff format are clean.
 - **N1 in CI:** the 9 documents, their answer keys and their generator are in git (`data/mock/n1/`, `scripts/mockdocs/n1.py`), apart from the kit (`demo.NOT_KIT`; the kit stays at 35). `test_n1_replay.py` reads the saved model answers of 2026-11-19 through a stub of the model: no incorrect value at 0.8 or more and no placeholder, for `v1` and `schema-only`. `test_evaluation_safety.py` checks the same numbers through the harness, before and after.
 - **Sweep** (`test_label_sweep.py`): every value printed on every text page of the kit and N1, as every field of its type, with 5 snippet shapes, and the real snippets of the S7 runs: 0 false downgrades of right values.
-- **Independent test sets.** A synthetic set (2,287 cases, written from the specification only) has 31 known limits, all strict `xfail`, and all conservative: a right value gets 0.5, never a wrong value 0.9. A held-out set (551 cases) passed 548 in its single blind run: one real false accept ("Date reported" taken as the incident date, 2 tests, since fixed) and one bug in the test itself. One row of it was changed after the run, with the reason in the file.
+- **Two more test sets, which are not independent.** `test_labels_synthetic.py` (2,287 cases on 2026-11-25) holds invented documents. Its rows were sorted by what the reader passes: the passing rows became plain tests and the 31 others strict `xfail` (all conservative: a right value gets 0.5, never a wrong value 0.9). So it shows what the reader does, not that the reader is right. `test_labels_holdout.py` (551 cases) passed 548 in its single run: one real false accept ("Date reported" taken as the incident date, 2 tests, since fixed) and one bug in the test itself. One row of it was changed after the run, to fit a later decision, and the rules were corrected on its result. Neither set is a held-out set: the author of the rules saw both. After the review they hold English rows only: 962 and 299 cases (section 10).
 - **Reviews:** an independent review of each phase; every finding was fixed with a test or documented.
 
 ## 7. Limits
 
 - **Not universal safety.** The result holds for these documents, this model and these answers.
 - **N1 is a development set, not a held-out set.** The safeguards were designed on the N1 answers of 2026-11-19. The live answers are new, but they hit the same 4 lures on the same 9 documents; `described` and `example` are new prompts, not new documents.
-- **The paired replay** measures the effect of the code on the same answers. It does not measure how the model behaves on other documents or other days. **Paul confirms** whether it meets the "control of the same day" of the issue, and the "before" reader (the `omni.py` of `0334e55` with the current, unchanged schemas and models).
+- **The paired replay** is the control of the same day: Paul accepted it in his review of 2026-11-27. It measures the effect of the code on the same model answers. It does not measure new documents: it does not show that the rules work on a document that they were not written with, and it says nothing about the model on other days.
+- **The provider and the person fields have no label check.** Only the form of the name is read. So `patient_name` accepts a doctor ("Doctor:" in front), and `provider` accepts a patient or an insurer. `invoice_number` accepts a value under "Bill to:" or "Policy ref:". Found in the review; kept for a later issue.
+- **English only.** The 44 documents are in English, so nothing measures another language. A label in German, French or Italian gives 0.5 to a right value. A language comes back when a document needs it.
+- **The synthetic and the holdout test sets are not independent** (section 6).
 - **Incorrect values stay stored, at 0.5.** A person checks them; nothing is rejected (non-negotiable 1).
 - **4 category errors per kit run stay at 0.9** (`cause`, `diagnosis` x2, `offence`): free-text fields, out of the scope of #125.
 - **Scans and photos** have no text layer: no label can be checked there, so their fields stay at 0.5.
 - **The confidence values are flags, not calibrated probabilities.**
-- **Conservative heuristics:** an unknown label wording ("Fatt. n.", a bare "Price"), a table whose labels are column headers, or a practice named only after its doctor gives 0.5 to a right value: a person checks it. A bare person name with no title as provider stays at 0.9.
+- **Conservative heuristics:** an unknown label wording (a bare "Price", "Amount" or "Sum", "Total to be paid"), a table whose labels are column headers, or a practice named only after its doctor gives 0.5 to a right value: a person checks it. A bare person name with no title as provider stays at 0.9.
 - **The labels are read from the text order of pypdf, not from positions.** A label in another column or far from its value is not seen.
 
 ## 8. How to reproduce
@@ -198,5 +201,42 @@ The kit gives about 1 right field less per run than S7, within the drift rule of
 ## 9. Future work
 
 - **Spatial association of label and value.** Read the positions of the words from the PDF text layer (pypdfium2 or pypdf give boxes) and tie a value to the label to its left or above it in the same column. That would handle tables with column headers and layouts with two columns, which the text order cannot. Not built in #125.
-- **A held-out document set** with new layouts and new lures, made before any rule sees it, for a claim beyond the 9 N1 documents.
+- **A real held-out document set:** documents with new layouts and new lures that the author of the rules has not seen, for a claim beyond the 9 N1 documents.
 - **The category fields** (`cause`, `diagnosis`, `offence`) need their own check: they are the remaining values at 0.9 on the kit.
+
+## 10. Review of pull request #128 (2026-11-27)
+
+Paul reviewed commit `8a2dd09`. He accepted the numbers and the paired replay, and asked for the changes below. The sections 4 and 5 keep the numbers as they were measured on 2026-11-25; nothing there was run again with the model.
+
+### The rule fixes (each one has a test in `test_labels.py`)
+
+| Page text | Field | Before | Now | Rule |
+|---|---|---|---|---|
+| `Booking reference: Sent separately` | `booking_reference` | 0.9 | 0.5 | an identifier of two words or more with no digit is prose |
+| `Date of departure: 2026-08-10` | `cancellation_date` | 0.9 | 0.5 | a bare "date" does not match when "of" follows |
+| `Sum insured: CHF 50'000.00` | `amount_paid` | 0.9 | 0.5 | the bare words "amount" and "sum" name no field |
+| `Total labour: 300.00` | `total` | 0.9 | 0.5 | "total" with another word after it is not the total |
+| `Total incl. 8.1% VAT: CHF 540.50` | `total` | 0.5 | 0.9 | a rate between "incl." and "VAT" is part of the remark |
+
+Side effects, all to the safe side (0.5): "Date of document", a bare "Amount:" or "Sum:" on a receipt, "Total gross" and "Total to be paid" are not verified any more. "Total in CHF" and "Total for 2 nights" stay verified.
+
+### What was removed
+
+- The German, French and Italian words of every table, the placeholders of these languages and their tests. Reason: the 44 documents are in English, so no document measured these words. Kept: the names of Swiss organisations that the mock documents hold ("Praxis", "-zentrum"), the legal forms ("AG", "GmbH", "SA", "Sàrl") and the titles ("Dr. med.").
+- Dead or double code: `_value_start` (no caller); the copies of `_ID_OTHER` in `_ID_TECHNICAL` and `_GENERIC_WORDS` (each word is listed once now); the words that `_REFUND_VETO` repeated from `_AMOUNT_VETO` (one shared list, `_AMOUNT_PARTS`); the list of count nouns after "total" (the new rule for "total" covers it).
+- `labels.py`: 1,432 lines before, 980 now.
+
+### The same answers through the corrected reader
+
+The saved answers of the live run of 2026-11-25 (360 calls) were read again, offline, by the reader of #20 and by the corrected reader. No request went to the model.
+
+| Set (3 runs) | Incorrect at >= 0.8 | Right | Right at >= 0.8 | Right fields lost / downgraded |
+|---|---|---|---|---|
+| kit `v1` | 18 -> 12 | 341 -> 341 (of 396) | 236 -> 236 | 0 / 0 |
+| N1, all prompts | 35 -> 0 | 288 -> 298 | 140 -> 140 | 0 / 0 |
+
+All 9 criteria pass, and the list of the 51 changed fields is the same file, byte for byte, as on 2026-11-25. So the corrections change no result on these answers. This is again the effect of the code on known answers and known documents, not a test on new documents.
+
+### Tests after the review
+
+Windows laptop, 2026-11-27, on top of `main` with D85: 3,154 passed, 15 xfailed (the English known limits), 12 deselected (live and sandbox tests), 7 failed (the same Windows-only failures as on `main`). mypy, ruff and ruff format are clean. The label tests: `test_labels.py` 300 cases, `test_labels_synthetic.py` 962 (15 of them strict `xfail`), `test_labels_holdout.py` 299.
